@@ -40,6 +40,10 @@ npm run images -- --download          # fehlende Bilder langsam von gundam-gcg.c
 | `npm run format` | Prettier                                                |
 | `npm run verify` | alles wie in der CI (Format, Lint, Typen, Tests, Build) |
 | `npm run build`  | Produktionsbuild nach `dist/`                           |
+| `npm run sim`    | Spiele ohne Oberfläche, z. B. `-- --games 10000`        |
+| `npm run fuzz`   | 100 000 Zufallsspiele mit Invarianten-Prüfung           |
+
+Aufbau der Regel-Engine: [docs/ENGINE.md](docs/ENGINE.md).
 
 ## GCGDB aktualisieren
 

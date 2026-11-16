@@ -18,7 +18,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "images": "tsx tools/images.ts",
-    "verify": "npm run format:check && npm run lint && npm run check && npm test && npm run build"
+    "verify": "npm run format:check && npm run lint && npm run check && npm test && npm run build",
+    "sim": "tsx tools/sim.ts",
+    "fuzz": "tsx tools/sim.ts --check --games 100000"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

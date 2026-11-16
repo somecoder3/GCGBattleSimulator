@@ -24,14 +24,24 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 - `docs/PLAN.md` vom Nutzer freigegeben. Entscheidungen (Abschnitt 13): TypeScript + Vite + Svelte;
   Rollback mit gleichem Zufall; **KI kennt das gegnerische Deck nicht**, darf es aber wie ein Mensch aus
   gesehenen Karten erraten; erstes Kartenziel Top-8-Archetypen der letzten 8 Wochen.
-- **M0 (Gerüst) fertig, noch nicht committet:** Vite 8 + TypeScript 6 + Svelte 5 (Runes), Vitest, ESLint,
-  Prettier, svelte-check; GCGDB als Submodul `gcgdb/` (Branch `main`); `npm run verify` = alles wie in der CI
-  (`.github/workflows/ci.yml`, Node 24). Erste Seite: Kartenliste mit Filtern (Suche, Set, alle acht Typen wie auf gundam-gcg.com, Farbe)
-  und Detaildialog mit allen Drucken; am Desktop und in Handybreite im Browser-Fenster geprüft.
-  Befehle und Einrichtung: `README.md`.
-- Aufbau bisher: `src/data/` (Kartenmodell `CardDef`, `CardPool` aus `cards.json`, Parser für Traits/Zonen/
-  Link), `src/app/` (Svelte), `tools/images.ts`, `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: **M1** Engine-Kern (Regeln ohne Kartentexte, Zufalls-KI, Fuzz-/Determinismus-Tests).
+- **M0 (Gerüst) fertig**, Commit `57220b2` (vom Nutzer gepusht): Vite 8 + TypeScript 6 + Svelte 5 (Runes),
+  Vitest, ESLint, Prettier, svelte-check; GCGDB als Submodul `gcgdb/` (Branch `main`); `npm run verify` = alles
+  wie in der CI (`.github/workflows/ci.yml`, Node 24). Kartenliste mit Filtern (Suche, Set, alle acht Typen wie
+  auf gundam-gcg.com, Farbe) und Detaildialog. Befehle und Einrichtung: `README.md`. CI-Lauf #1 auf GitHub grün (1 min).
+- **M1 (Engine-Kern) fertig.** Beschreibung, Umfang und Grenzen: **`docs/ENGINE.md`**.
+  Regeln ohne Kartentexte: Vorbereitung, Phasen, Ressourcen/Level/Kosten, Units, Pilots/Links, Bases,
+  Kampf, Schilde, Keywords (Blocker, First Strike, High-Maneuver, Suppression, Breach, Repair, Support),
+  Rules Management. Zufalls-KI, `playMatch`/`replay`, `npm run sim` und `npm run fuzz`.
+  - Tests: 34 Regeltests mit Testkarten (Set `X`, `tests/engine/helpers.ts`, Baukasten `scenario()`),
+    1000 Fuzz-Spiele mit Invarianten, Replay-/Determinismus-/JSON-Tests; insgesamt 49 Tests.
+  - **`npm run fuzz` (100 000 Spiele, Invarianten nach jedem Schritt): 0 Fehler**, 62 s. Ohne Prüfung
+    0,23 ms pro Spiel auf einem Kern (Zufalls-KI, Zufallsdecks: Ø 19 Züge, 68 Entscheidungen, Spieler 1
+    gewinnt 56,6 %; Werte sind ohne Effekte und mit Zufallsspiel nicht aussagekräftig für echte Decks).
+- Aufbau: `src/data/` (Kartenmodell), `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte),
+  `tools/` (`images.ts`, `sim.ts`), `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
+- Nächster Schritt: **M2** Effektsystem (DSL, Interpreter, Trigger, Dauereffekte, Bursts, Commands;
+  Entwurfsgenerator; Abdeckungsbericht; 2–3 Starter-Decks vollständig). Die Einstiegspunkte sind im
+  Engine-Code mit `M2:` markiert.
 
 ## Svelte-Fallen
 
@@ -40,6 +50,13 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   dann nie. Darum hieß der Set-Filter der Kartenliste nicht mehr `set`, sondern `setCode` (gefunden am 16. Nov.).
 
 ## Entscheidungen
+
+- **Engine (M1):** Zustand ist reines JSON und wird von `apply` direkt geändert (schnell); Entscheidungen
+  enthalten alle legalen Optionen, `apply` prüft dagegen. Rollback = Replay von Seed + Decks + Aktionen.
+  Die KI bekommt nur `viewFor()` (verdeckte Karten als `"?"`, Zufallsgenerator geleert). Kopien einer Karte
+  auf der Hand sind eine Option. Kosten: normale Ressourcen zuerst, EX Resource zuletzt (sie zählt bis zum
+  Verbrauch fürs Level mit). Spieler 1 zieht im ersten Zug (Regeln nehmen ihn nicht aus). Handlimit gilt nur
+  für den aktiven Spieler (7-6-5, 4-8-4 „your end phase“). Der zuletzt gelegte Schild ist der oberste (6-2-2).
 
 - **TypeScript 6.0.3 statt 7:** TS 7 (seit Juli 2026) wird von svelte-check (`^5 || ^6`) und
   typescript-eslint (`<6.1`) noch nicht unterstützt.
