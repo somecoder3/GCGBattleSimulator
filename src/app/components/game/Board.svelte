@@ -103,6 +103,8 @@
     return me.shields.length + me.base.length > 1;
   }
   let showTrash = $state<PlayerId | null>(null);
+  /** On narrow screens the side panel (controls, details, log) is a drawer. */
+  let panelOpen = $state(false);
   let logBox = $state<HTMLElement>();
 
   // Cards fly between hand, battle area and base; cards without a counterpart (to the trash, drawn
@@ -370,7 +372,7 @@
       drag = { id: pressed.id, x: e.clientX, y: e.clientY, over: null };
     }
     const under =
-      document.elementsFromPoint(e.clientX, e.clientY).find((el) => !el.closest(".ghost")) ?? null;
+      document.elementsFromPoint(e.clientX, e.clientY).find((el) => !el.closest(".drag-ghost")) ?? null;
     drag = { ...drag, x: e.clientX, y: e.clientY, over: dropKey(under) };
   }
 
@@ -586,6 +588,9 @@
     <div class="center" class:waiting={!decision && !result}>
       <div class="status">
         <span class="turn">Zug {view.turn} · {myTurn ? "Dein Zug" : "Zug der KI"}</span>
+        <button class="panel-toggle" onclick={() => (panelOpen = !panelOpen)} aria-expanded={panelOpen}>
+          ☰ Log &amp; Details
+        </button>
         <span class="step">{STEP_NAMES[view.step]}</span>
         {#if battleInfo}<span class="battle-info">{battleInfo}</span>{/if}
       </div>
@@ -596,6 +601,9 @@
         {#if selected !== null && selectedOptions.length}
           <div class="menu" role="group" aria-label="Möglichkeiten für {name(selected)}">
             <span class="menu-title">{name(selected)}:</span>
+            <button class="opt info-button" onclick={() => (panelOpen = true)} title="Karte im Detail"
+              >ⓘ</button
+            >
             {#each selectedOptions as o (JSON.stringify(o))}
               <button class="opt" onclick={() => act(o)}>{actionLabel(o, name)}</button>
             {/each}
@@ -656,7 +664,7 @@
 
     {#if drag && def(drag.id)}
       <div
-        class="ghost"
+        class="drag-ghost"
         style="left: {drag.x}px; top: {drag.y}px"
         class:valid={!!dropAction(drag.id, drag.over)}
       >
@@ -705,8 +713,12 @@
     {/if}
   </section>
 
-  <aside class="side-panel">
+  {#if panelOpen}
+    <button class="panel-backdrop" aria-label="Schließen" onclick={() => (panelOpen = false)}></button>
+  {/if}
+  <aside class="side-panel" class:open={panelOpen}>
     <div class="controls">
+      <button class="btn panel-close" onclick={() => (panelOpen = false)} aria-label="Schließen">✕</button>
       <button class="btn" onclick={undo} disabled={!canUndo} title="Strg+Z">↶ Rückgängig</button>
       <label>
         Tempo
@@ -751,8 +763,8 @@
         </div>
       {:else}
         <p class="hint">
-          Karte überfahren für Details. Leuchtende Karten kannst du nutzen: anklicken, dann Ziel wählen.
-          Strg+Z nimmt deine letzte Entscheidung zurück.
+          Karte überfahren (oder ⓘ) für Details. Leuchtende Karten kannst du nutzen: anklicken oder auf das
+          Ziel ziehen. Strg+Z oder ↶ nimmt deine letzte Entscheidung zurück.
         </p>
       {/if}
     </div>
@@ -890,7 +902,7 @@
   .draggable.dragging {
     opacity: 0.35;
   }
-  .ghost {
+  .drag-ghost {
     --cw: clamp(70px, 6.8vw, 104px);
     position: fixed;
     z-index: 20;
@@ -900,7 +912,7 @@
     filter: drop-shadow(0 12px 24px rgb(0 0 0 / 60%));
     opacity: 0.92;
   }
-  .ghost.valid {
+  .drag-ghost.valid {
     rotate: 0deg;
     filter: drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 80%, transparent));
   }
@@ -1299,12 +1311,18 @@
   .back:hover {
     border-color: var(--accent);
   }
+  .panel-toggle,
+  .panel-close,
+  .info-button,
+  .panel-backdrop {
+    display: none;
+  }
   @media (max-width: 1000px) {
     .game {
       grid-template-columns: 1fr;
       height: auto;
       overflow: visible;
-      --cw: clamp(44px, 11vw, 80px);
+      --cw: clamp(44px, 9.5vw, 80px);
     }
     .board {
       min-height: 80dvh;
@@ -1320,10 +1338,148 @@
       padding: 0;
     }
     .hand-card {
-      --cw: clamp(48px, 12vw, 84px);
+      --cw: clamp(48px, 11vw, 84px);
+    }
+  }
+
+  /* Phones in portrait: cards sized from the screen width, side panel as a drawer from the bottom. */
+  @media (max-width: 700px) {
+    .game {
+      --cw: min(50px, calc((100vw - 40px) / 7.7));
+      padding: 4px;
+      gap: 0;
+    }
+    .board {
+      min-height: calc(100dvh - 118px);
+      padding: 6px;
+      gap: 4px;
+      border-radius: 10px;
+    }
+    .side {
+      gap: 4px;
+    }
+    .field {
+      gap: 4px;
+    }
+    .shieldzone {
+      gap: 4px;
+      padding: 2px;
+    }
+    .shields {
+      width: calc(var(--cw) * 0.55);
+      height: calc(var(--cw) * 0.55 * 1.395 + 14px);
+    }
+    .count {
+      font-size: 13px;
+    }
+    .base {
+      width: calc(var(--cw) * 0.9);
+      --cw: calc(min(50px, calc((100vw - 40px) / 7.7)) * 0.9);
+    }
+    .battle {
+      gap: 3px;
+      min-height: calc(var(--cw) * 1.395 + 12px);
+    }
+    /* A rested card is turned; smaller, so it stays within its slot. */
+    .battle :global(.slot.rested .stack) {
+      transform: rotate(90deg) scale(0.7);
+    }
+    .info {
+      gap: 2px 10px;
+      font-size: 12px;
+    }
+    .opp-hand {
+      min-height: 14px;
+    }
+    .mini-back {
+      width: 10px;
+      height: 14px;
+    }
+    .center {
+      gap: 4px;
+      padding: 6px 4px;
+    }
+    .status {
+      gap: 2px 10px;
+      font-size: 12px;
+    }
+    .prompt {
+      font-size: 13px;
+    }
+    .opt,
+    .btn {
+      min-height: 34px;
+      padding: 4px 10px;
+      font-size: 13px;
+    }
+    kbd {
+      display: none;
     }
     .hand {
-      flex-wrap: wrap;
+      justify-content: flex-start;
+      min-height: calc(var(--cw) * 1.395);
+    }
+    .hand-card {
+      --cw: min(64px, 17vw);
+    }
+    .panel-toggle {
+      display: inline-flex;
+      padding: 2px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--bg-raised);
+      font-size: 12px;
+    }
+    .info-button,
+    .panel-close {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .panel-close {
+      margin-left: auto;
+      order: 10;
+    }
+    .panel-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 39;
+      border: 0;
+      background: rgb(0 0 0 / 45%);
+    }
+    .side-panel {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+      height: 72dvh;
+      padding: 10px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
+        max(10px, env(safe-area-inset-left));
+      grid-template-rows: auto auto minmax(0, 1fr);
+      border-top: 1px solid var(--line);
+      border-radius: 16px 16px 0 0;
+      background: var(--bg);
+      box-shadow: 0 -10px 30px rgb(0 0 0 / 50%);
+      transform: translateY(105%);
+      transition: transform 0.25s ease;
+    }
+    .side-panel.open {
+      transform: none;
+    }
+    .detail {
+      max-height: 34dvh;
+    }
+    .reveal-card {
+      width: 28vw;
+    }
+    .banner {
+      font-size: 24px;
+    }
+    .end-card {
+      padding: 20px;
+      margin: 0 12px;
     }
   }
 </style>
