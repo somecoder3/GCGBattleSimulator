@@ -1,5 +1,6 @@
 // What a player is allowed to know (4-1-4, 4-2-2, 4-6-4-1, 4-8-3). AIs only ever see this view.
 
+import { cloneState } from "./clone";
 import type { CardId, GameState, PlayerId } from "./types";
 
 export const HIDDEN = "?";
@@ -27,7 +28,7 @@ export function isHiddenFrom(state: GameState, id: CardId, viewer: PlayerId): bo
  * decks are shuffled after the ids are assigned.
  */
 export function viewFor(state: GameState, viewer: PlayerId): GameState {
-  const view = structuredClone(state);
+  const view = cloneState(state);
   view.rng = [0, 0, 0, 0];
   for (const card of view.cards) if (isHiddenFrom(state, card.id, viewer)) card.no = HIDDEN;
   return view;

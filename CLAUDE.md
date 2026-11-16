@@ -67,12 +67,28 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
     Detail zeigt Link-Bedingungen (gelb mit ✓, wenn gelinkt); zerstörte Schilde werden 2,8 s in der Mitte
     aufgedeckt (Kartennummer aus dem vollen Zustand, da öffentlich aufgedeckt); „Choose 1 of your Resources.
     Set it as active.“ fragt nicht mehr, sondern macht eine geruhte Ressource aktiv.
+- **M4 (Heuristik-KI v1, Massensimulation) fertig.** Beschreibung und Messungen: **`docs/AI.md`**.
+  - Heuristik v1 (`src/ai/lookahead.ts`, Bewertung `src/ai/evaluate.ts`): probiert jede Option auf einer
+    Kopie der Sicht (verdeckte Karten → `R-001`-Platzhalter, `determinize`), v0 spielt für beide bis zur Main
+    Phase des nächsten Zuges weiter, Stellung bewerten. KI-Namen/Erzeugung `src/ai/registry.ts`.
+  - Match-Runner `src/sim/runner.ts` (Spiel = Job + Index, Blöcke à 8 gleichen Startspieler, KI- und
+    Deck-Sitz aus), Pool `src/sim/pool.ts`, Statistik `src/sim/stats.ts` (Wilson-Intervalle, Matrix),
+    Node-CLI `npm run sim` mit Worker-Threads (`tools/sim-worker.ts`, `--import tsx`), Browser-Reiter
+    „Simulator“ (`#sim`, `src/app/components/sim/SimScreen.svelte`, Web Worker `src/sim/worker.ts`).
+  - `cloneState` (`src/engine/clone.ts`) statt `structuredClone`: v1 3× schneller.
+  - Gegner-KI im Spiel wählbar (Standard v1), `SessionSetup.ai`.
+  - Abnahme (Starter-Decks, Seed 1): **10 000 Spiele v1 gegen v1 in 128 s auf 8 Workern**; v1 gegen Zufall
+    **97,5 %**, gegen v0 75,5 %, v0 gegen Zufall 92,9 % (je 4000). Startspieler gewinnt bei v1 64 %.
+    Starter bei v1: ST04 58 %, ST01 58 %, ST03 49 %, ST02 35 %.
+  - Tests: 130 (neu: v1 2, Runner/Pool/Statistik 6, cloneState 1).
+  - `npm run fuzz` läuft jetzt über den Runner auf allen Kernen: 100 000 Spiele mit Invarianten in 30 s, 0 Fehler.
 - Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: **M4** Heuristik-KI v1 (Bewertungsfunktion, Vorausschau im Zug), Match-Runner,
-  Worker-Pool, Grundstatistik. Danach M5 (Meta + Meta-Karten), M6 (schöne Oberfläche, Ziehen & Ablegen,
-  Handy, intelligente Stopps im Action Step).
+- Nächster Schritt: **M5** Meta-Pipeline (Limitless, Archetypen, Konsenslisten, Banliste, Snapshot) und
+  Meta-Karten (~200) umsetzen. Danach M6 (schöne Oberfläche, Ziehen & Ablegen, Handy, intelligente Stopps
+  im Action Step), M7 (ISMCTS, Gewichts-Tuning).
+- Commits: M3 `e3bdd8e`.
 
 ## Svelte-Fallen
 
@@ -81,6 +97,11 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   dann nie. Darum hieß der Set-Filter der Kartenliste nicht mehr `set`, sondern `setCode` (gefunden am 16. Nov.).
 
 ## Entscheidungen
+
+- **KI v1 (M4):** Vorausschau bis Ende des Zuges statt bis zur nächsten Entscheidung (37–58 % → ~75 % gegen
+  v0). Hohe Strafe für geruhte Units macht passiv und schadet (`exposed` 0,15). Gewichte von Hand, Tuning in M7.
+  Gemessen, nicht geraten: allokationsfreie `activeStatics`-Variante war langsamer (66 statt 51 ms) und
+  wurde verworfen.
 
 - **Oberfläche (M3):** Die Oberfläche rendert nur `viewFor(state, mensch)` (kein Schummeln möglich); AP/HP
   kommen aus dem vollen Zustand (öffentlich). Optionen mit Zielkarte (Pilot, Angriff, Support, Ersetzen)

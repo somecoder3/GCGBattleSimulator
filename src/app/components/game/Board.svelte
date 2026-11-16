@@ -4,7 +4,7 @@
   import { crossfade, fade, fly } from "svelte/transition";
   import { cardImageUrl } from "../../../data/cards";
   import CardImage from "../CardImage.svelte";
-  import { HeuristicPolicy } from "../../../ai/heuristic";
+  import { makePolicy } from "../../../ai/registry";
   import type { CardPool } from "../../../data/cards";
   import type { CardDef } from "../../../data/types";
   import type { Engine } from "../../../engine/engine";
@@ -38,7 +38,7 @@
   } = $props();
 
   // svelte-ignore state_referenced_locally
-  const ai = new HeuristicPolicy(engine);
+  const ai = makePolicy(session.setup.ai ?? "heuristic-v1", engine, session.setup.options.seed);
   // svelte-ignore state_referenced_locally
   const human = session.human;
   const enemy: PlayerId = human === 0 ? 1 : 0;

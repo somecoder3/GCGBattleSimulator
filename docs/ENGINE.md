@@ -1,6 +1,6 @@
 # Regel-Engine
 
-Stand: M3 (16. Nov. 2026). Regelgrundlage: Comprehensive Rules **Ver. 1.10.0**; Regelnummern stehen im
+Stand: M4 (16. Nov. 2026). Regelgrundlage: Comprehensive Rules **Ver. 1.10.0**; Regelnummern stehen im
 Code und in den Tests.
 
 ## Schnittstelle
@@ -49,6 +49,11 @@ state.result; // { winner: 0 | 1 | null, reason: "damage" | "deckOut" | "turnLim
 | `src/ai/random.ts`             | Zufalls-KI (gewichtet: lieber handeln als die Main Phase beenden)                           |
 | `src/sim/match.ts`             | `playMatch`, `replay`                                                                       |
 | `src/sim/session.ts`           | `GameSession`: Mensch gegen KI mit Rollback, Log-Schritten, Speichern                       |
+| `src/sim/runner.ts`            | Match-Runner: Job (Decks, KIs, Spiele, Seed) → Spiel Nr. i, `GameSummary`                   |
+| `src/sim/pool.ts`              | Verteilt Spiele auf Worker (Node-Threads, Web Worker), Nachrichtenformat                    |
+| `src/sim/stats.ts`             | Siegquoten mit Wilson-Intervall pro KI, Deck, Matchup; Startspieler, Länge, Mulligan        |
+| `src/sim/worker.ts`            | Web Worker des Simulators im Browser (`tools/sim-worker.ts` für Node)                       |
+| `src/engine/clone.ts`          | `cloneState`: schnelle tiefe Kopie (statt `structuredClone`), für Sicht und KI-Suche        |
 | `tools/sim.ts`                 | `npm run sim` / `npm run fuzz`                                                              |
 
 Ablauf: `run()` arbeitet zuerst laufende Effekte ab (`frames`), dann wartende Trigger (`queue`), sonst den

@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { HeuristicPolicy } from "../../src/ai/heuristic";
+import { determinize, LookaheadPolicy } from "../../src/ai/lookahead";
 import { RandomPolicy } from "../../src/ai/random";
+import type { AiName } from "../../src/ai/registry";
+import { HIDDEN, viewFor } from "../../src/engine/view";
+import { runRange, type SimJob } from "../../src/sim/runner";
+import { computeStats } from "../../src/sim/stats";
 import { CardPool } from "../../src/data/cards";
 import { STARTER_DECKS } from "../../src/data/decks";
 import type { RawCardsDoc } from "../../src/data/types";
@@ -86,5 +91,37 @@ describe("heuristic AI v0", () => {
     });
     const action = new HeuristicPolicy(engine).choose(s, s.pending!);
     expect(action).toEqual({ type: "attack", unit: s.players[0].battle[0], target: s.players[1].battle[0] });
+  });
+});
+
+describe("heuristic AI v1 (evaluation and lookahead)", () => {
+  it("beats random play and v0 with the starter decks, on its own view", () => {
+    const job = (ai: [AiName, AiName]): SimJob => ({
+      decks: STARTER_DECKS.map((d) => ({ id: d.id, name: d.name, deck: d.deck })),
+      ai,
+      games: 64,
+      seed: 21,
+      check: true,
+    });
+    const vsRandom = computeStats(runRange(engine, job(["heuristic-v1", "random"]), 0, 64));
+    expect(vsRandom.errors).toBe(0);
+    expect(vsRandom.byAi["heuristic-v1"]!.rate).toBeGreaterThan(0.9);
+    const vsV0 = computeStats(runRange(engine, job(["heuristic-v1", "heuristic-v0"]), 0, 64));
+    expect(vsV0.byAi["heuristic-v1"]!.rate).toBeGreaterThan(0.55);
+  }, 120_000);
+
+  it("simulates with stand-ins for hidden cards, leaves the view unchanged and finds the win", () => {
+    const s = scenario({
+      engine,
+      filler: GM,
+      p0: { battle: [GM] },
+      p1: { battle: [{ no: GM, rested: true }], shields: 0, base: null },
+    });
+    const view = viewFor(s, 0);
+    const before = JSON.stringify(view);
+    expect(determinize(view).cards.some((c) => c.no === HIDDEN)).toBe(false);
+    const action = new LookaheadPolicy(engine).choose(view, view.pending!);
+    expect(JSON.stringify(view)).toBe(before);
+    expect(action).toEqual({ type: "attack", unit: s.players[0].battle[0], target: "player" });
   });
 });

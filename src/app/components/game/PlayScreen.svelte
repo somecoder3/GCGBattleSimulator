@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CardPool } from "../../../data/cards";
+  import { AI_LABELS, AI_NAMES, type AiName } from "../../../ai/registry";
   import { STARTER_DECKS } from "../../../data/decks";
   import { CardLib } from "../../../engine/cardlib";
   import { Engine } from "../../../engine/engine";
@@ -19,6 +20,7 @@
   let myDeck = $state(STARTER_DECKS[0]!.id);
   let aiDeck = $state(STARTER_DECKS[2]!.id);
   let starter = $state<"random" | "me" | "ai">("random");
+  let aiName = $state<AiName>("heuristic-v1");
   let seed = $state(randomSeed());
 
   function randomSeed(): number {
@@ -54,6 +56,7 @@
       decks: [mine.deck, theirs.deck],
       options: { seed: s, firstPlayer },
       human,
+      ai: aiName,
       deckNames: [`${mine.id} ${mine.name}`, `${theirs.id} ${theirs.name}`],
     });
   }
@@ -81,8 +84,8 @@
   <section class="setup" aria-labelledby="setup-title">
     <h1 id="setup-title">Spiel gegen die KI</h1>
     <p class="lead">
-      Starter-Decks gegen die einfache Heuristik-KI. Alle Entscheidungen lassen sich zurücknehmen; dieselben
-      Karten kommen wieder.
+      Starter-Decks gegen eine KI (Standard: Heuristik v1). Alle Entscheidungen lassen sich zurücknehmen;
+      dieselben Karten kommen wieder.
     </p>
     <div class="grid">
       <label>
@@ -95,6 +98,12 @@
         Deck der KI
         <select bind:value={aiDeck}>
           {#each STARTER_DECKS as d (d.id)}<option value={d.id}>{d.id} {d.name} ({d.colors})</option>{/each}
+        </select>
+      </label>
+      <label>
+        Gegner-KI
+        <select bind:value={aiName}>
+          {#each AI_NAMES as n (n)}<option value={n}>{AI_LABELS[n]}</option>{/each}
         </select>
       </label>
       <label>

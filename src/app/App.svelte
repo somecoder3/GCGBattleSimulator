@@ -3,10 +3,12 @@
   import type { CardPool } from "../data/cards";
   import CardBrowser from "./components/CardBrowser.svelte";
   import PlayScreen from "./components/game/PlayScreen.svelte";
+  import SimScreen from "./components/sim/SimScreen.svelte";
   import { loadCardPool } from "./lib/cardpool";
 
-  type Tab = "play" | "cards";
-  const tabFromHash = (): Tab => (location.hash === "#cards" ? "cards" : "play");
+  type Tab = "play" | "sim" | "cards";
+  const tabFromHash = (): Tab =>
+    location.hash === "#cards" ? "cards" : location.hash === "#sim" ? "sim" : "play";
   let tab = $state<Tab>(tabFromHash());
 
   let pool = $state<CardPool>();
@@ -22,7 +24,7 @@
     return () => removeEventListener("hashchange", onHash);
   });
 
-  const sections = ["Decks", "Meta", "Simulator"];
+  const sections = ["Decks", "Meta"];
 </script>
 
 <header class="top">
@@ -33,6 +35,9 @@
   <nav aria-label="Bereiche">
     <a href="#play" class:current={tab === "play"} aria-current={tab === "play" ? "page" : undefined}
       >Spielen</a
+    >
+    <a href="#sim" class:current={tab === "sim"} aria-current={tab === "sim" ? "page" : undefined}
+      >Simulator</a
     >
     <a href="#cards" class:current={tab === "cards"} aria-current={tab === "cards" ? "page" : undefined}
       >Karten</a
@@ -48,6 +53,8 @@
     <p class="message error">Kartendaten konnten nicht geladen werden: {error}</p>
   {:else if pool && tab === "play"}
     <PlayScreen {pool} />
+  {:else if tab === "sim"}
+    <SimScreen />
   {:else if pool}
     <CardBrowser {pool} />
   {:else}

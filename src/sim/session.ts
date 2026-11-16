@@ -2,6 +2,8 @@
 // going back replays a prefix of the actions (same random numbers, so the same cards come again).
 // The log is rebuilt the same way, so it always matches the current state.
 
+import { cloneState } from "../engine/clone";
+import type { AiName } from "../ai/registry";
 import type { Policy } from "../ai/types";
 import type { Engine } from "../engine/engine";
 import type { Action, DeckList, GameEvent, GameOptions, GameState, PlayerId } from "../engine/types";
@@ -14,6 +16,8 @@ export interface SessionSetup {
   human: PlayerId;
   /** Names for display, by seat. */
   deckNames?: [string, string];
+  /** The opponent AI (default: the best heuristic). */
+  ai?: AiName;
 }
 
 export interface SavedSession extends SessionSetup {
@@ -89,7 +93,7 @@ export class GameSession {
       action,
       turn,
       events,
-      after: structuredClone(this.state),
+      after: cloneState(this.state),
     };
     this.actions.push(action);
     this.steps.push(step);
@@ -134,7 +138,7 @@ export class GameSession {
     const { state, events } = this.engine.newGame(this.setup.decks, this.setup.options);
     this.state = state;
     this.actions.length = 0;
-    this.steps = [{ index: -1, player: null, action: null, turn: 0, events, after: structuredClone(state) }];
+    this.steps = [{ index: -1, player: null, action: null, turn: 0, events, after: cloneState(state) }];
     for (const action of actions) this.apply(action);
   }
 }
