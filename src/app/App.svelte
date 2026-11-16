@@ -3,12 +3,27 @@
   import type { CardPool } from "../data/cards";
   import CardBrowser from "./components/CardBrowser.svelte";
   import PlayScreen from "./components/game/PlayScreen.svelte";
+  import DecksScreen from "./components/decks/DecksScreen.svelte";
+  import MetaScreen from "./components/meta/MetaScreen.svelte";
+  import ReplayScreen from "./components/sim/ReplayScreen.svelte";
   import SimScreen from "./components/sim/SimScreen.svelte";
+  import type { SimJob } from "../sim/runner";
   import { loadCardPool } from "./lib/cardpool";
+  import { db } from "./lib/db";
+  import { BUNDLED_SNAPSHOT, setSnapshot, setUserDecks } from "./lib/decks";
 
-  type Tab = "play" | "sim" | "cards";
-  const tabFromHash = (): Tab =>
-    location.hash === "#cards" ? "cards" : location.hash === "#sim" ? "sim" : "play";
+  const TABS = [
+    ["play", "Spielen"],
+    ["sim", "Simulator"],
+    ["meta", "Meta"],
+    ["decks", "Decks"],
+    ["cards", "Karten"],
+  ] as const;
+  type Tab = (typeof TABS)[number][0];
+  const tabFromHash = (): Tab => {
+    const key = location.hash.slice(1);
+    return TABS.some(([k]) => k === key) ? (key as Tab) : "play";
+  };
   let tab = $state<Tab>(tabFromHash());
 
   let pool = $state<CardPool>();
@@ -16,6 +31,8 @@
 
   // A new version took over (service worker update): offer a reload, since the page still runs the old code.
   let updated = $state(false);
+  // A simulated game being watched (from the simulator's game list).
+  let replay = $state.raw<{ job: SimJob; index: number; names: Record<string, string> } | null>(null);
 
   onMount(() => {
     if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
@@ -23,14 +40,23 @@
     }
     const onHash = () => (tab = tabFromHash());
     addEventListener("hashchange", onHash);
-    loadCardPool().then(
-      (p) => (pool = p),
+    // Cards, a meta snapshot loaded earlier in the browser (if newer than the bundled one) and own decks.
+    Promise.all([loadCardPool(), loadStored()]).then(
+      ([p]) => (pool = p),
       (e: unknown) => (error = String(e)),
     );
     return () => removeEventListener("hashchange", onHash);
   });
 
-  const sections = ["Decks", "Meta"];
+  async function loadStored() {
+    try {
+      const cached = await db.meta.get();
+      if (cached && (!BUNDLED_SNAPSHOT || cached.to > BUNDLED_SNAPSHOT.to)) setSnapshot(cached);
+      setUserDecks(await db.decks.all());
+    } catch {
+      // IndexedDB unavailable: bundled data only.
+    }
+  }
 </script>
 
 <header class="top">
@@ -39,17 +65,8 @@
     <span>GCG Battle Simulator</span>
   </div>
   <nav aria-label="Bereiche">
-    <a href="#play" class:current={tab === "play"} aria-current={tab === "play" ? "page" : undefined}
-      >Spielen</a
-    >
-    <a href="#sim" class:current={tab === "sim"} aria-current={tab === "sim" ? "page" : undefined}
-      >Simulator</a
-    >
-    <a href="#cards" class:current={tab === "cards"} aria-current={tab === "cards" ? "page" : undefined}
-      >Karten</a
-    >
-    {#each sections as name (name)}
-      <span class="soon" title="Kommt in einem späteren Meilenstein">{name}</span>
+    {#each TABS as [key, label] (key)}
+      <a href="#{key}" class:current={tab === key} aria-current={tab === key ? "page" : undefined}>{label}</a>
     {/each}
   </nav>
 </header>
@@ -61,13 +78,25 @@
   </div>
 {/if}
 
-<main class:wide={tab === "play"}>
+<main class:wide={tab === "play" || (tab === "sim" && replay !== null)}>
   {#if error}
     <p class="message error">Kartendaten konnten nicht geladen werden: {error}</p>
   {:else if pool && tab === "play"}
     <PlayScreen {pool} />
+  {:else if pool && tab === "sim" && replay}
+    <ReplayScreen
+      {pool}
+      job={replay.job}
+      index={replay.index}
+      names={replay.names}
+      onclose={() => (replay = null)}
+    />
   {:else if pool && tab === "sim"}
-    <SimScreen {pool} />
+    <SimScreen {pool} onreplay={(job, index, names) => (replay = { job, index, names })} />
+  {:else if pool && tab === "meta"}
+    <MetaScreen {pool} />
+  {:else if pool && tab === "decks"}
+    <DecksScreen {pool} />
   {:else if pool}
     <CardBrowser {pool} />
   {:else}
@@ -109,8 +138,7 @@
     overflow-x: auto;
     scrollbar-width: none;
   }
-  nav a,
-  nav span {
+  nav a {
     padding: 5px 12px;
     border-radius: 999px;
     white-space: nowrap;
@@ -128,10 +156,6 @@
     color: var(--text);
     background: var(--bg-raised);
     border-color: var(--line);
-  }
-  .soon {
-    color: var(--text-dim);
-    opacity: 0.6;
   }
   main {
     padding: 16px max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left));

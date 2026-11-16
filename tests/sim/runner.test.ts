@@ -10,12 +10,14 @@ import {
   chunks,
   deckPairs,
   gameSpec,
+  recordGame,
   runGame,
   runRange,
   type GameSummary,
   type SimJob,
 } from "../../src/sim/runner";
-import { computeStats, wilson } from "../../src/sim/stats";
+import { GameSession } from "../../src/sim/session";
+import { cardStats, computeStats, gamesCsv, metaWeighted, wilson } from "../../src/sim/stats";
 
 const doc = JSON.parse(
   readFileSync(new URL("../../gcgdb/data/cards.json", import.meta.url), "utf8"),
@@ -120,5 +122,74 @@ describe("statistics", () => {
     expect(s.matrix.A!.A!.games).toBe(1);
     expect(s.mulliganRate).toBeCloseTo(0.5);
     expect(s.firstPlayer.games).toBe(3);
+  });
+});
+
+describe("M8: gauntlet, card statistics, replays", () => {
+  it("pairs only the focus deck with every other deck in a gauntlet", () => {
+    const job: SimJob = {
+      decks,
+      ai: ["random", "random"],
+      games: 48,
+      seed: 1,
+      mode: "gauntlet",
+      focus: "ST02",
+    };
+    const pairs = new Set(Array.from({ length: 48 }, (_, i) => [...gameSpec(job, i).decks].sort().join()));
+    expect(pairs).toEqual(new Set(["ST01,ST02", "ST02,ST03", "ST02,ST04"]));
+  });
+
+  it("records opening hand, drawn and played cards and computes card performance", () => {
+    const job: SimJob = { decks, ai: ["heuristic-v0", "heuristic-v0"], games: 40, seed: 2, cardStats: true };
+    const games = runRange(engine, job, 0, 40);
+    for (const g of games) {
+      for (const seat of [0, 1] as const) {
+        const c = g.cards![seat];
+        expect(c.opening.length).toBeGreaterThan(0);
+        expect(c.opening.every((no) => c.drawn.includes(no))).toBe(true);
+      }
+    }
+    const stats = cardStats(games, "ST01");
+    expect(stats.length).toBeGreaterThan(5);
+    for (const c of stats) {
+      expect(c.drawn.games + c.notDrawn.games).toBe(stats[0]!.drawn.games + stats[0]!.notDrawn.games);
+    }
+  });
+
+  it("replays a game with the same result as the run", () => {
+    const job: SimJob = { decks, ai: ["heuristic-v1", "random"], games: 4, seed: 3 };
+    const summary = runGame(engine, job, 3);
+    const recorded = recordGame(engine, job, 3);
+    const s = new GameSession(
+      engine,
+      { decks: recorded.decks, options: recorded.options, human: 0 },
+      recorded.actions,
+    );
+    expect(s.state.result?.winner).toBe(summary.winner);
+    expect(recorded.actions).toHaveLength(summary.decisions);
+  });
+
+  it("weights win rates against the field by meta share and writes CSV", () => {
+    const base = {
+      seed: 0,
+      turns: 10,
+      decisions: 50,
+      mulligans: [false, false] as [boolean, boolean],
+      ms: 1,
+    };
+    const g = (decks: [string, string], winner: 0 | 1): GameSummary => ({
+      ...base,
+      index: 0,
+      firstPlayer: 0,
+      decks,
+      ai: ["random", "random"],
+      slots: [0, 1],
+      winner,
+      reason: "damage",
+    });
+    const stats = computeStats([g(["A", "B"], 0), g(["A", "C"], 1)]);
+    // A beats B (share 3) and loses to C (share 1): 3/4.
+    expect(metaWeighted(stats, { A: 1, B: 3, C: 1 }).A).toBeCloseTo(0.75);
+    expect(gamesCsv([g(["A", "B"], 0)]).split("\n")[1]).toBe("0,0,0,A,B,random,random,0,damage,10,50,0,0,");
   });
 });

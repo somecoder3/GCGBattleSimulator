@@ -113,12 +113,25 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   - Gewichts-Abstimmung `npm run tune` (Koordinatensuche, Bestätigungslauf; Runner kann Gewichte pro KI:
     `SimJob.weights`, `GameSpec.slots`; Node-Worker in `tools/node-pool.ts`). Erste Runde: **keine
     Verbesserung** (einziger Treffer war Zufall) → Gewichte unverändert, v1 ist durch die Suche begrenzt.
+- **M7 (Such-KI) fertig, Ziel nur teilweise erreicht:** `src/ai/search.ts` (Monte Carlo über
+  Determinisierungen, kein voller ISMCTS-Baum) mit Gegnermodell `src/ai/opponent.ts` (Feld möglicher Decks,
+  Posterior aus gesehenen Karten). Suche – v1 **54,3 %** (800 Spiele Meta), stark – v1 53,5 %; kürzerer
+  Horizont schlechter. Schwierigkeitsgrade Leicht/Normal/Schwer/Sehr schwer = v0/v1/search/search-strong
+  (`DIFFICULTIES`), Standard im Spiel „Schwer“. Im Spiel kennt die KI das Feld (Meta mit Anteilen), nie das
+  echte Deck.
+- **M8 fertig:** Simulator-Dashboard (Gauntlet, meta-gewichtete Siegquote, Kartenleistung à la 17lands aus
+  `SimJob.cardStats`/`GameSummary.cards`, Spieleliste, Export JSON/CSV, Läufe in IndexedDB), **Replays**
+  (`recordGame` spielt Spiel Nr. i nach, `ReplayScreen` mit Board im `replay`-Modus), Reiter **Meta**
+  (`MetaScreen`, Neu-Laden von Limitless im Browser, Cache in IndexedDB, aktiver Snapshot über
+  `setSnapshot`) und **Decks** (`DecksScreen`, GCGDB `parseList`/`formatList`, Deckbau, Prüfung, IndexedDB).
+  IndexedDB-Schicht `src/app/lib/db.ts` (Stores `runs`, `decks`, `meta`). Vorauswahl zwischen Reitern über
+  `preset` in `src/app/lib/decks.ts`. Im Browser durchgeklickt (Desktop).
 - Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: **M7** Such-KI (ISMCTS mit Gegnermodell), Schwierigkeitsgrade, Gewichts-Tuning per
-  Selbstspiel. Danach M8 (Simulator-Dashboard, Replays, **Reiter „Meta“ und „Decks“**, Plan Abschnitt 8a,
-  vom Nutzer am 16. Nov. so eingeplant), M9 (restliche Karten, Pages-Vorbereitung).
+- Nächster Schritt: **M9** restliche Karten (Abdeckung 65 %), Q&A-Regelfälle, Feinschliff, Vorbereitung
+  GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
+  Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
   vom Nutzer gepusht, 16. Nov.; der Push aus der Sitzung war vom Sicherheitsfilter abgelehnt worden).
 - Beobachtung: Shining Gundam (M01, meistgespielt) gewinnt bei v1 nur ~40 %; die Karten sind korrekt (Partie

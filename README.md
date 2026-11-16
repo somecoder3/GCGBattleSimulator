@@ -52,7 +52,13 @@ KI und Stärkemessungen: [docs/AI.md](docs/AI.md), Meta-Decks: [docs/META.md](do
 
 ## Simulieren
 
-Im Reiter „Simulator“ (Web Worker) oder auf der Kommandozeile (Worker-Threads, Standard: Kerne − 1):
+Im Reiter „Simulator“ (Web Worker): Decks wählen (Meta, Starter, eigene), „Jeder gegen jeden“ oder
+„Gauntlet“ (ein Deck gegen das Feld), KIs, Spiele, Seed. Ergebnisse mit Siegquoten und 95-%-Intervallen
+pro KI und Deck, meta-gewichteter Siegquote, Matchup-Matrix, **Kartenleistung** (Siegquote, wenn eine Karte
+auf der Hand, gespielt oder in der Starthand war) und Spieleliste mit **Replay**. Läufe werden im Browser
+gespeichert und lassen sich als JSON oder CSV exportieren.
+
+Auf der Kommandozeile (Worker-Threads, Standard: Kerne − 1):
 
 ```bash
 npm run sim -- --ai v1,random --decks starters --games 4000   # KI-Vergleich
@@ -60,10 +66,19 @@ npm run sim -- --ai v1 --decks starters --games 10000         # Deck-Matrix
 npm run sim -- --decks ST01,ST03 --ai v1 --json out.json      # nur diese Decks, Ergebnisse als JSON
 ```
 
-KIs: `random`, `v0`, `v1` (= `heuristic`). Decks: `random` (Zufallsdecks), `starters`, `meta` (Top 8
+KIs: `random`, `v0`, `v1` (= `heuristic`), `search`, `strong` (= `search-strong`). Decks: `random` (Zufallsdecks), `starters`, `meta` (Top 8
 der Meta, `meta12` für 12 …) oder eine Liste (`ST01,M03`).
 Weitere Schalter: `--seed`, `--workers` (0 = ohne Threads), `--max-turns`, `--check` (Invarianten), `--verbose`.
 Jedes Spiel folgt aus Job und Nummer und ist damit wiederholbar.
+
+## Meta und Decks
+
+- **Meta:** Archetypen des aktuellen Snapshots mit Anteil, Listen und Unterstützung, Konsens- und
+  bestplatzierte Liste mit Kartenbildern, Bannliste; „Neu von Limitless laden“ (Zeitraum, Mindestgröße,
+  Top-N) speichert den neuen Stand im Browser. Von dort direkt spielen oder gegen das Feld simulieren.
+- **Decks:** eigene Decks anlegen, aus Meta/Starter kopieren, Listen importieren (alle Formate von GCGDBs
+  `parseList`), mit Kartensuche bearbeiten, prüfen (Deckbau-Regeln, Bannliste, Kartenunterstützung),
+  speichern (IndexedDB), exportieren, spielen und simulieren.
 
 ## Spielen
 

@@ -157,3 +157,117 @@ export function formatStats(s: SimStats, deckNames: Record<string, string> = {})
   }
   return lines.join("\n");
 }
+
+export interface CardStat {
+  no: string;
+  /** Games of the deck in which the card was drawn / played / in the opening hand / never drawn. */
+  drawn: Rate;
+  played: Rate;
+  opening: Rate;
+  notDrawn: Rate;
+}
+
+/**
+ * Card performance per deck (like 17lands): how often the deck won when a card was drawn, played or in
+ * the opening hand, and when it was never drawn. Needs games recorded with `cardStats`.
+ */
+export function cardStats(games: readonly GameSummary[], deck: string): CardStat[] {
+  const counters = new Map<
+    string,
+    { drawn: Counter; played: Counter; opening: Counter; notDrawn: Counter }
+  >();
+  const get = (no: string) => {
+    let c = counters.get(no);
+    if (!c)
+      counters.set(
+        no,
+        (c = {
+          drawn: new Counter(),
+          played: new Counter(),
+          opening: new Counter(),
+          notDrawn: new Counter(),
+        }),
+      );
+    return c;
+  };
+  const seatGames: {
+    result: "win" | "loss" | "draw";
+    drawn: Set<string>;
+    played: Set<string>;
+    opening: Set<string>;
+  }[] = [];
+  for (const g of games) {
+    if (g.error || !g.cards) continue;
+    for (const seat of [0, 1] as const) {
+      if (g.decks[seat] !== deck) continue;
+      const result = g.winner === null ? "draw" : g.winner === seat ? "win" : "loss";
+      const cards = g.cards[seat];
+      seatGames.push({
+        result,
+        drawn: new Set(cards.drawn),
+        played: new Set(cards.played),
+        opening: new Set(cards.opening),
+      });
+      for (const no of cards.drawn) get(no);
+    }
+  }
+  for (const sg of seatGames) {
+    for (const [no, c] of counters) {
+      if (sg.drawn.has(no)) c.drawn.add(sg.result);
+      else c.notDrawn.add(sg.result);
+      if (sg.played.has(no)) c.played.add(sg.result);
+      if (sg.opening.has(no)) c.opening.add(sg.result);
+    }
+  }
+  return [...counters].map(([no, c]) => ({
+    no,
+    drawn: c.drawn.rate(),
+    played: c.played.rate(),
+    opening: c.opening.rate(),
+    notDrawn: c.notDrawn.rate(),
+  }));
+}
+
+/**
+ * Win rate against the field weighted by meta share: Σ share(b) · rate(a vs b) / Σ share(b) over the
+ * opponents b with games (mirrors left out).
+ */
+export function metaWeighted(stats: SimStats, shares: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [a, row] of Object.entries(stats.matrix)) {
+    let sum = 0;
+    let weight = 0;
+    for (const [b, r] of Object.entries(row)) {
+      const w = shares[b] ?? 0;
+      if (a === b || !r.games || !w) continue;
+      sum += w * r.rate;
+      weight += w;
+    }
+    if (weight) out[a] = sum / weight;
+  }
+  return out;
+}
+
+/** One row per game, for spreadsheets. */
+export function gamesCsv(games: readonly GameSummary[]): string {
+  const head = "index,seed,first,deck0,deck1,ai0,ai1,winner,reason,turns,decisions,mulligan0,mulligan1,error";
+  const rows = games.map((g) =>
+    [
+      g.index,
+      g.seed,
+      g.firstPlayer,
+      g.decks[0],
+      g.decks[1],
+      g.ai[0],
+      g.ai[1],
+      g.winner ?? "",
+      g.reason,
+      g.turns,
+      g.decisions,
+      Number(g.mulligans[0]),
+      Number(g.mulligans[1]),
+      g.error ? JSON.stringify(g.error) : "",
+    ].join(","),
+  );
+  return [head, ...rows].join("\n") + "\n";
+}

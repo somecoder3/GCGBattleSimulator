@@ -4,6 +4,7 @@
   import { crossfade, fade, fly } from "svelte/transition";
   import { cardImageUrl } from "../../../data/cards";
   import CardImage from "../CardImage.svelte";
+  import type { FieldDeck } from "../../../ai/opponent";
   import { makePolicy } from "../../../ai/registry";
   import type { CardPool } from "../../../data/cards";
   import type { CardDef } from "../../../data/types";
@@ -29,16 +30,26 @@
     session,
     onsave,
     onnew,
+    opponentField = [],
+    replay = false,
   }: {
     engine: Engine;
     pool: CardPool;
     session: GameSession;
     onsave: () => void;
     onnew: () => void;
+    /** Decks the AI considers for the human (search AI's opponent model). */
+    opponentField?: FieldDeck[];
+    /** Watching a recorded game: no decisions, no AI turns, no undo. */
+    replay?: boolean;
   } = $props();
 
+  // The AI knows its own list and the field, never the human's actual deck.
   // svelte-ignore state_referenced_locally
-  const ai = makePolicy(session.setup.ai ?? "heuristic-v1", engine, session.setup.options.seed);
+  const ai = makePolicy(session.setup.ai ?? "heuristic-v1", engine, session.setup.options.seed, undefined, {
+    deck: session.setup.decks[session.human === 0 ? 1 : 0],
+    field: opponentField,
+  });
   // svelte-ignore state_referenced_locally
   const human = session.human;
   const enemy: PlayerId = human === 0 ? 1 : 0;
@@ -214,6 +225,7 @@
   $effect(() => {
     void view;
     void stops;
+    if (replay) return;
     if (skipActionStep()) {
       const timer = setTimeout(() => refresh(session.apply({ type: "pass" }, true)), Math.min(speed, 150));
       return () => clearTimeout(timer);
@@ -230,7 +242,7 @@
     logBox?.scrollTo({ top: logBox.scrollHeight });
   });
 
-  const decision = $derived(view.pending && view.pending.player === human ? view.pending : null);
+  const decision = $derived(!replay && view.pending && view.pending.player === human ? view.pending : null);
   const options = $derived(decision?.options ?? []);
   const buttons = $derived(options.filter(isButton));
   const spaceAction = $derived(primaryButton(buttons));
@@ -407,6 +419,7 @@
 
   /** Rollback points: the first log line of each human action, and the start of the human's turns. */
   function rollbackIndex(line: LogLine, i: number): number | undefined {
+    if (replay) return undefined;
     if (line.kind === "turn") return line.player === human ? session.turnStart(line.turn!) : undefined;
     if (line.actor !== human || line.index < 0 || line.auto) return undefined;
     return lines[i - 1]?.index === line.index ? undefined : line.index;
@@ -631,6 +644,8 @@
             {/each}
           </div>
         {/if}
+      {:else if replay}
+        <p class="prompt">Replay (Sicht von Sitz 1)</p>
       {:else}
         <p class="prompt thinking">KI ist am Zug …</p>
       {/if}
@@ -719,24 +734,26 @@
   <aside class="side-panel" class:open={panelOpen}>
     <div class="controls">
       <button class="btn panel-close" onclick={() => (panelOpen = false)} aria-label="Schließen">✕</button>
-      <button class="btn" onclick={undo} disabled={!canUndo} title="Strg+Z">↶ Rückgängig</button>
-      <label>
-        Tempo
-        <select bind:value={speed}>
-          {#each SPEEDS as sp (sp.ms)}
-            <option value={sp.ms}>{sp.label}</option>
-          {/each}
-        </select>
-      </label>
-      <label title="Wann das Spiel im Action Step für dich anhält, wenn du etwas spielen könntest">
-        Anhalten
-        <select bind:value={stops}>
-          {#each STOPS as st (st.value)}
-            <option value={st.value}>{st.label}</option>
-          {/each}
-        </select>
-      </label>
-      <button class="btn ghost" onclick={onnew}>Neues Spiel</button>
+      {#if !replay}
+        <button class="btn" onclick={undo} disabled={!canUndo} title="Strg+Z">↶ Rückgängig</button>
+        <label>
+          Tempo
+          <select bind:value={speed}>
+            {#each SPEEDS as sp (sp.ms)}
+              <option value={sp.ms}>{sp.label}</option>
+            {/each}
+          </select>
+        </label>
+        <label title="Wann das Spiel im Action Step für dich anhält, wenn du etwas spielen könntest">
+          Anhalten
+          <select bind:value={stops}>
+            {#each STOPS as st (st.value)}
+              <option value={st.value}>{st.label}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+      <button class="btn ghost" onclick={onnew}>{replay ? "Replay schließen" : "Neues Spiel"}</button>
     </div>
 
     <div class="detail">

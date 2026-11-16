@@ -41,20 +41,18 @@ export class LookaheadPolicy implements Policy {
     if (options.length === 1) return options[0]!;
     if (!SEARCHED.has(decision.kind)) return this.rules.choose(view, decision);
 
+    return this.rank(view, decision)[0] ?? this.rules.choose(view, decision);
+  }
+
+  /** All options, best first (stable: the v0 choice wins ties). */
+  rank(view: GameState, decision: Decision): Action[] {
     const base = determinize(view);
     const me = decision.player;
-    let best: Action | undefined;
-    let bestScore = -Infinity;
-    // The v0 choice goes first, so it wins ties.
     const preferred = this.rules.choose(base, decision);
-    for (const option of [preferred, ...options.filter((o) => o !== preferred)]) {
-      const score = this.score(base, option, me);
-      if (score > bestScore) {
-        best = option;
-        bestScore = score;
-      }
-    }
-    return best ?? this.rules.choose(view, decision);
+    const ordered = [preferred, ...decision.options.filter((o) => o !== preferred)];
+    const scored = ordered.map((option, i) => ({ option, i, score: this.score(base, option, me) }));
+    scored.sort((a, b) => b.score - a.score || a.i - b.i);
+    return scored.map((x) => x.option);
   }
 
   /** Value of the position after `option` and the v0 continuation up to the next main decision. */

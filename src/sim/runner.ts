@@ -9,7 +9,15 @@ import { randomDeck } from "../engine/deck";
 import type { Engine } from "../engine/engine";
 import { checkInvariants } from "../engine/invariants";
 import { seedRng } from "../engine/rng";
-import type { DeckList, GameEndReason, PlayerId } from "../engine/types";
+import type {
+  Action,
+  DeckList,
+  GameEndReason,
+  GameEvent,
+  GameOptions,
+  GameState,
+  PlayerId,
+} from "../engine/types";
 import { playMatch } from "./match";
 
 export interface DeckEntry {
@@ -21,6 +29,13 @@ export interface DeckEntry {
 export interface SimJob {
   /** Decks to pair with each other (every pair once, mirrors included). Empty: random legal decks. */
   decks: DeckEntry[];
+  /** "gauntlet": only the deck `focus` against every other deck (no mirror). Default: every pair. */
+  mode?: "pairs" | "gauntlet";
+  focus?: string;
+  /** Meta share per deck id, for the meta-weighted win rate. */
+  shares?: Record<string, number>;
+  /** Record opening hand, drawn and played cards per seat (card statistics). */
+  cardStats?: boolean;
   /** The two AIs. If they differ, each plays each deck of a pairing equally often. */
   ai: [AiName, AiName];
   /** Evaluation weights for heuristic-v1 per AI of `ai` (tuning: the same AI with other weights). */
@@ -52,6 +67,17 @@ export interface GameSummary extends GameSpec {
   mulligans: [boolean, boolean];
   ms: number;
   error?: string;
+  /** Card numbers per seat (with `job.cardStats`). */
+  cards?: [SeatCards, SeatCards];
+}
+
+export interface SeatCards {
+  /** The hand at the start of the first turn (after mulligans). */
+  opening: string[];
+  /** Every card that came into the hand (drawn, from Shields or effects), opening hand included (each once). */
+  drawn: string[];
+  /** Cards played from the hand: deployed, paired or activated as a Command (each number once). */
+  played: string[];
 }
 
 /** Unordered pairs of deck indices, mirrors included: (0,0), (0,1), …, (1,1), … */
@@ -59,6 +85,18 @@ export function deckPairs(n: number): [number, number][] {
   const pairs: [number, number][] = [];
   for (let i = 0; i < n; i++) for (let j = i; j < n; j++) pairs.push([i, j]);
   return pairs;
+}
+
+/** The pairings of a job (indices into job.decks). */
+export function jobPairs(job: SimJob): [number, number][] {
+  if (job.mode === "gauntlet") {
+    const focus = Math.max(
+      0,
+      job.decks.findIndex((d) => d.id === job.focus),
+    );
+    return job.decks.flatMap((_, i): [number, number][] => (i === focus ? [] : [[focus, i]]));
+  }
+  return deckPairs(job.decks.length);
 }
 
 /**
@@ -72,8 +110,8 @@ export function gameSpec(job: SimJob, index: number): GameSpec {
   const swapDecks = ((index >> 2) & 1) === 1;
   let decks: [string, string] = ["random", "random"];
   if (job.decks.length) {
-    const pairs = deckPairs(job.decks.length);
-    const [a, b] = pairs[Math.floor(index / 8) % pairs.length]!;
+    const pairs = jobPairs(job);
+    const [a, b] = pairs.length ? pairs[Math.floor(index / 8) % pairs.length]! : [0, 0];
     decks = [job.decks[a]!.id, job.decks[b]!.id];
     if (swapDecks) decks = [decks[1], decks[0]];
   }
@@ -100,6 +138,31 @@ export function runGame(engine: Engine, job: SimJob, index: number): GameSummary
     decks[0].main.length + decks[0].resources.length,
     decks[1].main.length + decks[1].resources.length,
   ];
+  const seatCards: [SeatCards, SeatCards] = [
+    { opening: [], drawn: [], played: [] },
+    { opening: [], drawn: [], played: [] },
+  ];
+  const add = (list: string[], no: string) => void (list.includes(no) || list.push(no));
+  let openingDone = false;
+  const collect = (state: GameState, events: GameEvent[]) => {
+    for (const e of events) {
+      if (e.t === "turnStart" && !openingDone) {
+        openingDone = true;
+        for (const p of [0, 1] as const) {
+          for (const id of state.players[p].hand) add(seatCards[p].opening, state.cards[id]!.no);
+        }
+      }
+      if (e.t === "draw") add(seatCards[e.player].drawn, state.cards[e.card]!.no);
+      else if (e.t === "toHand" && e.from !== "battle" && e.from !== "pilot") {
+        // Shields, searched or recovered cards: in the hand as if drawn.
+        const card = state.cards[e.card]!;
+        add(seatCards[card.owner].drawn, card.no);
+      } else if (e.t === "deploy" || e.t === "pair" || e.t === "play") {
+        const card = state.cards[e.card]!;
+        if (!card.token) add(seatCards[card.owner].played, card.no);
+      }
+    }
+  };
   try {
     const record = playMatch(
       engine,
@@ -111,15 +174,23 @@ export function runGame(engine: Engine, job: SimJob, index: number): GameSummary
           engine,
           spec.seed * 2 + seat,
           job.weights?.[spec.slots[seat]!] ?? undefined,
+          {
+            deck: decks[seat],
+            // The field: the decks of this simulation (equally likely); random decks give no field.
+            field: job.decks.map((d) => ({ deck: d.deck, weight: 1 })),
+          },
         ),
       ) as [Policy, Policy],
       {
-        onStep: job.check
-          ? (state) => {
-              const errors = checkInvariants(engine, state, expected);
-              if (errors.length) throw new Error(errors.join("\n"));
-            }
-          : undefined,
+        onStep:
+          job.check || job.cardStats
+            ? (state, events) => {
+                if (job.cardStats) collect(state, events);
+                if (!job.check) return;
+                const errors = checkInvariants(engine, state, expected);
+                if (errors.length) throw new Error(errors.join("\n"));
+              }
+            : undefined,
       },
     );
     const redraws = record.actions.filter((a) => a.type === "redraw" || a.type === "keepHand");
@@ -136,6 +207,7 @@ export function runGame(engine: Engine, job: SimJob, index: number): GameSummary
       decisions: record.actions.length,
       mulligans,
       ms: performance.now() - started,
+      ...(job.cardStats ? { cards: seatCards } : {}),
     };
   } catch (error) {
     return {
@@ -163,4 +235,27 @@ export function chunks(total: number, workers: number): [number, number][] {
   const out: [number, number][] = [];
   for (let from = 0; from < total; from += size) out.push([from, Math.min(total, from + size)]);
   return out;
+}
+
+/** Plays game `index` of a job again and returns everything needed to watch it (replay). */
+export function recordGame(
+  engine: Engine,
+  job: SimJob,
+  index: number,
+): { spec: GameSpec; decks: [DeckList, DeckList]; options: GameOptions; actions: Action[] } {
+  const spec = gameSpec(job, index);
+  const decks = specDecks(engine, job, spec);
+  const options: GameOptions = {
+    seed: spec.seed,
+    firstPlayer: spec.firstPlayer,
+    ...(job.maxTurns ? { maxTurns: job.maxTurns } : {}),
+  };
+  const policies = [0, 1].map((seat) =>
+    makePolicy(spec.ai[seat]!, engine, spec.seed * 2 + seat, job.weights?.[spec.slots[seat]!] ?? undefined, {
+      deck: decks[seat],
+      field: job.decks.map((d) => ({ deck: d.deck, weight: 1 })),
+    }),
+  ) as [Policy, Policy];
+  const record = playMatch(engine, decks, options, policies);
+  return { spec, decks, options, actions: record.actions };
 }

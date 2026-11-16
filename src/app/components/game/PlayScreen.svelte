@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { CardPool } from "../../../data/cards";
-  import { AI_LABELS, AI_NAMES, type AiName } from "../../../ai/registry";
+  import { AI_LABELS, DIFFICULTIES, type AiName } from "../../../ai/registry";
   import { Engine } from "../../../engine/engine";
-  import { SNAPSHOT, cardLib, deckChoices, deckLabel } from "../../lib/decks";
+  import { SNAPSHOT, cardLib, deckChoices, deckLabel, preset } from "../../lib/decks";
   import type { PlayerId } from "../../../engine/types";
   import { GameSession, type SavedSession } from "../../../sim/session";
   import Board from "./Board.svelte";
@@ -17,15 +17,20 @@
   const groups = [
     { key: "meta", label: SNAPSHOT ? `Meta (Turniere bis ${SNAPSHOT.to})` : "Meta" },
     { key: "starter", label: "Starter-Decks" },
+    { key: "user", label: "Eigene Decks" },
   ] as const;
 
   let session = $state.raw<GameSession>();
   let saved = $state.raw<SavedSession | undefined>(load());
 
-  let myDeck = $state(DECKS[0]!.id);
+  // A deck chosen in the Meta or Decks tab ("play against the AI").
+  let myDeck = $state(preset.play && DECKS.some((d) => d.id === preset.play) ? preset.play : DECKS[0]!.id);
+  preset.play = null;
   let aiDeck = $state(DECKS[1]!.id);
   let starter = $state<"random" | "me" | "ai">("random");
-  let aiName = $state<AiName>("heuristic-v1");
+  let aiName = $state<AiName>("search");
+  // What the AI expects you to play: the meta by share, starter decks a little.
+  const field = DECKS.map((d) => ({ deck: d.deck, weight: d.share ?? 0.01 }));
   let seed = $state(randomSeed());
 
   function randomSeed(): number {
@@ -93,7 +98,7 @@
 {/snippet}
 
 {#if session}
-  <Board {engine} {pool} {session} onsave={save} onnew={newGame} />
+  <Board {engine} {pool} {session} opponentField={field} onsave={save} onnew={newGame} />
 {:else}
   <section class="setup" aria-labelledby="setup-title">
     <h1 id="setup-title">Spiel gegen die KI</h1>
@@ -115,9 +120,9 @@
         </select>
       </label>
       <label>
-        Gegner-KI
+        Schwierigkeit
         <select bind:value={aiName}>
-          {#each AI_NAMES as n (n)}<option value={n}>{AI_LABELS[n]}</option>{/each}
+          {#each DIFFICULTIES as d (d.ai)}<option value={d.ai}>{d.label} – {AI_LABELS[d.ai]}</option>{/each}
         </select>
       </label>
       <label>

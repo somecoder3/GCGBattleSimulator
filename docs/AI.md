@@ -1,6 +1,6 @@
 # KI
 
-Stand: M4 (16. Nov. 2026). Plan und spätere Stufen: `docs/PLAN.md` Abschnitt 6.
+Stand: M8 (16. Nov. 2026). Plan und spätere Stufen: `docs/PLAN.md` Abschnitt 6.
 
 ## Schnittstelle
 
@@ -16,6 +16,43 @@ erklärt `usesView = false` (Zufalls-KI). `playMatch` (`src/sim/match.ts`) und `
 | **Heuristik v1** (`heuristic-v1`) | `src/ai/lookahead.ts`, `src/ai/evaluate.ts` | Standard-Gegner im Spiel, Massensimulation     |
 
 Namen und Erzeugung: `src/ai/registry.ts` (`makePolicy`, Kurzformen `v0`, `v1`, `heuristic` = v1).
+
+## Such-KI (M7, `src/ai/search.ts`, `src/ai/opponent.ts`)
+
+**Gegnermodell:** Die KI kennt ihre eigene Liste und ein **Feld** möglicher Gegnerdecks (im Spiel: die
+Meta-Archetypen mit ihren Anteilen, Starter-Decks mit kleinem Gewicht; im Simulator: die Decks des Laufs,
+gleich wahrscheinlich). Aus den gesehenen Karten des Gegners (Feld, Trash, Verbannung, Base, Piloten)
+schätzt sie, welches Deck er spielt: Anteil × 0,02 je gesehener Karte, die das Deck nicht (so oft) enthält.
+Für eine Stichprobe zieht sie ein Deck nach diesem Gewicht und füllt die verdeckten Karten (Hand, Deck,
+Schilde) mit dessen noch nicht gesehenen Karten in zufälliger Reihenfolge; ihre eigenen verdeckten Karten
+sind der Rest ihrer Liste. Sie sieht nie die echten verdeckten Karten.
+
+**Suche:** Für jede Entscheidung (Main, Block, Action, Effekte) nimmt sie die besten 6 Optionen nach v1
+(`LookaheadPolicy.rank`), zieht 6 Stichproben (stark: 16 Stichproben, 8 Optionen) und spielt jede Option in
+jeder Stichprobe mit v0 für beide Spieler **bis zu ihrer nächsten Main Phase** weiter, also durch den
+ganzen Zug des Gegners mit Karten, die er wirklich haben könnte. Gewählt wird der beste Durchschnitt der
+Bewertung (`Evaluator`). Das ist Monte Carlo über Determinisierungen („PIMC“), **kein vollständiger
+ISMCTS-Baum**: Die Engine fragt sehr feinkörnig (jedes Ziel, jedes Passen); ein Baum würde fast sein
+ganzes Budget auf triviale Zweige verwenden.
+
+**Stärke (Top-8-Meta-Decks, alle Paarungen):**
+
+| Paarung                      | Spiele | Ergebnis (95 %)          | Rechenzeit/Spiel |
+| ---------------------------- | ------ | ------------------------ | ---------------- |
+| Suche – v1                   | 800    | **54,3 %** (50,8–57,7 %) | 2,7 s            |
+| Suche stark – v1             | 800    | 53,5 % (50,0–56,9 %)     | 6,8 s            |
+| Suche stark – Suche          | 256    | 57,0 % (50,9–62,9 %)     | 9,3 s            |
+| Suche, Horizont Zugende – v1 | 800    | 52,5 % (49,0–55,9 %)     | –                |
+| Suche – v1 (Starter-Decks)   | 128    | 62,5 % (53,9–70,4 %)     | 1,9 s            |
+
+Die Suche ist messbar stärker als v1, aber nicht deutlich; mehr Stichproben helfen kaum. Die Grenze ist die
+Fortsetzung: Für alle weiteren Entscheidungen (auch die eigenen im restlichen Zug) spielt v0. Nächste
+Hebel: eine bessere Fortsetzungspolitik (z. B. v1 für die eigenen Entscheidungen im laufenden Zug), Gewichte
+neu abstimmen, wenn die Suche sie nutzt (`npm run tune` mit `search`), echte Baumsuche über
+Makro-Aktionen (ganzer Zug als Plan).
+
+**Schwierigkeitsgrade im Spiel** (`DIFFICULTIES` in `src/ai/registry.ts`): Leicht = v0, Normal = v1,
+Schwer = Suche (Standard), Sehr schwer = Suche stark.
 
 ## Heuristik v1 (Bewertung + Vorausschau)
 
