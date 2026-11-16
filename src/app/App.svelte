@@ -14,7 +14,13 @@
   let pool = $state<CardPool>();
   let error = $state<string>();
 
+  // A new version took over (service worker update): offer a reload, since the page still runs the old code.
+  let updated = $state(false);
+
   onMount(() => {
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.addEventListener("controllerchange", () => (updated = true));
+    }
     const onHash = () => (tab = tabFromHash());
     addEventListener("hashchange", onHash);
     loadCardPool().then(
@@ -47,6 +53,13 @@
     {/each}
   </nav>
 </header>
+
+{#if updated}
+  <div class="update" role="status">
+    Neue Version geladen.
+    <button onclick={() => location.reload()}>Neu laden</button>
+  </div>
+{/if}
 
 <main class:wide={tab === "play"}>
   {#if error}
@@ -124,6 +137,28 @@
     padding: 16px max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left));
     max-width: 1600px;
     margin: 0 auto;
+  }
+  .update {
+    position: fixed;
+    z-index: 50;
+    left: 50%;
+    bottom: 16px;
+    translate: -50% 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-raised);
+    box-shadow: var(--shadow);
+  }
+  .update button {
+    padding: 4px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent-strong);
+    color: #fff;
   }
   main.wide {
     max-width: none;
