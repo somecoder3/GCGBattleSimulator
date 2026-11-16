@@ -1,6 +1,6 @@
 # GCGBattleSimulator – Umsetzungsplan
 
-Stand: 16. Nov. 2026 · Status: **freigegeben**, Entscheidungen in Abschnitt 13 · **M0–M5 fertig** (Engine: `docs/ENGINE.md`, Effekte: `docs/EFFECTS.md`, KI: `docs/AI.md`, Meta: `docs/META.md`)
+Stand: 16. Nov. 2026 · Status: **freigegeben**, Entscheidungen in Abschnitt 13 · **M0–M6 fertig** (M6 am Handy nur in der Emulation geprüft) (Engine: `docs/ENGINE.md`, Effekte: `docs/EFFECTS.md`, KI: `docs/AI.md`, Meta: `docs/META.md`)
 
 Ein Kampfsimulator für das **Gundam Card Game** auf Basis von [GCGDB](https://github.com/somecoder3/GCGDB):
 

@@ -97,13 +97,25 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
     geht er mit). `Engine.card()` berücksichtigt Piloten, die als Unit eingesetzt wurden.
   - Tests: 158 (neu: 21 Meta-Kartentests in `tests/cards/meta.test.ts`, 6 Meta-Pipeline-Tests).
     `npm run sim -- --decks meta --ai v1 --check`: 2000 Spiele ohne Fehler.
+- **M6 (schöne Oberfläche) fertig**, Handy nur in der Browser-Emulation (375×812) geprüft.
+  - Intelligente Stopps: Einstellung „Anhalten“ (Klug/Immer/Nie, `localStorage`); automatische Pässe sind in
+    der Sitzung als `auto` markiert (kein Rollback-Punkt, gespeichert in `SavedSession.auto`).
+  - Animationen: Schadens-/Heilzahlen, Angreifer/Verteidiger, wackelnde Schildzone, Zugbanner, Zerstörung.
+  - Ziehen & Ablegen mit Pointer Events (`data-drop` = Karten-Id, `player`, `field`); Klicken bleibt.
+  - Handy (≤ 700 px): Kartenbreite aus Bildschirmbreite, Seitenleiste als Schublade („☰ Log & Details“).
+  - PWA: `public/manifest.webmanifest`, `public/sw.js` (Version aus `__BUILD_ID__`, Kartenbilder in eigenem
+    Cache), Icons aus `public/icon.svg` (`npm run icons`), Hinweis bei neuer Version. Preview-Server in
+    `.claude/launch.json` (`preview`, Port 4173).
+  - `npm run game -- M01 M02 3`: KI-Partie als Log (Analyse von KI und Karten).
 - Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: **M6** schöne Oberfläche (Animationen, Ziehen & Ablegen, Handy-Layouts, Zeitleiste,
-  intelligente Stopps im Action Step, PWA/offline). Danach M7 (ISMCTS, Gewichts-Tuning), M8 (Simulator-
-  Dashboard, Replays), M9 (restliche Karten).
-- Commits: M3 `e3bdd8e`, M4 `4f03529` (beide gepusht).
+- Nächster Schritt: **M7** Such-KI (ISMCTS mit Gegnermodell), Schwierigkeitsgrade, Gewichts-Tuning per
+  Selbstspiel. Danach M8 (Simulator-Dashboard, Replays), M9 (restliche Karten, Pages-Vorbereitung).
+- Commits: M3 `e3bdd8e`, M4 `4f03529` (beide gepusht); M5 `2a76b7f` und M6 lokal, **Push vom
+  Sicherheitsfilter der Sitzung abgelehnt** (neue Action mit Schreibrecht) – Nutzer pusht selbst.
+- Beobachtung: Shining Gundam (M01, meistgespielt) gewinnt bei v1 nur ~40 %; die Karten sind korrekt (Partie
+  per `npm run game` geprüft), die KI spielt das Special-Move-Timing schlecht (v0 wirft z. B. Master Asia ab).
 
 ## Svelte-Fallen
 

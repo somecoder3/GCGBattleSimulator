@@ -44,6 +44,7 @@ npm run images -- --download          # fehlende Bilder langsam von gundam-gcg.c
 | `npm run fuzz`     | 100 000 Zufallsspiele mit Invarianten-Prüfung               |
 | `npm run coverage` | Wie viele Kartentexte die Engine versteht (`-- --set ST01`) |
 | `npm run meta`     | Aktuelle Turnierdecks von Limitless laden (`-- --report`)   |
+| `npm run game`     | Eine KI-Partie als Log, z. B. `-- M01 M02 3`                |
 
 Aufbau der Regel-Engine: [docs/ENGINE.md](docs/ENGINE.md), Karteneffekte: [docs/EFFECTS.md](docs/EFFECTS.md),
 KI und Stärkemessungen: [docs/AI.md](docs/AI.md), Meta-Decks: [docs/META.md](docs/META.md).
@@ -65,11 +66,18 @@ Jedes Spiel folgt aus Job und Nummer und ist damit wiederholbar.
 
 ## Spielen
 
-Im Reiter „Spielen“ Deck, KI-Deck, Startspieler und Seed wählen. Leuchtende Karten sind nutzbar: anklicken,
-dann im Menü oder direkt auf dem Feld das Ziel wählen (rot pulsierend; die Schildzone steht für den
-Spielerangriff). Leertaste = hervorgehobene Schaltfläche (Passen, Nicht blocken, Main Phase beenden),
+Im Reiter „Spielen“ Deck (Meta oder Starter), KI-Deck, Gegner-KI, Startspieler und Seed wählen. Leuchtende
+Karten sind nutzbar: anklicken und im Menü oder direkt auf dem Feld das Ziel wählen (rot pulsierend; die
+Schildzone steht für den Spielerangriff), oder die Karte auf das Ziel bzw. das eigene Feld **ziehen** (Maus
+und Touch). „Anhalten“ legt fest, wann das Spiel im Action Step für dich stoppt (Klug: nur bei Unit-Kämpfen
+oder wenn ein Angriff dich ohne Schilde lassen könnte). Leertaste = hervorgehobene Schaltfläche (Passen, Nicht blocken, Main Phase beenden),
 Strg+Z = letzte eigene Entscheidung zurück, Esc = Auswahl aufheben. Im Log springt ↶ vor eine Entscheidung
 oder an den Beginn eines eigenen Zuges. Die Partie wird im Browser gespeichert und lässt sich fortsetzen.
+Am Handy (hochkant) liegen Log, Details und Einstellungen in einer Leiste hinter „☰ Log & Details“.
+
+Die gebaute App (`npm run build`, `npm run preview`) ist eine installierbare PWA und läuft nach dem ersten
+Besuch offline; Kartenbilder werden beim Ansehen zwischengespeichert. Icons: `npm run icons` aus
+`public/icon.svg`.
 
 ## GCGDB aktualisieren
 
