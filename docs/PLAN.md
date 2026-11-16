@@ -261,6 +261,28 @@ Effekte werden **als Daten** beschrieben und von der Engine interpretiert. Beisp
 
 ---
 
+## 8a. Reiter „Meta“ und „Decks“ (M8)
+
+Beide nutzen dieselbe Speicherung wie die Simulationsläufe (IndexedDB) und speisen Spiel und Simulator.
+
+**Meta** – Daten und Logik gibt es seit M5 (`src/meta/`), es fehlt die Ansicht:
+
+- Archetypen des aktuellen Snapshots: Meta-Anteil, Zahl der Listen, Farben, Status der Kartenunterstützung.
+- Pro Archetyp Konsensliste und bestplatzierte echte Liste mit Kartenbildern; Hinweise, was für die
+  Legalität angepasst wurde (zwei Hauptfarben, Bannliste, aufgelöste Bann-Paare).
+- Meta im Browser neu von Limitless laden (CORS erlaubt): Zeitraum, Mindestgröße der Turniere, Top-N;
+  Ergebnis in IndexedDB zwischenspeichern, mitgelieferter Snapshot als Rückfall (offline).
+- Bannliste anzeigen.
+- Direkt übernehmen: „Gegen die KI spielen“ und „Im Simulator verwenden“ (z. B. Gauntlet gegen das Feld).
+
+**Decks** – eigene Decklisten:
+
+- Import der Formate, die GCGDB liest (`lists.js`: ExBurst, Limitless, TTS …), und Export.
+- Einfacher Deckbau aus der Kartenliste (Filter wie im Reiter „Karten“), Anzahl je Karte, Ressourcen-Deck.
+- Laufende Prüfung: Deckbau-Regeln (6-1), Bannliste, und welche Karten die Engine noch nicht vollständig
+  versteht.
+- Decks speichern, kopieren (z. B. aus einem Meta-Archetyp), löschen; in Spiel und Simulator wählbar.
+
 ## 9. Spiel gegen die KI – Aussehen und Gefühl
 
 ### Spielfeld
@@ -325,18 +347,18 @@ Effekte werden **als Daten** beschrieben und von der Engine interpretiert. Beisp
 
 Jeder Meilenstein endet mit etwas Ausprobierbarem, Tests in CI und aktualisierter CLAUDE.md.
 
-| #      | Inhalt                                                                                                                                                   | Ergebnis / Abnahme                                                |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **M0** | Gerüst: Vite + TS + Svelte, Submodul `gcgdb`, Vitest, ESLint/Prettier, CI, Bild-Pipeline, CLAUDE.md                                                      | `npm run dev` zeigt Kartenliste mit Bildern; CI grün              |
-| **M1** | Engine-Kern ohne Kartentexte: Aufbau, Phasen, Ressourcen, Units, Pilots (Werte, Link), Kampf, Schilde, Base, Keywords, Rules Management, Zufalls-KI, CLI | Fuzz 100 k Spiele ohne Fehler, Determinismus-Test, Regeltests     |
-| **M2** | Effektsystem: DSL, Interpreter, Trigger, Dauereffekte, Ersatzeffekte, Kosten; Entwurfsgenerator; Abdeckungsbericht; **2–3 Starter-Decks vollständig**    | Starter-Decks spielbar, alle ihre Karten getestet                 |
-| **M3** | Erste spielbare Oberfläche (schlicht) gegen Heuristik-KI v0, Rollback, Log                                                                               | Ein komplettes Spiel am Desktop spielbar und zurücksetzbar        |
-| **M4** | Heuristik-KI v1, Match-Runner, Worker-Pool, Node-CLI, Grundstatistik                                                                                     | 10 000 Matches < 5 min (8 Kerne); Heuristik schlägt Zufall > 95 % |
-| **M5** | Meta-Pipeline (Limitless, Archetypen, Konsenslisten, Banliste, Snapshot-Action); **Meta-Karten umsetzen (~200)**                                         | Top-8-Archetypen voll unterstützt                                 |
-| **M6** | Schöne Spieloberfläche: Animationen, Ziehen & Ablegen, Handy-Layouts, Zeitleiste, PWA/offline                                                            | Test am Desktop (und Handy), flüssig mit 60 fps                   |
-| **M7** | Such-KI (ISMCTS), Schwierigkeitsgrade, Gewichts-Tuning per Selbstspiel                                                                                   | ISMCTS schlägt Heuristik deutlich                                 |
-| **M8** | Simulator-Oberfläche und Statistik-Dashboard, Replays, Export                                                                                            | Meta-Turnier mit Matrix, Intervallen, Kartenleistung              |
-| **M9** | Restliche Karten, Q&A-Regelfälle, Feinschliff, Vorbereitung Pages (Bilderlösung)                                                                         | Abdeckungsziel erreicht; Veröffentlichung entscheidbar            |
+| #      | Inhalt                                                                                                                                                   | Ergebnis / Abnahme                                                                                  |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **M0** | Gerüst: Vite + TS + Svelte, Submodul `gcgdb`, Vitest, ESLint/Prettier, CI, Bild-Pipeline, CLAUDE.md                                                      | `npm run dev` zeigt Kartenliste mit Bildern; CI grün                                                |
+| **M1** | Engine-Kern ohne Kartentexte: Aufbau, Phasen, Ressourcen, Units, Pilots (Werte, Link), Kampf, Schilde, Base, Keywords, Rules Management, Zufalls-KI, CLI | Fuzz 100 k Spiele ohne Fehler, Determinismus-Test, Regeltests                                       |
+| **M2** | Effektsystem: DSL, Interpreter, Trigger, Dauereffekte, Ersatzeffekte, Kosten; Entwurfsgenerator; Abdeckungsbericht; **2–3 Starter-Decks vollständig**    | Starter-Decks spielbar, alle ihre Karten getestet                                                   |
+| **M3** | Erste spielbare Oberfläche (schlicht) gegen Heuristik-KI v0, Rollback, Log                                                                               | Ein komplettes Spiel am Desktop spielbar und zurücksetzbar                                          |
+| **M4** | Heuristik-KI v1, Match-Runner, Worker-Pool, Node-CLI, Grundstatistik                                                                                     | 10 000 Matches < 5 min (8 Kerne); Heuristik schlägt Zufall > 95 %                                   |
+| **M5** | Meta-Pipeline (Limitless, Archetypen, Konsenslisten, Banliste, Snapshot-Action); **Meta-Karten umsetzen (~200)**                                         | Top-8-Archetypen voll unterstützt                                                                   |
+| **M6** | Schöne Spieloberfläche: Animationen, Ziehen & Ablegen, Handy-Layouts, Zeitleiste, PWA/offline                                                            | Test am Desktop (und Handy), flüssig mit 60 fps                                                     |
+| **M7** | Such-KI (ISMCTS), Schwierigkeitsgrade, Gewichts-Tuning per Selbstspiel                                                                                   | ISMCTS schlägt Heuristik deutlich                                                                   |
+| **M8** | Simulator-Oberfläche und Statistik-Dashboard, Replays, Export; **Reiter „Meta“ und „Decks“** (Abschnitt 8a), Speicherung in IndexedDB                    | Meta-Turnier mit Matrix, Intervallen, Kartenleistung; eigenes Deck bauen/importieren und simulieren |
+| **M9** | Restliche Karten, Q&A-Regelfälle, Feinschliff, Vorbereitung Pages (Bilderlösung)                                                                         | Abdeckungsziel erreicht; Veröffentlichung entscheidbar                                              |
 
 M1–M3 sind der „vertikale Schnitt“: früh ein echtes Spiel, damit Engine und Bedienung zusammen wachsen.
 Danach laufen Kartenumsetzung (M5/M9) und Oberfläche (M6) gut parallel.

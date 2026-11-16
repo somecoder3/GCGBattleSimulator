@@ -114,9 +114,10 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
 - Nächster Schritt: **M7** Such-KI (ISMCTS mit Gegnermodell), Schwierigkeitsgrade, Gewichts-Tuning per
-  Selbstspiel. Danach M8 (Simulator-Dashboard, Replays), M9 (restliche Karten, Pages-Vorbereitung).
-- Commits: M3 `e3bdd8e`, M4 `4f03529` (beide gepusht); M5 `2a76b7f` und M6 lokal, **Push vom
-  Sicherheitsfilter der Sitzung abgelehnt** (neue Action mit Schreibrecht) – Nutzer pusht selbst.
+  Selbstspiel. Danach M8 (Simulator-Dashboard, Replays, **Reiter „Meta“ und „Decks“**, Plan Abschnitt 8a,
+  vom Nutzer am 16. Nov. so eingeplant), M9 (restliche Karten, Pages-Vorbereitung).
+- Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
+  vom Nutzer gepusht, 16. Nov.; der Push aus der Sitzung war vom Sicherheitsfilter abgelehnt worden).
 - Beobachtung: Shining Gundam (M01, meistgespielt) gewinnt bei v1 nur ~40 %; die Karten sind korrekt (Partie
   per `npm run game` geprüft), die KI spielt das Special-Move-Timing schlecht (v0 wirft z. B. Master Asia ab).
 
