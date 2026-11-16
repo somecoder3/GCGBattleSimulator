@@ -58,7 +58,12 @@ export function checkInvariants(engine: Engine, s: GameState, expectedCards?: [n
     }
   }
 
+  const resolving = new Set([...s.frames.map((f) => f.source), ...s.queue.map((t) => t.source)]);
   for (const card of s.cards) {
+    if (card.zone === "limbo") {
+      if (!resolving.has(card.id)) errors.push(`card ${card.id} in limbo without an effect`);
+      continue;
+    }
     if (card.zone === "pilot" && !seen.has(card.id)) errors.push(`pilot ${card.id} not under a Unit`);
     if (card.zone === "gone" && !card.token) errors.push(`non-token ${card.id} removed from the game`);
     if (card.zone !== "gone" && !seen.has(card.id)) errors.push(`card ${card.id} (${card.zone}) is nowhere`);
@@ -73,6 +78,9 @@ export function checkInvariants(engine: Engine, s: GameState, expectedCards?: [n
 
   if (s.result && s.pending) errors.push("game over but a decision is pending");
   if (!s.result && !s.pending) errors.push("game is stuck without a decision");
+  if (s.pending && s.frames.length > 0 !== (s.pending.kind === "effect")) {
+    if (s.pending.kind === "effect") errors.push("effect decision without a running effect");
+  }
   if (s.pending && s.pending.options.length === 0) errors.push("decision without options");
   return errors;
 }

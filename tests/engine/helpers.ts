@@ -114,6 +114,10 @@ export interface SideSpec {
 }
 
 export interface ScenarioSpec {
+  /** Engine with another card library (default: the test cards). */
+  engine?: Engine;
+  /** Card number used for decks and Shields without a list (default X-VAN). */
+  filler?: string;
   turn?: number;
   active?: PlayerId;
   step?: Step;
@@ -124,6 +128,8 @@ export interface ScenarioSpec {
 
 /** Builds a state directly (no setup phase) and runs it to the first decision. */
 export function scenario(spec: ScenarioSpec = {}): GameState {
+  const eng = spec.engine ?? engine;
+  const filler = spec.filler ?? "X-VAN";
   const turn = spec.turn ?? 3;
   const s: GameState = {
     version: 1,
@@ -141,6 +147,8 @@ export function scenario(spec: ScenarioSpec = {}): GameState {
     priority: 0,
     passes: 0,
     oncePerTurn: {},
+    frames: [],
+    queue: [],
     pending: null,
     result: null,
   };
@@ -155,7 +163,7 @@ export function scenario(spec: ScenarioSpec = {}): GameState {
       pilot: null,
       pairedTo: null,
       enteredTurn: 0,
-      token: lib.get(no).token && lib.get(no).type !== "RESOURCE",
+      token: eng.lib.get(no).token && eng.lib.get(no).type !== "RESOURCE",
     };
     s.cards.push(card);
     list?.push(card.id);
@@ -165,7 +173,7 @@ export function scenario(spec: ScenarioSpec = {}): GameState {
     const side = (p === 0 ? spec.p0 : spec.p1) ?? {};
     const me = s.players[p];
     const list = (x: number | string[] | undefined, fallback: number) =>
-      Array.isArray(x) ? x : Array<string>(x ?? fallback).fill("X-VAN");
+      Array.isArray(x) ? x : Array<string>(x ?? fallback).fill(filler);
     for (const no of list(side.deck, 20)) add(p, no, "deck", me.deck);
     for (let i = 0; i < (side.resourceDeck ?? 5); i++) add(p, "R-001", "resourceDeck", me.resourceDeck);
     for (const no of list(side.shields, 6)) add(p, no, "shields", me.shields);
@@ -191,7 +199,7 @@ export function scenario(spec: ScenarioSpec = {}): GameState {
       }
     }
   }
-  engine.advance(s);
+  eng.advance(s);
   return s;
 }
 

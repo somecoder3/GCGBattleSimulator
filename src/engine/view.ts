@@ -7,6 +7,8 @@ export const HIDDEN = "?";
 /** Is the card's identity hidden from `viewer`? */
 export function isHiddenFrom(state: GameState, id: CardId, viewer: PlayerId): boolean {
   const card = state.cards[id]!;
+  // Cards the viewer is looking at through an effect ("Look at the top …").
+  if (state.frames.some((f) => f.controller === viewer && f.looking?.includes(id))) return false;
   switch (card.zone) {
     case "deck":
     case "resourceDeck":

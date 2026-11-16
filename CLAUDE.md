@@ -28,7 +28,7 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Vitest, ESLint, Prettier, svelte-check; GCGDB als Submodul `gcgdb/` (Branch `main`); `npm run verify` = alles
   wie in der CI (`.github/workflows/ci.yml`, Node 24). Kartenliste mit Filtern (Suche, Set, alle acht Typen wie
   auf gundam-gcg.com, Farbe) und Detaildialog. Befehle und Einrichtung: `README.md`. CI-Lauf #1 auf GitHub grün (1 min).
-- **M1 (Engine-Kern) fertig.** Beschreibung, Umfang und Grenzen: **`docs/ENGINE.md`**.
+- **M1 (Engine-Kern) fertig**, Commit `59fe24b` (vom Nutzer gepusht). Beschreibung, Umfang und Grenzen: **`docs/ENGINE.md`**.
   Regeln ohne Kartentexte: Vorbereitung, Phasen, Ressourcen/Level/Kosten, Units, Pilots/Links, Bases,
   Kampf, Schilde, Keywords (Blocker, First Strike, High-Maneuver, Suppression, Breach, Repair, Support),
   Rules Management. Zufalls-KI, `playMatch`/`replay`, `npm run sim` und `npm run fuzz`.
@@ -37,11 +37,23 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   - **`npm run fuzz` (100 000 Spiele, Invarianten nach jedem Schritt): 0 Fehler**, 62 s. Ohne Prüfung
     0,23 ms pro Spiel auf einem Kern (Zufalls-KI, Zufallsdecks: Ø 19 Züge, 68 Entscheidungen, Spieler 1
     gewinnt 56,6 %; Werte sind ohne Effekte und mit Zufallsspiel nicht aussagekräftig für echte Decks).
-- Aufbau: `src/data/` (Kartenmodell), `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte),
-  `tools/` (`images.ts`, `sim.ts`), `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: **M2** Effektsystem (DSL, Interpreter, Trigger, Dauereffekte, Bursts, Commands;
-  Entwurfsgenerator; Abdeckungsbericht; 2–3 Starter-Decks vollständig). Die Einstiegspunkte sind im
-  Engine-Code mit `M2:` markiert.
+- **M2 (Effektsystem) fertig.** Beschreibung: **`docs/EFFECTS.md`** (DSL, Übersetzer,
+  Compiler, Ablauf, Abdeckung, wie man Karten ergänzt, Auslegungen), Engine-Teil in `docs/ENGINE.md`.
+  - Kartentexte → DSL per Übersetzer `src/effects/parse.ts` (feste Satzmuster, Unbekanntes wird nicht
+    geraten) oder Handskript `src/effects/manual.ts` (Vorrang; zurzeit ST01-015, ST02-016, ST03-011, ST04-012).
+    Compiler macht flache Programme; laufende Effekte sind `frames` im Zustand, wartende Trigger `queue`.
+  - Engine aufgeteilt: `engine.ts` (Ablauf, Optionen, Aktionen), `core.ts` (Werte mit Dauereffekten, Filter,
+    Bedingungen, Kartenbewegung, Trigger, Rules Management), `interpret.ts` (Effekte ausführen).
+  - **Abdeckung (`npm run coverage`): 51,6 % der 1123 Karten vollständig, ST01–ST04 zu 100 %.**
+    Starter-Decklisten in `src/data/decks.ts`.
+  - Tests: 109 (Regeln 34, Kartentests ST01–ST04 49 inkl. 400 Starter-Spielen mit Invarianten,
+    Übersetzer/Compiler 11, Fuzz/Replay 4, Daten 11). **`npm run fuzz` mit Effekten (100 000 Spiele): 0 Fehler**, 106 s;
+    ~1,3 ms pro Spiel mit Effekten.
+- Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
+  `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
+  `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
+- Nächster Schritt: **M3** erste spielbare Oberfläche gegen eine einfache KI (Heuristik v0), Rollback, Log.
+  Danach M4 (Heuristik-KI, Massensimulation) und M5 (Meta + Meta-Karten).
 
 ## Svelte-Fallen
 
@@ -50,6 +62,12 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   dann nie. Darum hieß der Set-Filter der Kartenliste nicht mehr `set`, sondern `setCode` (gefunden am 16. Nov.).
 
 ## Entscheidungen
+
+- **Effekte (M2):** Daten-DSL statt Code pro Karte, damit laufende Effekte serialisierbar bleiben. Der
+  Übersetzer erkennt nur sichere Muster; nicht verstandene Zeilen wirken nicht und machen die Karte
+  `partial` (für die Meta-Auswahl später sichtbar). Pilot-Zeilen außer 【Burst】 gehen an die Unit.
+  Triggerreihenfolge: Burst, dann aktiver Spieler, dann Standby, je in Auftrittsreihenfolge (eigene Wahl der
+  Reihenfolge, 10-1-6-5, noch nicht). Weitere Auslegungen in `docs/EFFECTS.md`.
 
 - **Engine (M1):** Zustand ist reines JSON und wird von `apply` direkt geändert (schnell); Entscheidungen
   enthalten alle legalen Optionen, `apply` prüft dagegen. Rollback = Replay von Seed + Decks + Aktionen.

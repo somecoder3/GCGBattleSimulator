@@ -18,6 +18,13 @@ const WEIGHTS: Record<Action["type"], number> = {
   noBlock: 2,
   pass: 1,
   discard: 1,
+  playCommand: 4,
+  activate: 3,
+  target: 1,
+  done: 1,
+  yes: 3,
+  no: 1,
+  option: 1,
 };
 
 export class RandomPolicy implements Policy {

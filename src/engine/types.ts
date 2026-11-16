@@ -2,6 +2,7 @@
 // closures or Maps), so a state can be cloned, hashed, stored and sent to a worker.
 // Rule numbers refer to the Comprehensive Rules Ver. 1.10.0.
 
+import type { Filter, FlagName, KeywordName } from "../effects/dsl";
 import type { RngState } from "./rng";
 
 export type PlayerId = 0 | 1;
@@ -18,8 +19,11 @@ export type ZoneName =
   | "trash"
   | "removal";
 
-/** Where a card is. "pilot": paired under a Unit; "gone": token removed from the game (5-17-2-5). */
-export type Location = ZoneName | "pilot" | "gone";
+/**
+ * Where a card is. "pilot": paired under a Unit; "gone": token removed from the game (5-17-2-5);
+ * "limbo": a Command whose effect is active or a revealed Shield whose Burst is pending (4-1-2).
+ */
+export type Location = ZoneName | "pilot" | "gone" | "limbo";
 
 export interface CardInstance {
   id: CardId;
@@ -53,13 +57,58 @@ export interface PlayerState {
   mulliganDone: boolean;
 }
 
-/** A temporary change of a card's values, e.g. from <Support> ("during this turn"). */
+/**
+ * A lasting change made by an effect: AP/HP, a keyword or a flag on a card, or (target -1) a flag on a
+ * player. "nextStart" ends after the start phase of the target's owner (e.g. "won't be set as active").
+ */
 export interface Modifier {
   target: CardId;
+  player?: PlayerId;
   ap: number;
   hp: number;
-  until: "turn" | "battle";
+  keyword?: KeywordName;
+  amount?: number;
+  flag?: FlagName;
+  filter?: Filter;
+  until: "turn" | "battle" | "nextStart";
   source: CardId;
+}
+
+/** Identifies an effect: the card number holding the script, its index, and whether it is Pilot-granted. */
+export interface EffectRef {
+  no: string;
+  idx: number;
+  granted: boolean;
+}
+
+export type EffectOrigin = "trigger" | "command" | "burst" | "activated";
+
+/** A triggered effect waiting to be resolved (10-1-6). */
+export interface PendingTrigger {
+  ref: EffectRef;
+  /** The card whose effect it is (for granted effects: the Unit). */
+  source: CardId;
+  controller: PlayerId;
+  /** The card the trigger is about (e.g. the destroyed enemy Unit). */
+  event: CardId | null;
+  origin: EffectOrigin;
+}
+
+/** A running effect: program counter and variables of a compiled script (effects/compile.ts). */
+export interface Frame {
+  ref: EffectRef;
+  origin: EffectOrigin;
+  source: CardId;
+  controller: PlayerId;
+  event: CardId | null;
+  pc: number;
+  vars: Record<string, CardId[]>;
+  /** Choice in progress: variable, cards still to choose, whether the player may stop. */
+  choosing?: { as: string; left: number; optional: boolean; candidates: CardId[] };
+  /** Cards from the deck only the controller has seen (Look at the top …). */
+  looking?: CardId[];
+  /** Remaining cards to place for "deploy N tokens" etc. when a choice interrupts it. */
+  repeat?: number;
 }
 
 export type AttackTarget = "player" | CardId;
@@ -109,14 +158,24 @@ export type Action =
   | { type: "block"; unit: CardId }
   | { type: "noBlock" }
   | { type: "pass" }
-  | { type: "discard"; card: CardId };
+  | { type: "discard"; card: CardId }
+  | { type: "playCommand"; card: CardId }
+  | { type: "activate"; card: CardId; effect: number }
+  | { type: "target"; card: CardId }
+  | { type: "done" }
+  | { type: "yes" }
+  | { type: "no" }
+  | { type: "option"; index: number; label: string };
 
-export type DecisionKind = "mulligan" | "main" | "block" | "action" | "discard";
+export type DecisionKind = "mulligan" | "main" | "block" | "action" | "discard" | "effect";
 
 export interface Decision {
   player: PlayerId;
   kind: DecisionKind;
   options: Action[];
+  /** For effect decisions: the card whose effect asks, and what is asked. */
+  source?: CardId;
+  prompt?: "target" | "may" | "option" | "discard" | "lookPick" | "lookTop" | "burst" | "overflow";
 }
 
 export interface GameOptions {
@@ -154,6 +213,10 @@ export interface GameState {
   passes: number;
   /** Turn in which each "Once per Turn" effect was last used, by "<cardId>:<effect>". */
   oncePerTurn: Record<string, number>;
+  /** Running effects; the last one is executing (10-1-6-7: new triggers resolve first). */
+  frames: Frame[];
+  /** Triggered effects waiting to be resolved, in order. */
+  queue: PendingTrigger[];
   pending: Decision | null;
   result: GameResult | null;
 }
@@ -176,8 +239,21 @@ export type GameEvent =
   | { t: "playerDamage"; player: PlayerId; amount: number }
   | { t: "shieldBreak"; player: PlayerId; card: CardId }
   | { t: "destroyed"; card: CardId }
-  | { t: "toTrash"; card: CardId; reason: "destroyed" | "overflow" | "discard" | "shield" | "paired" }
+  | {
+      t: "toTrash";
+      card: CardId;
+      reason: "destroyed" | "overflow" | "discard" | "shield" | "paired" | "resolved" | "mill";
+    }
   | { t: "removed"; card: CardId }
   | { t: "recover"; card: CardId; amount: number }
   | { t: "modifier"; card: CardId; ap: number; hp: number }
+  | { t: "play"; player: PlayerId; card: CardId }
+  | { t: "effect"; source: CardId; origin: EffectOrigin; controller: PlayerId }
+  | { t: "burst"; player: PlayerId; card: CardId; used: boolean }
+  | { t: "ready"; card: CardId }
+  | { t: "toHand"; card: CardId; from: Location }
+  | { t: "toDeck"; card: CardId; pos: "top" | "bottom" }
+  | { t: "token"; player: PlayerId; card: CardId }
+  | { t: "exResource"; player: PlayerId; card: CardId }
+  | { t: "reveal"; player: PlayerId; cards: CardId[] }
   | { t: "gameOver"; result: GameResult };

@@ -2,6 +2,8 @@
 
 import type { CardPool } from "../data/cards";
 import type { CardDef, CardType, Color, LinkCondition } from "../data/types";
+import type { ParseContext } from "../effects/parse";
+import { buildScript, parseContext, type CompiledScript } from "../effects/scripts";
 
 export interface Keywords {
   blocker: boolean;
@@ -43,6 +45,8 @@ export interface EngineCard {
   pairable: boolean;
   token: boolean;
   text: string;
+  /** Compiled card effects (effects/scripts.ts). */
+  script: CompiledScript;
 }
 
 const KEYWORD_LINE =
@@ -88,7 +92,7 @@ export function commandPilotName(text: string): string | null {
   return m ? m[1]!.trim() : null;
 }
 
-export function toEngineCard(def: CardDef): EngineCard {
+export function toEngineCard(def: CardDef, ctx: ParseContext): EngineCard {
   const commandPilot = def.type === "COMMAND" ? commandPilotName(def.text) : null;
   return {
     no: def.no,
@@ -107,6 +111,7 @@ export function toEngineCard(def: CardDef): EngineCard {
     pairable: def.type === "PILOT" || commandPilot !== null,
     token: def.token,
     text: def.text,
+    script: buildScript(def, ctx),
   };
 }
 
@@ -114,7 +119,9 @@ export class CardLib {
   private readonly byNo = new Map<string, EngineCard>();
 
   constructor(cards: Iterable<CardDef>) {
-    for (const def of cards) this.byNo.set(def.no, toEngineCard(def));
+    const list = [...cards];
+    const ctx = parseContext(list);
+    for (const def of list) this.byNo.set(def.no, toEngineCard(def, ctx));
   }
 
   static fromPool(pool: CardPool): CardLib {

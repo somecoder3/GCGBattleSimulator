@@ -1,6 +1,6 @@
 # Regel-Engine
 
-Stand: M1 (16. Nov. 2026). Regelgrundlage: Comprehensive Rules **Ver. 1.10.0**; Regelnummern stehen im
+Stand: M2 (16. Nov. 2026). Regelgrundlage: Comprehensive Rules **Ver. 1.10.0**; Regelnummern stehen im
 Code und in den Tests.
 
 ## Schnittstelle
@@ -33,20 +33,24 @@ state.result; // { winner: 0 | 1 | null, reason: "damage" | "deckOut" | "turnLim
 
 ## Aufbau
 
-| Datei                          | Inhalt                                                                  |
-| ------------------------------ | ----------------------------------------------------------------------- |
-| `src/engine/types.ts`          | Zustand, Aktionen, Entscheidungen, Events                               |
-| `src/engine/engine.ts`         | Ablauf als Zustandsmaschine (`Step`), Aktionen, Kampf, Rules Management |
-| `src/engine/cardlib.ts`        | Regelrelevante Kartendaten: Keywords, Pilotname, Link-Prüfung           |
-| `src/engine/deck.ts`           | Deckbau-Regeln (6-1), Zufallsdecks                                      |
-| `src/engine/view.ts`           | Spielersicht ohne verdeckte Information                                 |
-| `src/engine/invariants.ts`     | Konsistenzprüfungen für Tests und Fuzzing                               |
-| `src/engine/rng.ts`, `hash.ts` | Zufall, Zustands-Fingerabdruck                                          |
-| `src/ai/random.ts`             | Zufalls-KI (gewichtet: lieber handeln als die Main Phase beenden)       |
-| `src/sim/match.ts`             | `playMatch`, `replay`                                                   |
-| `tools/sim.ts`                 | `npm run sim` / `npm run fuzz`                                          |
+| Datei                          | Inhalt                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `src/engine/types.ts`          | Zustand, Aktionen, Entscheidungen, Events                                                   |
+| `src/engine/engine.ts`         | Ablauf als Zustandsmaschine (`Step`), Optionen, Aktionen, Kampf                             |
+| `src/engine/core.ts`           | Werte mit Effekten, Filter, Bedingungen, Kartenbewegung, Schaden, Trigger, Rules Management |
+| `src/engine/interpret.ts`      | Führt Karteneffekte aus (Frames), Effekt-Entscheidungen                                     |
+| `src/effects/`                 | Effekt-DSL, Übersetzer, Compiler, Handskripte – siehe `docs/EFFECTS.md`                     |
+| `src/engine/cardlib.ts`        | Regelrelevante Kartendaten: Keywords, Pilotname, Link-Prüfung                               |
+| `src/engine/deck.ts`           | Deckbau-Regeln (6-1), Zufallsdecks                                                          |
+| `src/engine/view.ts`           | Spielersicht ohne verdeckte Information                                                     |
+| `src/engine/invariants.ts`     | Konsistenzprüfungen für Tests und Fuzzing                                                   |
+| `src/engine/rng.ts`, `hash.ts` | Zufall, Zustands-Fingerabdruck                                                              |
+| `src/ai/random.ts`             | Zufalls-KI (gewichtet: lieber handeln als die Main Phase beenden)                           |
+| `src/sim/match.ts`             | `playMatch`, `replay`                                                                       |
+| `tools/sim.ts`                 | `npm run sim` / `npm run fuzz`                                                              |
 
-Ablauf: `run()` führt Schritte aus (`startTurn → draw → resource → main ↔ attack → block → battleAction →
+Ablauf: `run()` arbeitet zuerst laufende Effekte ab (`frames`), dann wartende Trigger (`queue`), sonst den
+nächsten Schritt (`startTurn → draw → resource → main ↔ attack → block → battleAction →
 damage → battleEnd`, `endAction → endStep → handStep → cleanup`), nach jedem Schritt Rules Management
 (Niederlage, Zerstörung), bis eine Entscheidung ansteht oder das Spiel endet. Action Steps laufen mit
 abwechselnder Priorität; wer nur passen kann, passt automatisch.
@@ -67,11 +71,19 @@ abwechselnder Priorität; wer nur passen kann, passt automatisch.
 - Rules Management: Niederlage bei leerem Deck, Zerstörung bei Schaden ≥ HP (gleichzeitig), Pilot geht mit,
   Tokens verlassen das Spiel außerhalb des Feldes.
 
-## Noch nicht (M2: Effektsystem)
+## Umgesetzt (M2)
 
-Kartentexte (【Deploy】, 【Attack】, 【Burst】, 【When Paired】, Commands mit 【Main】/【Action】,
-【Activate･Main/Action】, Dauereffekte, bedingte Keywords wie 【During Link】<High-Maneuver>), Pilot-Texte,
-die die Unit erhält, Burst beim Zerstören von Schilden. Die Stellen sind im Code mit `M2:` markiert.
+Karteneffekte über die Effekt-DSL (`docs/EFFECTS.md`): Trigger, Commands (Main und Action, auch im Action
+Step), Activate-Effekte mit Kosten, Bursts, Dauereffekte, Pilot-Texte für die Unit, Tokens, Flags wie
+„can't attack“, „may attack active Units“, Schutz vor Schaden. Neue Optionen: `playCommand`, `activate`;
+Effekt-Entscheidungen haben `kind: "effect"`. Im Action Step wechselt nach einer Aktion die Priorität
+(9-4-1).
+
+## Offen
+
+- Reihenfolge gleichzeitiger eigener Trigger wählbar machen (10-1-6-5); zurzeit in Auftrittsreihenfolge.
+- Events sind noch nicht nach Sichtbarkeit gefiltert (für die Oberfläche, M3).
+- Rund die Hälfte der Karten hat noch nicht verstandene Zeilen (`npm run coverage`).
 
 ## Prüfung
 
@@ -79,4 +91,7 @@ die die Unit erhält, Burst beim Zerstören von Schilden. Die Stellen sind im Co
   Baukasten für Spielsituationen (`scenario()`).
 - `tests/engine/fuzz.test.ts`: 1000 Spiele mit Zufallsdecks aus allen echten Karten, Invarianten nach jedem
   Schritt, exakte Replays, JSON-Runde mitten im Spiel.
-- `npm run fuzz`: 100 000 solche Spiele.
+- `tests/cards/starters.test.ts`: jede Effektkarte von ST01–ST04 mit echten Karten, dazu 400 Spiele
+  zwischen allen Starter-Paarungen mit Invarianten.
+- `tests/effects/parse.test.ts`: Übersetzer und Compiler.
+- `npm run fuzz`: 100 000 Spiele mit Zufallsdecks aus allen Karten (inklusive aller verstandenen Effekte).
