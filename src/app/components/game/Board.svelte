@@ -58,13 +58,107 @@
   let hovered = $state<CardId | null>(null);
   let flashed = $state.raw(new Set<CardId>());
   let speed = $state(600);
+
+  // When the game stops for the human in an action step (9-4).
+  type Stops = "always" | "smart" | "never";
+  const STOPS: { value: Stops; label: string }[] = [
+    { value: "smart", label: "Klug" },
+    { value: "always", label: "Immer" },
+    { value: "never", label: "Nie (passen)" },
+  ];
+  const STOPS_KEY = "gcg-battle-simulator.stops";
+  let stops = $state<Stops>(loadStops());
+
+  function loadStops(): Stops {
+    try {
+      const v = localStorage.getItem(STOPS_KEY);
+      return v === "always" || v === "never" ? v : "smart";
+    } catch {
+      return "smart";
+    }
+  }
+
+  $effect(() => {
+    try {
+      localStorage.setItem(STOPS_KEY, stops);
+    } catch {
+      // only a convenience
+    }
+  });
+
+  /**
+   * "Klug": stop in an action step only when two Units fight (AP changes decide the battle) or when an
+   * attack on the player could leave you without Shields and Base.
+   */
+  function skipActionStep(): boolean {
+    const pending = session.state.pending;
+    if (!pending || pending.player !== human || pending.kind !== "action") return false;
+    if (stops === "always") return false;
+    if (stops === "never") return true;
+    const b = session.state.battle;
+    if (!b || session.state.step !== "battleAction") return true;
+    if (b.target !== "player") return false;
+    if (b.attackerOwner === human) return true;
+    const me = session.state.players[human];
+    return me.shields.length + me.base.length > 1;
+  }
   let showTrash = $state<PlayerId | null>(null);
   let logBox = $state<HTMLElement>();
 
+  // Cards fly between hand, battle area and base; cards without a counterpart (to the trash, drawn
+  // from the deck) shrink and fade, with a red flash when they leave.
   const [send, receive] = crossfade({
     duration: 380,
-    fallback: (node) => fade(node, { duration: 200 }),
+    fallback: (_node, _params, intro) => ({
+      duration: intro ? 260 : 420,
+      css: (t) =>
+        `opacity:${t};transform:scale(${0.75 + 0.25 * t});` +
+        (intro ? "" : `filter:sepia(${1 - t}) saturate(${1 + 3 * (1 - t)}) hue-rotate(-30deg)`),
+    }),
   });
+
+  // Short-lived effects of the last step: damage numbers, shaking shield areas, the turn banner.
+  let hits = $state.raw(new Map<CardId, { amount: number; n: number }>());
+  let shaking = $state.raw(new Set<PlayerId>());
+  let banner = $state.raw<{ text: string; mine: boolean; n: number } | null>(null);
+  let effectN = 0;
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  const later = (ms: number, fn: () => void) => timers.push(setTimeout(fn, ms));
+
+  function animate(step?: LogStep) {
+    if (!step) return;
+    // Built locally and then assigned as a whole to $state.raw, so plain collections are right here.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const nextHits = new Map<CardId, { amount: number; n: number }>();
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const nextShake = new Set<PlayerId>();
+    for (const e of step.events) {
+      if (e.t === "damage" || e.t === "recover") {
+        const amount = (nextHits.get(e.card)?.amount ?? 0) + (e.t === "damage" ? -e.amount : e.amount);
+        nextHits.set(e.card, { amount, n: ++effectN });
+        const card = step.after.cards[e.card]!;
+        if (e.t === "damage" && card.zone === "base") nextShake.add(card.owner);
+      } else if (e.t === "shieldBreak" || e.t === "playerDamage") nextShake.add(e.player);
+      else if (e.t === "turnStart") {
+        banner = {
+          text: e.player === human ? "Dein Zug" : "Zug der KI",
+          mine: e.player === human,
+          n: ++effectN,
+        };
+        later(1300, () => (banner = null));
+      }
+    }
+    if (nextHits.size) {
+      hits = nextHits;
+      later(1200, () => (hits = new Map()));
+    }
+    if (nextShake.size) {
+      shaking = nextShake;
+      later(600, () => (shaking = new Set()));
+    }
+  }
+
+  onDestroy(() => timers.forEach(clearTimeout));
 
   function refresh(step?: LogStep) {
     view = session.view();
@@ -72,6 +166,7 @@
     selected = null;
     flashed = new Set(step && step.player !== human ? touched(step.events) : []);
     reveal(step);
+    animate(step);
     onsave();
   }
 
@@ -112,9 +207,15 @@
     return ids;
   }
 
-  // AI turns: one decision at a time with a short pause, so the human can follow.
+  // AI turns: one decision at a time with a short pause, so the human can follow. Action steps the
+  // human doesn't want to stop in are passed automatically (marked, so undo skips them).
   $effect(() => {
     void view;
+    void stops;
+    if (skipActionStep()) {
+      const timer = setTimeout(() => refresh(session.apply({ type: "pass" }, true)), Math.min(speed, 150));
+      return () => clearTimeout(timer);
+    }
     if (!session.aiToAct) return;
     const kind = session.state.pending!.kind;
     const delay = kind === "mulligan" ? Math.min(speed, 300) : speed;
@@ -188,6 +289,12 @@
     };
   }
 
+  function battleRole(id: CardId): "" | "attacker" | "defender" {
+    const b = view.battle;
+    if (!b) return "";
+    return b.attacker === id ? "attacker" : b.target === id ? "defender" : "";
+  }
+
   function cardState(id: CardId): "" | "legal" | "selected" | "target" {
     if (id === selected) return "selected";
     if (targets.has(id)) return "target";
@@ -243,7 +350,7 @@
   /** Rollback points: the first log line of each human action, and the start of the human's turns. */
   function rollbackIndex(line: LogLine, i: number): number | undefined {
     if (line.kind === "turn") return line.player === human ? session.turnStart(line.turn!) : undefined;
-    if (line.actor !== human || line.index < 0) return undefined;
+    if (line.actor !== human || line.index < 0 || line.auto) return undefined;
     return lines[i - 1]?.index === line.index ? undefined : line.index;
   }
 
@@ -304,6 +411,8 @@
   <div class="field" class:mine={p === human}>
     <div
       class="shieldzone"
+      class:shake={shaking.has(p)}
+      class:defender={view.battle?.target === "player" && view.battle.attackerOwner !== p}
       class:target={p === enemy && targets.has("player")}
       role="button"
       tabindex={p === enemy && targets.has("player") ? 0 : -1}
@@ -326,6 +435,7 @@
               rested={view.cards[id]!.rested}
               state={cardState(id)}
               flash={flashed.has(id)}
+              hit={hits.get(id) ?? null}
               onclick={() => clickCard(id)}
               onhover={(on) => (hovered = on ? id : null)}
             />
@@ -345,6 +455,8 @@
             pilot={pilotOf(id)}
             state={cardState(id)}
             flash={flashed.has(id)}
+            battle={battleRole(id)}
+            hit={hits.get(id) ?? null}
             onclick={() => clickCard(id)}
             onhover={(on) => (hovered = on ? id : null)}
           />
@@ -458,6 +570,12 @@
       </div>
     </div>
 
+    {#if banner}
+      {#key banner.n}
+        <div class="banner" class:mine={banner.mine} aria-live="polite">{banner.text}</div>
+      {/key}
+    {/if}
+
     {#if revealed.length}
       <button class="reveal" transition:fade={{ duration: 200 }} onclick={() => (revealed = [])}>
         <span class="reveal-title">
@@ -501,6 +619,14 @@
         <select bind:value={speed}>
           {#each SPEEDS as sp (sp.ms)}
             <option value={sp.ms}>{sp.label}</option>
+          {/each}
+        </select>
+      </label>
+      <label title="Wann das Spiel im Action Step für dich anhält, wenn du etwas spielen könntest">
+        Anhalten
+        <select bind:value={stops}>
+          {#each STOPS as st (st.value)}
+            <option value={st.value}>{st.label}</option>
           {/each}
         </select>
       </label>
@@ -663,6 +789,78 @@
     padding: 6px 8px;
     border-radius: 10px;
     border: 1px dashed transparent;
+  }
+  .field:not(.mine) {
+    --lunge: 8px;
+  }
+  .shieldzone.defender {
+    border-color: var(--danger);
+  }
+  .shieldzone.shake {
+    animation: shake 0.45s ease-in-out;
+  }
+  @keyframes shake {
+    20% {
+      translate: -6px 0;
+    }
+    40% {
+      translate: 5px 0;
+    }
+    60% {
+      translate: -3px 0;
+    }
+    80% {
+      translate: 2px 0;
+    }
+  }
+  .banner {
+    position: absolute;
+    z-index: 6;
+    left: 0;
+    right: 0;
+    top: 50%;
+    translate: 0 -50%;
+    padding: 14px 0;
+    text-align: center;
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fff;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 93 108 / 55%) 30%,
+      rgb(255 93 108 / 55%) 70%,
+      transparent
+    );
+    text-shadow: 0 2px 12px rgb(0 0 0 / 70%);
+    pointer-events: none;
+    animation: banner 1.3s ease-in-out forwards;
+  }
+  .banner.mine {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(31 155 255 / 55%) 30%,
+      rgb(31 155 255 / 55%) 70%,
+      transparent
+    );
+  }
+  @keyframes banner {
+    0% {
+      opacity: 0;
+      transform: scaleY(0.2);
+    }
+    15%,
+    75% {
+      opacity: 1;
+      transform: none;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(40px);
+    }
   }
   .shieldzone.target {
     border-color: var(--danger);

@@ -19,6 +19,8 @@ export interface LogLine {
   turn?: number;
   /** Player whose turn a "turn" line starts. */
   player?: PlayerId;
+  /** Caused by an automatic pass. */
+  auto?: boolean;
 }
 
 const REASONS = {
@@ -42,7 +44,15 @@ export function describeStep(engine: Engine, step: LogStep, human: PlayerId): Lo
   const owner = (id: CardId) => s.cards[id]!.owner;
   let subject: PlayerId | null = step.player;
   const add = (kind: LogLine["kind"], text: string, extra: Partial<LogLine> = {}) =>
-    lines.push({ index: step.index, actor: step.player, subject, kind, text, ...extra });
+    lines.push({
+      index: step.index,
+      actor: step.player,
+      subject,
+      kind,
+      text,
+      ...(step.auto ? { auto: true } : {}),
+      ...extra,
+    });
 
   // Decisions without an event of their own get a line, so every human decision can be rolled back.
   if (step.player === human && step.action) {
@@ -51,7 +61,9 @@ export function describeStep(engine: Engine, step: LogStep, human: PlayerId): Lo
       a.type === "endMain"
         ? "Du beendest die Main Phase."
         : a.type === "pass"
-          ? "Du passt."
+          ? step.auto
+            ? "Du passt (automatisch)."
+            : "Du passt."
           : a.type === "noBlock"
             ? "Du blockst nicht."
             : a.type === "yes"

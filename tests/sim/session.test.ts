@@ -60,6 +60,35 @@ describe("game session", () => {
     expect(full.over).toBe(true);
   });
 
+  it("automatic passes are no rollback points and survive saving", () => {
+    // A game in which the human had something to play in an action step.
+    let session!: GameSession;
+    let autoCount = 0;
+    for (let seed = 1; seed < 30 && autoCount === 0; seed++) {
+      session = new GameSession(engine, {
+        decks: [STARTER_DECKS[0]!.deck, STARTER_DECKS[2]!.deck],
+        options: { seed, firstPlayer: 0 },
+        human: 0,
+      });
+      const human = new RandomPolicy(seed);
+      while (!session.over) {
+        if (session.aiToAct) session.stepAI(ai);
+        else if (session.state.pending!.kind === "action") {
+          session.apply({ type: "pass" }, true);
+          autoCount++;
+        } else session.apply(human.choose(session.state, session.state.pending!));
+      }
+    }
+    expect(autoCount).toBeGreaterThan(0);
+    const autos = session.steps.filter((s) => s.auto).map((s) => s.index);
+    expect(session.humanActions().some((i) => autos.includes(i))).toBe(false);
+    const restored = GameSession.restore(engine, JSON.parse(JSON.stringify(session.save())));
+    expect(restored.steps.filter((s) => s.auto).map((s) => s.index)).toEqual(autos);
+    const last = session.humanActions().at(-1)!;
+    session.undo();
+    expect(session.actions).toHaveLength(last);
+  });
+
   it("saves and restores a game exactly", () => {
     const session = play(3, 20);
     const restored = GameSession.restore(engine, JSON.parse(JSON.stringify(session.save())));

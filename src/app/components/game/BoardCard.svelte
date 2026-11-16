@@ -11,6 +11,8 @@
     pilot = null,
     state = "",
     flash = false,
+    battle = "",
+    hit = null,
     label = "",
     onclick,
     onhover,
@@ -31,6 +33,10 @@
     /** "legal" (can be used), "selected", "target" (completes the selected option) or "". */
     state?: "" | "legal" | "selected" | "target";
     flash?: boolean;
+    /** Part of the current battle. */
+    battle?: "" | "attacker" | "defender";
+    /** Damage (negative) or recovery (positive) to show as a floating number; `n` restarts it. */
+    hit?: { amount: number; n: number } | null;
     label?: string;
     onclick?: () => void;
     onhover?: (on: boolean) => void;
@@ -46,6 +52,8 @@
   class:rested
   class:paired={!!pilot}
   class:flash
+  class:attacker={battle === "attacker"}
+  class:defender={battle === "defender"}
   class:clickable={!!onclick}
   aria-label={label || card?.name || "Verdeckte Karte"}
   onclick={() => onclick?.()}
@@ -71,6 +79,13 @@
         <CardImage {card} src={cardImageUrl(card, "small")} eager />
       {:else}
         <div class="back" aria-hidden="true"><span></span></div>
+      {/if}
+      {#if hit}
+        {#key hit.n}
+          <span class="hit" class:heal={hit.amount > 0} aria-hidden="true">
+            {hit.amount > 0 ? `+${hit.amount}` : hit.amount}
+          </span>
+        {/key}
       {/if}
       {#if stats}
         <div class="stats">
@@ -215,6 +230,60 @@
   .stats .hurt {
     color: #fff;
     background: #a3283a;
+  }
+  /* The attacker leans forward, the defender braces. */
+  .attacker .stack {
+    animation: lunge 0.9s ease-in-out infinite alternate;
+  }
+  .attacker .card {
+    box-shadow:
+      0 0 0 2px #ff8a3d,
+      0 0 22px rgb(255 138 61 / 70%);
+  }
+  .defender .card {
+    box-shadow:
+      0 0 0 2px var(--danger),
+      0 0 18px color-mix(in srgb, var(--danger) 60%, transparent);
+  }
+  @keyframes lunge {
+    to {
+      translate: 0 var(--lunge, -8px);
+    }
+  }
+  .hit {
+    position: absolute;
+    z-index: 3;
+    left: 50%;
+    top: 30%;
+    translate: -50% 0;
+    font-size: 26px;
+    font-weight: 800;
+    color: #ff5d6c;
+    text-shadow:
+      0 2px 0 #000,
+      0 0 12px rgb(0 0 0 / 80%);
+    pointer-events: none;
+    animation: hit 1.1s ease-out forwards;
+  }
+  .hit.heal {
+    color: #7fe0a0;
+  }
+  @keyframes hit {
+    0% {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+    15% {
+      opacity: 1;
+      transform: scale(1.25);
+    }
+    30% {
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-34px);
+    }
   }
   .link-badge {
     position: absolute;

@@ -22,7 +22,8 @@
     "sim": "tsx tools/sim.ts",
     "fuzz": "tsx tools/sim.ts --check --games 100000",
     "coverage": "tsx tools/coverage.ts",
-    "meta": "tsx tools/meta-snapshot.ts"
+    "meta": "tsx tools/meta-snapshot.ts",
+    "game": "tsx tools/game-log.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

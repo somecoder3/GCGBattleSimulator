@@ -23,6 +23,8 @@ export interface SessionSetup {
 export interface SavedSession extends SessionSetup {
   version: 1;
   actions: Action[];
+  /** Indices of actions made automatically for the human (passing). */
+  auto?: number[];
 }
 
 /** Events of one engine step: setup (action index -1) or the action with that index. */
@@ -35,6 +37,8 @@ export interface LogStep {
   events: GameEvent[];
   /** State after the step, for describing the events with the cards' identities at that time. */
   after: GameState;
+  /** Made automatically for the human (e.g. passing in an action step); not a rollback point. */
+  auto?: boolean;
 }
 
 export class GameSession {
@@ -46,17 +50,19 @@ export class GameSession {
     readonly engine: Engine,
     readonly setup: SessionSetup,
     actions: readonly Action[] = [],
+    auto: readonly number[] = [],
   ) {
-    this.rebuild(actions);
+    this.rebuild(actions, new Set(auto));
   }
 
   static restore(engine: Engine, saved: SavedSession): GameSession {
-    const { version: _version, actions, ...setup } = saved;
-    return new GameSession(engine, setup, actions);
+    const { version: _version, actions, auto, ...setup } = saved;
+    return new GameSession(engine, setup, actions, auto);
   }
 
   save(): SavedSession {
-    return { version: 1, ...this.setup, actions: [...this.actions] };
+    const auto = this.steps.filter((s) => s.auto).map((s) => s.index);
+    return { version: 1, ...this.setup, actions: [...this.actions], ...(auto.length ? { auto } : {}) };
   }
 
   get human(): PlayerId {
@@ -82,7 +88,7 @@ export class GameSession {
     return this.state.pending !== null && this.state.pending.player !== this.human;
   }
 
-  apply(action: Action): LogStep {
+  apply(action: Action, auto = false): LogStep {
     const pending = this.state.pending;
     if (!pending) throw new Error("no decision pending");
     const turn = this.state.turn;
@@ -94,6 +100,7 @@ export class GameSession {
       turn,
       events,
       after: cloneState(this.state),
+      ...(auto ? { auto: true } : {}),
     };
     this.actions.push(action);
     this.steps.push(step);
@@ -108,13 +115,13 @@ export class GameSession {
     return this.apply(policy.choose(view, pending));
   }
 
-  /** Indices of the human's actions (rollback points). */
+  /** Indices of the human's own decisions (rollback points); automatic passes don't count. */
   humanActions(): number[] {
-    return this.steps.filter((s) => s.player === this.human).map((s) => s.index);
+    return this.steps.filter((s) => s.player === this.human && !s.auto).map((s) => s.index);
   }
 
   get canUndo(): boolean {
-    return this.steps.some((s) => s.player === this.human);
+    return this.steps.some((s) => s.player === this.human && !s.auto);
   }
 
   /** Takes back the human's last decision together with everything that followed. */
@@ -126,19 +133,20 @@ export class GameSession {
   /** Goes back to the moment before action `index`, keeping actions 0..index-1. */
   rollbackTo(index: number): void {
     if (index < 0 || index > this.actions.length) throw new Error(`no action ${index}`);
-    this.rebuild(this.actions.slice(0, index));
+    const auto = new Set(this.steps.filter((s) => s.auto && s.index < index).map((s) => s.index));
+    this.rebuild(this.actions.slice(0, index), auto);
   }
 
   /** Index of the human's first decision in the given turn (for "back to the start of the turn"). */
   turnStart(turn: number): number | undefined {
-    return this.steps.find((s) => s.turn === turn && s.player === this.human)?.index;
+    return this.steps.find((s) => s.turn === turn && s.player === this.human && !s.auto)?.index;
   }
 
-  private rebuild(actions: readonly Action[]): void {
+  private rebuild(actions: readonly Action[], auto: ReadonlySet<number> = new Set()): void {
     const { state, events } = this.engine.newGame(this.setup.decks, this.setup.options);
     this.state = state;
     this.actions.length = 0;
     this.steps = [{ index: -1, player: null, action: null, turn: 0, events, after: cloneState(state) }];
-    for (const action of actions) this.apply(action);
+    actions.forEach((action, i) => this.apply(action, auto.has(i)));
   }
 }
