@@ -85,8 +85,9 @@ Jedes Spiel folgt aus Job und Nummer und ist damit wiederholbar.
 Im Reiter „Spielen“ Deck (Meta oder Starter), KI-Deck, Gegner-KI, Startspieler und Seed wählen. Leuchtende
 Karten sind nutzbar: anklicken und im Menü oder direkt auf dem Feld das Ziel wählen (rot pulsierend; die
 Schildzone steht für den Spielerangriff), oder die Karte auf das Ziel bzw. das eigene Feld **ziehen** (Maus
-und Touch). „Anhalten“ legt fest, wann das Spiel im Action Step für dich stoppt (Klug: nur bei Unit-Kämpfen
-oder wenn ein Angriff dich ohne Schilde lassen könnte). Leertaste = hervorgehobene Schaltfläche (Passen, Nicht blocken, Main Phase beenden),
+und Touch). „Anhalten“ legt fest, wann das Spiel im Action Step für dich stoppt. Es fragt nur, wenn du
+etwas spielen kannst; Standard „Immer“, „Bei Angriffen der KI“ überspringt nur deine eigenen Angriffe auf
+den Spieler und das Zugende, „Nie“ passt immer. Leertaste = hervorgehobene Schaltfläche (Passen, Nicht blocken, Main Phase beenden),
 Strg+Z = letzte eigene Entscheidung zurück, Esc = Auswahl aufheben. Im Log springt ↶ vor eine Entscheidung
 oder an den Beginn eines eigenen Zuges. Die Partie wird im Browser gespeichert und lässt sich fortsetzen.
 Am Handy (hochkant) liegen Log, Details und Einstellungen in einer Leiste hinter „☰ Log & Details“.

@@ -71,21 +71,25 @@
   let speed = $state(600);
 
   // When the game stops for the human in an action step (9-4).
-  type Stops = "always" | "smart" | "never";
+  // When the game stops for the human in an action step (9-4). The engine only asks when the human can
+  // play something, so by default every such chance is offered ("Immer"). "Nur eigene Züge" skips the
+  // action steps of the own attacks on the player and of the end of turn (never the opponent's attacks).
+  type Stops = "always" | "reactive" | "never";
   const STOPS: { value: Stops; label: string }[] = [
-    { value: "smart", label: "Klug" },
     { value: "always", label: "Immer" },
+    { value: "reactive", label: "Bei Angriffen der KI" },
     { value: "never", label: "Nie (passen)" },
   ];
-  const STOPS_KEY = "gcg-battle-simulator.stops";
+  // A new key: the earlier default ("smart") skipped chances to react and is not carried over.
+  const STOPS_KEY = "gcg-battle-simulator.stops-v2";
   let stops = $state<Stops>(loadStops());
 
   function loadStops(): Stops {
     try {
       const v = localStorage.getItem(STOPS_KEY);
-      return v === "always" || v === "never" ? v : "smart";
+      return v === "reactive" || v === "never" ? v : "always";
     } catch {
-      return "smart";
+      return "always";
     }
   }
 
@@ -97,21 +101,16 @@
     }
   });
 
-  /**
-   * "Klug": stop in an action step only when two Units fight (AP changes decide the battle) or when an
-   * attack on the player could leave you without Shields and Base.
-   */
+  /** Should the human's pending action step be passed automatically? */
   function skipActionStep(): boolean {
     const pending = session.state.pending;
     if (!pending || pending.player !== human || pending.kind !== "action") return false;
     if (stops === "always") return false;
     if (stops === "never") return true;
+    // "reactive": stop whenever the AI attacks or a Unit of yours fights; skip the rest.
     const b = session.state.battle;
     if (!b || session.state.step !== "battleAction") return true;
-    if (b.target !== "player") return false;
-    if (b.attackerOwner === human) return true;
-    const me = session.state.players[human];
-    return me.shields.length + me.base.length > 1;
+    return b.attackerOwner === human && b.target === "player";
   }
   let showTrash = $state<PlayerId | null>(null);
   /** On narrow screens the side panel (controls, details, log) is a drawer. */

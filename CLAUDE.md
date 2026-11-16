@@ -98,8 +98,11 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   - Tests: 158 (neu: 21 Meta-Kartentests in `tests/cards/meta.test.ts`, 6 Meta-Pipeline-Tests).
     `npm run sim -- --decks meta --ai v1 --check`: 2000 Spiele ohne Fehler.
 - **M6 (schöne Oberfläche) fertig**, Handy nur in der Browser-Emulation (375×812) geprüft.
-  - Intelligente Stopps: Einstellung „Anhalten“ (Klug/Immer/Nie, `localStorage`); automatische Pässe sind in
-    der Sitzung als `auto` markiert (kein Rollback-Punkt, gespeichert in `SavedSession.auto`).
+  - Stopps: Einstellung „Anhalten“ (Immer/Bei Angriffen der KI/Nie, `localStorage`-Schlüssel `…stops-v2`);
+    automatische Pässe sind in der Sitzung als `auto` markiert (kein Rollback-Punkt, `SavedSession.auto`).
+    **Nutzerwunsch (16. Nov.):** Kann der Spieler eine Karte spielen, muss er die Chance zum Reagieren
+    bekommen. Die frühere Standardstufe „Klug“ übersprang Angriffe der KI auf den Spieler (mit > 1 Schild)
+    und wurde deshalb ersetzt; Standard ist jetzt „Immer“.
   - Animationen: Schadens-/Heilzahlen, Angreifer/Verteidiger, wackelnde Schildzone, Zugbanner, Zerstörung.
   - Ziehen & Ablegen mit Pointer Events (`data-drop` = Karten-Id, `player`, `field`); Klicken bleibt.
   - Handy (≤ 700 px): Kartenbreite aus Bildschirmbreite, Seitenleiste als Schublade („☰ Log & Details“).
