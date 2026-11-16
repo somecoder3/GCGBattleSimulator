@@ -1,6 +1,7 @@
 // The AIs by name, for the simulator (CLI and browser) and the game.
 
 import type { Engine } from "../engine/engine";
+import { DEFAULT_WEIGHTS, type Weights } from "./evaluate";
 import { HeuristicPolicy } from "./heuristic";
 import { LookaheadPolicy } from "./lookahead";
 import { RandomPolicy } from "./random";
@@ -23,14 +24,17 @@ export function parseAiName(name: string): AiName {
   return full as AiName;
 }
 
-/** `seed` only matters for the random AI; the heuristics are deterministic. */
-export function makePolicy(name: AiName, engine: Engine, seed: number): Policy {
+/**
+ * `seed` only matters for the random AI; the heuristics are deterministic. `weights` changes the
+ * evaluation of heuristic-v1 (for tuning).
+ */
+export function makePolicy(name: AiName, engine: Engine, seed: number, weights?: Partial<Weights>): Policy {
   switch (name) {
     case "random":
       return new RandomPolicy(seed);
     case "heuristic-v0":
       return new HeuristicPolicy(engine);
     case "heuristic-v1":
-      return new LookaheadPolicy(engine);
+      return new LookaheadPolicy(engine, weights ? { ...DEFAULT_WEIGHTS, ...weights } : DEFAULT_WEIGHTS);
   }
 }

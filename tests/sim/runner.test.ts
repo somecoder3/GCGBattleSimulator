@@ -74,7 +74,14 @@ describe("statistics", () => {
   });
 
   it("counts wins per AI, deck and matchup from both seats", () => {
-    const base = { seed: 0, turns: 10, decisions: 50, mulligans: [false, true] as [boolean, boolean], ms: 1 };
+    const base = {
+      seed: 0,
+      turns: 10,
+      decisions: 50,
+      mulligans: [false, true] as [boolean, boolean],
+      ms: 1,
+      slots: [0, 1] as [0 | 1, 0 | 1],
+    };
     const games: GameSummary[] = [
       {
         ...base,

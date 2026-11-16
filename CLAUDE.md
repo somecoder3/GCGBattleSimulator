@@ -110,6 +110,9 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 - **Nach M6 (selbstständig):** alle 15 Meta-Archetypen voll unterstützt (M09–M15 nachgezogen, ~30 Karten,
   neue Mechaniken in `docs/EFFECTS.md` „Erweiterungen nach M5“); Abdeckung gesamt **65,1 %**.
   `npm run coverage -- --meta` zeigt Archetypen und fehlende Zeilen. 169 Tests.
+  - Gewichts-Abstimmung `npm run tune` (Koordinatensuche, Bestätigungslauf; Runner kann Gewichte pro KI:
+    `SimJob.weights`, `GameSpec.slots`; Node-Worker in `tools/node-pool.ts`). Erste Runde: **keine
+    Verbesserung** (einziger Treffer war Zufall) → Gewichte unverändert, v1 ist durch die Suche begrenzt.
 - Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.

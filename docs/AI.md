@@ -41,6 +41,20 @@ Bekannte Schwächen: Die Fortsetzung spielt nur v0, also keine echte Planung meh
 keine Vorstellung von gegnerischen Handkarten (für M7: ISMCTS mit Gegnermodell); Gewichte von Hand gesetzt
 (Tuning per Selbstspiel in M7).
 
+## Abstimmung der Gewichte (`npm run tune`)
+
+Koordinatensuche per Selbstspiel: Jedes Gewicht wird mit ×0,5 und ×1,6 gegen die aktuellen Gewichte
+gespielt (v1 gegen v1, je 1000 Spiele mit den Top-8-Meta-Decks, Sitze, Decks und Startspieler
+ausgeglichen). Gewinnt der Kandidat mindestens 53,5 % **und** bestätigt ein zweiter, unabhängiger Lauf mit
+doppelt so vielen Spielen den Vorteil (untere Intervallgrenze > 50 %), wird er übernommen. Der Runner kann dafür pro KI
+eigene Gewichte mitgeben (`SimJob.weights`, `GameSpec.slots` sagt, welche KI auf welchem Sitz spielt).
+
+**Erste Runde (16. Nov. 2026, 36 Vergleiche, 12 min auf 15 Workern):** Kein Gewicht ist klar besser. Der
+einzige Treffer (Lv.-Gewicht 0,3 → 0,48: 54,6 %) war Zufall; mit 3000 neuen Spielen 49,5 % (47,7–51,3 %).
+Deshalb gibt es jetzt den Bestätigungslauf. Ergebnis: Die Handgewichte liegen auf einem Plateau; die
+Grenzen von v1 liegen in der Suche (nur v0 als Fortsetzung, keine gegnerischen Handkarten), nicht in der
+Bewertung. Das ist die Ausgangslage für M7 (ISMCTS).
+
 ## Heuristik v0
 
 Feste Regeln mit einer einfachen Bewertung, **ohne Vorausschau**. Jede Option bekommt eine Punktzahl, die

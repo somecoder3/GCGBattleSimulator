@@ -2,7 +2,9 @@
 // game follows from the job and its index alone, so workers only need the job and a range of indices,
 // and any game can be replayed later from (job, index).
 
+import type { Weights } from "../ai/evaluate";
 import { makePolicy, type AiName } from "../ai/registry";
+import type { Policy } from "../ai/types";
 import { randomDeck } from "../engine/deck";
 import type { Engine } from "../engine/engine";
 import { checkInvariants } from "../engine/invariants";
@@ -21,6 +23,8 @@ export interface SimJob {
   decks: DeckEntry[];
   /** The two AIs. If they differ, each plays each deck of a pairing equally often. */
   ai: [AiName, AiName];
+  /** Evaluation weights for heuristic-v1 per AI of `ai` (tuning: the same AI with other weights). */
+  weights?: [Partial<Weights> | null, Partial<Weights> | null];
   games: number;
   seed: number;
   maxTurns?: number;
@@ -35,6 +39,8 @@ export interface GameSpec {
   /** Deck ids by seat ("random" for generated decks). */
   decks: [string, string];
   ai: [AiName, AiName];
+  /** Which AI of the job (0 or 1) plays in each seat. */
+  slots: [0 | 1, 0 | 1];
 }
 
 export interface GameSummary extends GameSpec {
@@ -71,8 +77,9 @@ export function gameSpec(job: SimJob, index: number): GameSpec {
     decks = [job.decks[a]!.id, job.decks[b]!.id];
     if (swapDecks) decks = [decks[1], decks[0]];
   }
-  const ai: [AiName, AiName] = swapAi ? [job.ai[1], job.ai[0]] : [job.ai[0], job.ai[1]];
-  return { index, seed, firstPlayer, decks, ai };
+  const slots: [0 | 1, 0 | 1] = swapAi ? [1, 0] : [0, 1];
+  const ai: [AiName, AiName] = [job.ai[slots[0]], job.ai[slots[1]]];
+  return { index, seed, firstPlayer, decks, ai, slots };
 }
 
 /** Deck lists of a game (random decks are generated from the game's seed). */
@@ -98,7 +105,14 @@ export function runGame(engine: Engine, job: SimJob, index: number): GameSummary
       engine,
       decks,
       { seed: spec.seed, firstPlayer: spec.firstPlayer, ...(job.maxTurns ? { maxTurns: job.maxTurns } : {}) },
-      [makePolicy(spec.ai[0], engine, spec.seed * 2), makePolicy(spec.ai[1], engine, spec.seed * 2 + 1)],
+      [0, 1].map((seat) =>
+        makePolicy(
+          spec.ai[seat]!,
+          engine,
+          spec.seed * 2 + seat,
+          job.weights?.[spec.slots[seat]!] ?? undefined,
+        ),
+      ) as [Policy, Policy],
       {
         onStep: job.check
           ? (state) => {
