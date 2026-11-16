@@ -1,0 +1,4 @@
+[submodule "gcgdb"]
+	path = gcgdb
+	url = https://github.com/somecoder3/GCGDB.git
+	branch = main
