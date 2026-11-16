@@ -313,6 +313,10 @@
   }
 
   function clickCard(id: CardId) {
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
     if (!decision) return;
     if (selected !== null) {
       const complete = selectedOptions.filter((o) => secondary(o) === id);
@@ -329,6 +333,58 @@
     }
     if (own.length === 1 && immediate(own[0]!)) return act(own[0]!);
     selected = id;
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Drag and drop (mouse and touch): a card with options is picked up after a few pixels; dropping it on
+  // a highlighted target completes the option, on the own field it deploys/plays it.
+
+  let drag = $state<{ id: CardId; x: number; y: number; over: string | null } | null>(null);
+  let pressed: { id: CardId; x: number; y: number; pointer: number } | null = null;
+  let suppressClick = false;
+
+  function dropKey(el: Element | null): string | null {
+    return el?.closest("[data-drop]")?.getAttribute("data-drop") ?? null;
+  }
+
+  /** The option a drop on `key` ("player", "field" or a card id) completes. */
+  function dropAction(id: CardId, key: string | null): Action | undefined {
+    if (key === null) return undefined;
+    const own = options.filter((o) => primaryCard(o) === id);
+    if (key === "field") return own.length === 1 && secondary(own[0]!) === null ? own[0] : undefined;
+    const target = key === "player" ? "player" : Number(key);
+    const matching = own.filter((o) => secondary(o) === target);
+    return matching.length === 1 ? matching[0] : undefined;
+  }
+
+  function onpointerdown(e: PointerEvent, id: CardId) {
+    if (!decision || !legal.has(id) || e.button !== 0) return;
+    pressed = { id, x: e.clientX, y: e.clientY, pointer: e.pointerId };
+  }
+
+  function onpointermove(e: PointerEvent) {
+    if (!pressed || e.pointerId !== pressed.pointer) return;
+    if (!drag) {
+      if (Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < 10) return;
+      selected = pressed.id; // highlights the targets
+      drag = { id: pressed.id, x: e.clientX, y: e.clientY, over: null };
+    }
+    const under =
+      document.elementsFromPoint(e.clientX, e.clientY).find((el) => !el.closest(".ghost")) ?? null;
+    drag = { ...drag, x: e.clientX, y: e.clientY, over: dropKey(under) };
+  }
+
+  function onpointerup(e: PointerEvent) {
+    if (!pressed || e.pointerId !== pressed.pointer) return;
+    const current = drag;
+    pressed = null;
+    drag = null;
+    if (!current) return; // a plain click
+    suppressClick = true;
+    setTimeout(() => (suppressClick = false), 0);
+    const action = dropAction(current.id, current.over);
+    if (action) act(action);
+    else selected = null;
   }
 
   function clickEnemyPlayer() {
@@ -404,13 +460,15 @@
   );
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} {onpointermove} {onpointerup} onpointercancel={onpointerup} />
 
 {#snippet field(p: PlayerId)}
   {@const player = view.players[p]}
   <div class="field" class:mine={p === human}>
     <div
       class="shieldzone"
+      data-drop={p === enemy ? "player" : undefined}
+      class:over={drag !== null && p === enemy && drag.over === "player"}
       class:shake={shaking.has(p)}
       class:defender={view.battle?.target === "player" && view.battle.attackerOwner !== p}
       class:target={p === enemy && targets.has("player")}
@@ -428,7 +486,15 @@
       </div>
       <div class="base">
         {#each player.base as id (id)}
-          <div in:receive={{ key: id }} out:send={{ key: id }}>
+          <!-- Dragging only adds to the card button inside; keyboard and screen readers use the button. -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            in:receive={{ key: id }}
+            out:send={{ key: id }}
+            class="draggable"
+            class:dragging={drag?.id === id}
+            onpointerdown={(e) => onpointerdown(e, id)}
+          >
             <BoardCard
               card={def(id)}
               stats={stats(id)}
@@ -445,9 +511,23 @@
         {/each}
       </div>
     </div>
-    <div class="battle">
+    <div
+      class="battle"
+      data-drop={p === human ? "field" : undefined}
+      class:over={drag !== null && p === human && drag.over === "field"}
+    >
       {#each player.battle as id (id)}
-        <div class="unit" animate:flip={{ duration: 300 }} in:receive={{ key: id }} out:send={{ key: id }}>
+        <!-- Dragging only adds to the card button inside; keyboard and screen readers use the button. -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="unit draggable"
+          class:dragging={drag?.id === id}
+          data-drop={id}
+          animate:flip={{ duration: 300 }}
+          in:receive={{ key: id }}
+          out:send={{ key: id }}
+          onpointerdown={(e) => onpointerdown(e, id)}
+        >
           <BoardCard
             card={def(id)}
             stats={stats(id)}
@@ -553,8 +633,12 @@
       {@render info(human)}
       <div class="hand" aria-label="Deine Hand" style="--n: {Math.max(2, me.hand.length)}">
         {#each me.hand as id (id)}
+          <!-- Dragging only adds to the card button inside; keyboard and screen readers use the button. -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
-            class="hand-card"
+            class="hand-card draggable"
+            class:dragging={drag?.id === id}
+            onpointerdown={(e) => onpointerdown(e, id)}
             animate:flip={{ duration: 300 }}
             in:receive={{ key: id }}
             out:send={{ key: id }}
@@ -569,6 +653,16 @@
         {/each}
       </div>
     </div>
+
+    {#if drag && def(drag.id)}
+      <div
+        class="ghost"
+        style="left: {drag.x}px; top: {drag.y}px"
+        class:valid={!!dropAction(drag.id, drag.over)}
+      >
+        <BoardCard card={def(drag.id)} />
+      </div>
+    {/if}
 
     {#if banner}
       {#key banner.n}
@@ -789,6 +883,32 @@
     padding: 6px 8px;
     border-radius: 10px;
     border: 1px dashed transparent;
+  }
+  .draggable {
+    touch-action: none;
+  }
+  .draggable.dragging {
+    opacity: 0.35;
+  }
+  .ghost {
+    --cw: clamp(70px, 6.8vw, 104px);
+    position: fixed;
+    z-index: 20;
+    translate: -50% -60%;
+    rotate: -4deg;
+    pointer-events: none;
+    filter: drop-shadow(0 12px 24px rgb(0 0 0 / 60%));
+    opacity: 0.92;
+  }
+  .ghost.valid {
+    rotate: 0deg;
+    filter: drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 80%, transparent));
+  }
+  .battle.over,
+  .shieldzone.over {
+    outline: 2px dashed var(--accent);
+    outline-offset: 4px;
+    border-radius: 12px;
   }
   .field:not(.mine) {
     --lunge: 8px;
