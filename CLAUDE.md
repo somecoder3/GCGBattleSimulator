@@ -1,8 +1,8 @@
 # GCGBattleSimulator
 
 Privates Projekt des Nutzers: Kampfsimulator für das **Gundam Card Game** auf Basis von **GCGDB**
-(`E:\programming\GCGDB`, Kartendatenbank, siehe dessen `CLAUDE.md`). Vorbild für Aufbau und Abläufe ist
-**GCGScanner** (`E:\programming\GCGScanner`). Kommunikation auf Deutsch. Der Nutzer kommt aus der
+(Repo `somecoder3/GCGDB`, hier als Submodul `gcgdb/`, siehe dessen `CLAUDE.md`). Vorbild für Aufbau und
+Abläufe ist **GCGScanner** (auf dem aktuellen Rechner `D:\programming\GCGScanner`, früher `E:\programming\…`). Kommunikation auf Deutsch. Der Nutzer kommt aus der
 Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 
 ## Ziele (aus der ursprünglichen Anfrage)
@@ -49,11 +49,30 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   - Tests: 109 (Regeln 34, Kartentests ST01–ST04 49 inkl. 400 Starter-Spielen mit Invarianten,
     Übersetzer/Compiler 11, Fuzz/Replay 4, Daten 11). **`npm run fuzz` mit Effekten (100 000 Spiele): 0 Fehler**, 106 s;
     ~1,3 ms pro Spiel mit Effekten.
+- **M3 (erste spielbare Oberfläche) fertig.** KI-Beschreibung: **`docs/AI.md`**.
+  - Heuristik-KI v0 `src/ai/heuristic.ts`: Regeln + Kartenwert, ohne Vorausschau, nur auf ihrer Sicht; liest
+    bei Zielwahl im übersetzten Effektprogramm, ob das Ziel geschädigt oder gestärkt wird. Starter-Decks:
+    **93,8 % gegen Zufall** (1000 Spiele), gegen sich selbst 51/49, Startspieler 63 %.
+  - `GameSession` (`src/sim/session.ts`): Mensch gegen KI, Rollback = Replay eines Präfixes (`undo`,
+    `rollbackTo`, `turnStart`), speichert Schritte mit Zustand danach fürs Log, `save`/`restore` als JSON.
+  - Oberfläche `src/app/components/game/` (`PlayScreen` Einstellungen/Fortsetzen, `Board` Spielfeld,
+    `BoardCard`, `CardInfo`), Reiter „Spielen“ (`#play`, Standard) und „Karten“ (`#cards`) in `App.svelte`.
+    Bedienung per Klick (Karte → Menü/Ziel), Leertaste, Strg+Z, Log mit ↶-Rücksprung, KI-Tempo, Partie in
+    `localStorage` (`gcg-battle-simulator.game`). Log-Texte `src/app/lib/gamelog.ts` (nur sichtbare Karten
+    benannt), Optionen/Beschriftungen `src/app/lib/actions.ts`. Im Browser durchgespielt (1440×900, 1280×720).
+  - `npm run sim -- --ai heuristic,random --decks starters` (KI je Seite, Starter-Decks).
+  - Tests: 121 (neu: KI 4, Sitzung/Rollback/Log 5, Aktionen 3).
+  - Nachbesserungen nach erstem Spieltest des Nutzers: Pilot liegt 28 % nach unten versetzt unter der Unit
+    (Name und AP+/HP+ sichtbar, gemessen am Kartenbild), eigenes Hovern zeigt den Piloten im Detail;
+    Detail zeigt Link-Bedingungen (gelb mit ✓, wenn gelinkt); zerstörte Schilde werden 2,8 s in der Mitte
+    aufgedeckt (Kartennummer aus dem vollen Zustand, da öffentlich aufgedeckt); „Choose 1 of your Resources.
+    Set it as active.“ fragt nicht mehr, sondern macht eine geruhte Ressource aktiv.
 - Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: **M3** erste spielbare Oberfläche gegen eine einfache KI (Heuristik v0), Rollback, Log.
-  Danach M4 (Heuristik-KI, Massensimulation) und M5 (Meta + Meta-Karten).
+- Nächster Schritt: **M4** Heuristik-KI v1 (Bewertungsfunktion, Vorausschau im Zug), Match-Runner,
+  Worker-Pool, Grundstatistik. Danach M5 (Meta + Meta-Karten), M6 (schöne Oberfläche, Ziehen & Ablegen,
+  Handy, intelligente Stopps im Action Step).
 
 ## Svelte-Fallen
 
@@ -62,6 +81,12 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   dann nie. Darum hieß der Set-Filter der Kartenliste nicht mehr `set`, sondern `setCode` (gefunden am 16. Nov.).
 
 ## Entscheidungen
+
+- **Oberfläche (M3):** Die Oberfläche rendert nur `viewFor(state, mensch)` (kein Schummeln möglich); AP/HP
+  kommen aus dem vollen Zustand (öffentlich). Optionen mit Zielkarte (Pilot, Angriff, Support, Ersetzen)
+  brauchen zwei Klicks, alle anderen wirken sofort. Rollback-Punkte sind nur Entscheidungen des Menschen
+  (die KI ist deterministisch und würde dasselbe wiederholen). Eigene Aktionen ohne eigenes Event (Passen,
+  Main Phase beenden, Ja/Nein) bekommen eine Log-Zeile, damit jede Entscheidung einen ↶ hat.
 
 - **Effekte (M2):** Daten-DSL statt Code pro Karte, damit laufende Effekte serialisierbar bleiben. Der
   Übersetzer erkennt nur sichere Muster; nicht verstandene Zeilen wirken nicht und machen die Karte
@@ -104,11 +129,12 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   **ohne Ressourcen-Deck**), `deck.name` = Archetyp, `placing`, `record`. Sendet `Access-Control-Allow-Origin: *`.
 - Probe (30 Turniere ≥ 12 Spieler, Mai–Nov. 2026, Top 8 = 176 Decks): 343 verschiedene Karten; Top 100 Karten
   decken 80 %, Top 200 94 %, Top 300 98,5 % der Kartenplätze.
-- Kartenbilder: alle 2205 liegen in `E:\programming\GCGScanner\build\carddb-cache\images\`. gundam-gcg.com
+- Kartenbilder: alle 2205 liegen in GCGScanners `build\carddb-cache\images\` (`npm run images` findet sie
+  über `../GCGScanner`). gundam-gcg.com
   sendet `Cross-Origin-Resource-Policy: same-site` (kein Einbinden von fremden Seiten). Bilder nicht ins Repo
   und nicht frei auf Pages (Pages ist öffentlich).
 - `gh` ist nicht installiert; GitHub-Oberfläche über Claude in Chrome (Nutzer angemeldet als `somecoder3`).
-  Node v26 und Python 3.11 sind vorhanden.
+  Auf dem aktuellen Rechner (Projekte unter `D:\programming`, 16. Nov.) Node v24.21, früher v26; Python vorhanden.
 
 ## Konventionen
 
@@ -116,4 +142,4 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Entscheidungen im selben Commit nachtragen, Veraltetes korrigieren.
 - Abhängigkeiten exakt pinnen und gegen die Registry prüfen; keine Version unter 2 Wochen Alter
   (auch GitHub Actions, per Commit-SHA).
-- Unter Windows mit Python-Pfaden `E:/...` statt `/e/...`.
+- Unter Windows mit Python-Pfaden `D:/...` statt `/d/...`.

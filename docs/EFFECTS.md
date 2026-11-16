@@ -76,3 +76,6 @@ Stand 16. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **51,6 % vollständi
   im Spiel ist (auch wenn beide zerstört werden).
 - ST01 Starter-Deckliste: Die Quelle ergibt 51 Karten; Guntank (ST01-004) ist mit 3 statt 4 gezählt
   (`src/data/decks.ts`).
+- „Choose N of your (rested) Resources. Set it/them as active.“ wird ohne Auswahl zu `readyResource`:
+  Ressourcen sind gleichwertig, die Wahl einer aktiven Ressource würde den Effekt nur verschenken
+  (ST01-011, GD05-066, GD06-053, ST07-001).

@@ -217,6 +217,15 @@ function tokenNo(spec: string, ctx: ParseContext): string {
 
 const TOKEN_SPEC = "(\\[[^\\]]+\\]\\((?:[^()]|\\([^()]*\\))*\\))";
 
+/** "your Resources" or "your rested Resources" without further conditions. */
+function isOwnResources(f: Filter): boolean {
+  return (
+    f.zone === "resources" &&
+    f.side === "friendly" &&
+    Object.keys(f).every((k) => k === "zone" || k === "side" || k === "rested" || k === "types")
+  );
+}
+
 function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
   const push = (step: Step): void => void scope.steps.push(step);
   let m: RegExpMatchArray | null;
@@ -255,8 +264,17 @@ function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
   // Actions on the chosen card(s) or this card.
   if ((m = sentence.match(new RegExp(`^[Rr]est ${TARGET}$`))))
     return push({ op: "rest", t: ref(m[1]!, scope) });
-  if ((m = sentence.match(new RegExp(`^[Ss]et ${TARGET} as active$`))))
-    return push({ op: "ready", t: ref(m[1]!, scope) });
+  if ((m = sentence.match(new RegExp(`^[Ss]et ${TARGET} as active$`)))) {
+    const t = ref(m[1]!, scope);
+    // "Choose 1 of your Resources. Set it as active.": Resources are all alike, so the choice only
+    // matters for rested ones; readyResource sets that many rested Resources active without asking.
+    const prev = scope.steps.at(-1);
+    if (prev?.op === "choose" && prev.as === t && !prev.upTo && isOwnResources(prev.filter)) {
+      scope.steps.pop();
+      return push({ op: "readyResource", n: prev.count ?? 1 });
+    }
+    return push({ op: "ready", t });
+  }
   if ((m = sentence.match(new RegExp(`^[Dd]eal (\\d+) damage to ${TARGET}$`)))) {
     return push({ op: "damage", t: ref(m[2]!, scope), amount: num(m[1]!) });
   }

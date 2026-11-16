@@ -1,6 +1,6 @@
 # Regel-Engine
 
-Stand: M2 (16. Nov. 2026). Regelgrundlage: Comprehensive Rules **Ver. 1.10.0**; Regelnummern stehen im
+Stand: M3 (16. Nov. 2026). Regelgrundlage: Comprehensive Rules **Ver. 1.10.0**; Regelnummern stehen im
 Code und in den Tests.
 
 ## Schnittstelle
@@ -23,7 +23,8 @@ state.result; // { winner: 0 | 1 | null, reason: "damage" | "deckOut" | "turnLim
   Option zusammengefasst (Kopien sind gleichwertig, 2-1-1).
 - **Events** beschreiben jede Änderung (`draw`, `deploy`, `pair`, `attack`, `block`, `damage`,
   `shieldBreak`, `destroyed`, `toTrash`, …) für Animationen, Log und Statistik. Sie enthalten Karten-Ids
-  und sind noch nicht nach Sichtbarkeit gefiltert (kommt mit der Oberfläche, M3).
+  und sind nicht nach Sichtbarkeit gefiltert; das Spiel-Log (`src/app/lib/gamelog.ts`) nennt nur Karten,
+  die der Mensch in dem Moment sehen darf.
 - **Zufall:** eigener Generator (xoshiro128\*\*) im Zustand. Seed + Decks + Aktionen ⇒ exakt dasselbe
   Spiel (`replay()` in `src/sim/match.ts`). **Rollback = Replay eines Präfixes.** Die KI hat einen eigenen
   Generator und verändert den Spielzufall nie.
@@ -47,6 +48,7 @@ state.result; // { winner: 0 | 1 | null, reason: "damage" | "deckOut" | "turnLim
 | `src/engine/rng.ts`, `hash.ts` | Zufall, Zustands-Fingerabdruck                                                              |
 | `src/ai/random.ts`             | Zufalls-KI (gewichtet: lieber handeln als die Main Phase beenden)                           |
 | `src/sim/match.ts`             | `playMatch`, `replay`                                                                       |
+| `src/sim/session.ts`           | `GameSession`: Mensch gegen KI mit Rollback, Log-Schritten, Speichern                       |
 | `tools/sim.ts`                 | `npm run sim` / `npm run fuzz`                                                              |
 
 Ablauf: `run()` arbeitet zuerst laufende Effekte ab (`frames`), dann wartende Trigger (`queue`), sonst den
@@ -82,7 +84,6 @@ Effekt-Entscheidungen haben `kind: "effect"`. Im Action Step wechselt nach einer
 ## Offen
 
 - Reihenfolge gleichzeitiger eigener Trigger wählbar machen (10-1-6-5); zurzeit in Auftrittsreihenfolge.
-- Events sind noch nicht nach Sichtbarkeit gefiltert (für die Oberfläche, M3).
 - Rund die Hälfte der Karten hat noch nicht verstandene Zeilen (`npm run coverage`).
 
 ## Prüfung

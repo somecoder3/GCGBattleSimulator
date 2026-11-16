@@ -2,19 +2,27 @@
   import { onMount } from "svelte";
   import type { CardPool } from "../data/cards";
   import CardBrowser from "./components/CardBrowser.svelte";
+  import PlayScreen from "./components/game/PlayScreen.svelte";
   import { loadCardPool } from "./lib/cardpool";
+
+  type Tab = "play" | "cards";
+  const tabFromHash = (): Tab => (location.hash === "#cards" ? "cards" : "play");
+  let tab = $state<Tab>(tabFromHash());
 
   let pool = $state<CardPool>();
   let error = $state<string>();
 
   onMount(() => {
+    const onHash = () => (tab = tabFromHash());
+    addEventListener("hashchange", onHash);
     loadCardPool().then(
       (p) => (pool = p),
       (e: unknown) => (error = String(e)),
     );
+    return () => removeEventListener("hashchange", onHash);
   });
 
-  const sections = ["Spielen", "Decks", "Meta", "Simulator"];
+  const sections = ["Decks", "Meta", "Simulator"];
 </script>
 
 <header class="top">
@@ -23,16 +31,23 @@
     <span>GCG Battle Simulator</span>
   </div>
   <nav aria-label="Bereiche">
-    <span class="current">Karten</span>
+    <a href="#play" class:current={tab === "play"} aria-current={tab === "play" ? "page" : undefined}
+      >Spielen</a
+    >
+    <a href="#cards" class:current={tab === "cards"} aria-current={tab === "cards" ? "page" : undefined}
+      >Karten</a
+    >
     {#each sections as name (name)}
       <span class="soon" title="Kommt in einem späteren Meilenstein">{name}</span>
     {/each}
   </nav>
 </header>
 
-<main>
+<main class:wide={tab === "play"}>
   {#if error}
     <p class="message error">Kartendaten konnten nicht geladen werden: {error}</p>
+  {:else if pool && tab === "play"}
+    <PlayScreen {pool} />
   {:else if pool}
     <CardBrowser {pool} />
   {:else}
@@ -74,15 +89,25 @@
     overflow-x: auto;
     scrollbar-width: none;
   }
+  nav a,
   nav span {
     padding: 5px 12px;
     border-radius: 999px;
     white-space: nowrap;
     font-size: 14px;
   }
-  .current {
+  nav a {
+    color: var(--text-dim);
+    text-decoration: none;
+    border: 1px solid transparent;
+  }
+  nav a:hover {
+    color: var(--text);
+  }
+  nav .current {
+    color: var(--text);
     background: var(--bg-raised);
-    border: 1px solid var(--line);
+    border-color: var(--line);
   }
   .soon {
     color: var(--text-dim);
@@ -92,6 +117,10 @@
     padding: 16px max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left));
     max-width: 1600px;
     margin: 0 auto;
+  }
+  main.wide {
+    max-width: none;
+    padding: 0;
   }
   .message {
     color: var(--text-dim);

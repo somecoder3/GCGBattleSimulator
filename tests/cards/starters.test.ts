@@ -159,11 +159,10 @@ describe("ST01 Heroic Beginnings", () => {
     expect(b.players[1].trash).toHaveLength(0);
   });
 
-  it("ST01-011 Suletta Mercury: on attack, once per turn, sets a Resource active", () => {
+  it("ST01-011 Suletta Mercury: on attack, once per turn, sets a rested Resource active without asking", () => {
     const s = scenario({ p0: { battle: [{ no: GM, pilot: "ST01-011" }], restedResources: 5 } });
     attack(s, id(s, 0, "battle", GM));
-    expect(s.pending?.prompt).toBe("target");
-    apply(s, target(s.players[0].resources[2]!));
+    expect(s.pending?.kind).not.toBe("effect");
     settle(s);
     expect(s.players[0].resources.filter((r) => !s.cards[r]!.rested)).toHaveLength(1);
   });
