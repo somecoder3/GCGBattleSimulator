@@ -53,8 +53,8 @@
     <p class="message error">Kartendaten konnten nicht geladen werden: {error}</p>
   {:else if pool && tab === "play"}
     <PlayScreen {pool} />
-  {:else if tab === "sim"}
-    <SimScreen />
+  {:else if pool && tab === "sim"}
+    <SimScreen {pool} />
   {:else if pool}
     <CardBrowser {pool} />
   {:else}

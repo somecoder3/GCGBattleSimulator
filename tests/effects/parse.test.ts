@@ -67,15 +67,21 @@ describe("bodies", () => {
     expect(segs[1]!.map((s) => s.op)).toEqual(["choose", "damage"]);
   });
 
-  it("nests 'You may …. If you do, …' (5-20-1)", () => {
+  it("nests 'You may …. If you do, …' (5-20-1), discarding only with enough cards in the hand", () => {
     const segs = parseBody("You may discard 1. If you do, draw 2.", ctx);
     expect(segs).toEqual([
       [
         {
-          op: "may",
-          do: [
-            { op: "discard", n: 1 },
-            { op: "draw", n: 2 },
+          op: "if",
+          cond: { hand: { min: 1 }, side: "friendly" },
+          then: [
+            {
+              op: "may",
+              do: [
+                { op: "discard", n: 1 },
+                { op: "draw", n: 2 },
+              ],
+            },
           ],
         },
       ],

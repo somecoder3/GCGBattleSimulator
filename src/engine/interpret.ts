@@ -1,11 +1,13 @@
 // Runs compiled card effects (effects/compile.ts). An effect is a Frame on c.s.frames; it runs until it
 // needs a player's choice (then c.s.pending is set and `answer` continues it) or until it ends.
 
-import type { Ref } from "../effects/dsl";
+import type { Cond, Filter, Ref } from "../effects/dsl";
 import type { Instr } from "../effects/compile";
 import {
   LIMITS,
+  apOf,
   candidates,
+  damageShieldArea,
   dealDamage,
   def,
   deployBase,
@@ -14,12 +16,16 @@ import {
   effectByRef,
   enterBattle,
   evalCond,
+  hpOf,
   inst,
+  mark,
   matches,
   moveTo,
   onceKey,
   other,
+  pairPilot,
   placeExResource,
+  raise,
   ready,
   rest,
   rulesManagement,
@@ -29,7 +35,7 @@ import {
   createCard,
   type Ctx,
 } from "./core";
-import type { Action, CardId, Decision, Frame, PendingTrigger } from "./types";
+import type { Action, CardId, Decision, Frame, PendingTrigger, PlayerId } from "./types";
 
 const OVERFLOW = "__overflow";
 const DEPLOY = "__deploy";
@@ -61,8 +67,13 @@ function finish(c: Ctx): void {
   if (card.zone === "limbo") toTrash(c, frame.source, frame.origin === "burst" ? "shield" : "resolved");
 }
 
-function ask(c: Ctx, frame: Frame, decision: Omit<Decision, "player" | "kind" | "source">): void {
-  c.s.pending = { player: frame.controller, kind: "effect", source: frame.source, ...decision };
+function ask(
+  c: Ctx,
+  frame: Frame,
+  decision: Omit<Decision, "player" | "kind" | "source">,
+  player: PlayerId = frame.controller,
+): void {
+  c.s.pending = { player, kind: "effect", source: frame.source, ...decision };
 }
 
 const YES_NO: Action[] = [{ type: "yes" }, { type: "no" }];
@@ -71,6 +82,7 @@ const IN_PLAY = ["battle", "base", "resources"];
 
 /** Cards a reference stands for that are still where the effect can reach them (in play by default). */
 function targets(c: Ctx, frame: Frame, ref: Ref, zones: string[] = IN_PLAY): CardId[] {
+  if (ref.includes("+")) return ref.split("+").flatMap((r) => targets(c, frame, r, zones));
   const ids =
     ref === "self"
       ? [frame.source]
@@ -101,14 +113,60 @@ function uniqueByNo(c: Ctx, ids: CardId[]): CardId[] {
   });
 }
 
-/** Offers the current choice of `frame.choosing` to the controller. */
-function offerChoice(c: Ctx, frame: Frame, prompt: Decision["prompt"]): void {
+/** Offers the current choice of `frame.choosing` to the controller (or to `player`). */
+function offerChoice(c: Ctx, frame: Frame, prompt: Decision["prompt"], player?: PlayerId): void {
   const ch = frame.choosing!;
   const options: Action[] = (prompt === "discard" ? uniqueByNo(c, ch.candidates) : ch.candidates).map(
     (card): Action => ({ type: "target", card }),
   );
   if (ch.optional) options.push({ type: "done" });
-  ask(c, frame, { prompt, options });
+  ask(c, frame, { prompt, options }, player);
+}
+
+/** Conditions that look at the running effect's variables, then the general ones (core.evalCond). */
+function frameCond(c: Ctx, frame: Frame, cond: Cond): boolean {
+  if ("and" in cond) return cond.and.every((x) => frameCond(c, frame, x));
+  if ("varGone" in cond) return (frame.vars[cond.varGone] ?? []).some((id) => inst(c, id).zone !== "battle");
+  if ("varMatches" in cond) {
+    return (frame.vars[cond.varMatches] ?? []).some((id) =>
+      matches(c, id, cond.filter, frame.controller, frame.source, true),
+    );
+  }
+  return evalCond(c, cond, frame.source, frame.controller);
+}
+
+/** Replaces "Lv./AP equal to or lower than that Unit" (a variable) by numbers. */
+function resolveFilter(c: Ctx, frame: Frame, f: Filter): Filter {
+  if ((!f.lvMaxOf || f.lvMaxOf === "self") && (!f.apMaxOf || f.apMaxOf === "self")) return f;
+  const out: Filter = { ...f };
+  if (f.lvMaxOf && f.lvMaxOf !== "self") {
+    const ids = frame.vars[f.lvMaxOf] ?? [];
+    out.lvMax = ids.length ? Math.min(...ids.map((id) => def(c, id).level)) : -1;
+    delete out.lvMaxOf;
+  }
+  if (f.apMaxOf && f.apMaxOf !== "self") {
+    const ids = frame.vars[f.apMaxOf] ?? [];
+    out.apMax = ids.length ? Math.min(...ids.map((id) => apOf(c, id))) : -1;
+    delete out.apMaxOf;
+  }
+  return out;
+}
+
+/** Starts the 【Main】 or 【Action】 command effect of a card as a new effect of `controller`. */
+function runCommand(c: Ctx, card: CardId, controller: PlayerId, timing: "main" | "action"): void {
+  const d = def(c, card);
+  const idx = d.script.compiled.findIndex(
+    (e) => e.effect.kind === "command" && e.effect.timing.includes(timing),
+  );
+  if (idx < 0) return;
+  mark(c, "cmd", controller, d.no);
+  startEffect(c, {
+    ref: { no: inst(c, card).no, idx, granted: false },
+    source: card,
+    controller,
+    event: null,
+    origin: "command",
+  });
 }
 
 /** Runs the top frame until it needs a decision or ends. */
@@ -139,7 +197,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       frame.pc = instr.to;
       return;
     case "jumpUnless":
-      frame.pc = evalCond(c, instr.cond, frame.source, me) ? frame.pc + 1 : instr.to;
+      frame.pc = frameCond(c, frame, instr.cond) ? frame.pc + 1 : instr.to;
       return;
     case "ask":
       ask(c, frame, { prompt: "may", options: YES_NO });
@@ -154,9 +212,18 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     case "choose": {
       const as = instr.as ?? "it";
       const chosen = frame.vars[as] ?? [];
-      const pool = candidates(c, instr.filter, me, frame.source).filter((id) => !chosen.includes(id));
+      const pool = candidates(c, resolveFilter(c, frame, instr.filter), me, frame.source).filter(
+        (id) => !chosen.includes(id),
+      );
       const left = (instr.count ?? 1) - chosen.length;
-      const optional = !!(instr.may || instr.upTo);
+      // "You may choose 2 … from your trash. Exile them. If you do, …": the full number or nothing.
+      // Once the first card is chosen, the rest must follow.
+      const exact = !!instr.may && !instr.upTo && (instr.count ?? 1) > 1;
+      if (exact && !chosen.length && pool.length < left) {
+        frame.pc = instr.fail;
+        return;
+      }
+      const optional = !!instr.upTo || (!!instr.may && !(exact && chosen.length));
       if (!pool.length || left <= 0) {
         // 10-2-2: no target, no effect (the rest of the segment is skipped).
         if (!chosen.length) frame.pc = instr.fail;
@@ -169,11 +236,11 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         return;
       }
       frame.choosing = { as, left, optional, candidates: pool };
-      offerChoice(c, frame, "target");
+      offerChoice(c, frame, "target", instr.by === "opponent" ? other(me) : undefined);
       return;
     }
     case "all":
-      frame.vars[instr.as ?? "it"] = candidates(c, instr.filter, me, frame.source);
+      frame.vars[instr.as ?? "it"] = candidates(c, resolveFilter(c, frame, instr.filter), me, frame.source);
       next();
       return;
 
@@ -184,10 +251,13 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       for (const id of targets(c, frame, instr.t)) ready(c, id);
       return next();
     case "damage":
-      for (const id of targets(c, frame, instr.t)) dealDamage(c, id, instr.amount, "effect");
+      for (const id of targets(c, frame, instr.t)) dealDamage(c, id, instr.amount, "effect", frame.source);
       return next();
     case "destroy":
-      for (const id of targets(c, frame, instr.t)) destroy(c, id);
+      for (const id of targets(c, frame, instr.t)) {
+        if (inst(c, id).owner === me) mark(c, "ownDestroyed", me, def(c, frame.source).no);
+        destroy(c, id);
+      }
       return next();
     case "bounce":
       for (const id of targets(c, frame, instr.t)) toHand(c, id);
@@ -197,14 +267,25 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       return next();
     case "exile":
       for (const id of targets(c, frame, instr.t, [...IN_PLAY, "trash", "hand"])) {
+        const pilot = inst(c, id).pilot;
         moveTo(c, id, "removal");
         c.ev.push({ t: "removed", card: id });
+        if (pilot !== null) {
+          moveTo(c, pilot, "removal"); // the Pilot goes along (3-3-6)
+          c.ev.push({ t: "removed", card: pilot });
+        }
       }
       return next();
     case "toDeck":
       for (const id of targets(c, frame, instr.t)) {
+        // The paired Pilot goes along, as when a Unit goes to the trash or hand (3-3-6).
+        const pilot = inst(c, id).pilot;
         moveTo(c, id, "deck", instr.pos);
         c.ev.push({ t: "toDeck", card: id, pos: instr.pos });
+        if (pilot !== null) {
+          moveTo(c, pilot, "deck", instr.pos);
+          c.ev.push({ t: "toDeck", card: pilot, pos: instr.pos });
+        }
       }
       return next();
     case "recover":
@@ -248,6 +329,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         hp: 0,
         flag: instr.flag,
         ...(instr.filter ? { filter: instr.filter } : {}),
+        ...(instr.amount ? { amount: instr.amount } : {}),
         until: instr.until,
         source: frame.source,
       };
@@ -366,22 +448,93 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       }
       return next();
     }
-    case "runMain": {
-      next();
-      const idx = def(c, frame.source).script.compiled.findIndex(
-        (e) => e.effect.kind === "command" && e.effect.timing.includes("main"),
-      );
-      if (idx >= 0) {
-        startEffect(c, {
-          ref: { no: inst(c, frame.source).no, idx, granted: false },
-          source: frame.source,
-          controller: me,
-          event: null,
-          origin: "command",
-        });
+    case "modByCount": {
+      const amount = candidates(c, instr.count, me, frame.source).length * instr.sign;
+      for (const id of targets(c, frame, instr.t)) {
+        c.s.modifiers.push({ target: id, ap: amount, hp: 0, until: instr.until, source: frame.source });
+        c.ev.push({ t: "modifier", card: id, ap: amount, hp: 0 });
       }
+      return next();
+    }
+    case "peek":
+      frame.looking = c.s.players[me].deck.slice(0, instr.n);
+      return next();
+    case "unpeek":
+      delete frame.looking;
+      return next();
+    case "topToBottom":
+      for (const id of c.s.players[me].deck.slice(0, instr.n)) {
+        moveTo(c, id, "deck", "bottom");
+        c.ev.push({ t: "toDeck", card: id, pos: "bottom" });
+      }
+      delete frame.looking;
+      return next();
+    case "damageShieldArea":
+      damageShieldArea(c, other(me), instr.amount, "effect", frame.source);
+      return next();
+    case "deploy": {
+      const ids = targets(c, frame, instr.t, ["hand", "trash"]);
+      const id = ids[0];
+      if (id === undefined) return next();
+      if (def(c, id).type === "BASE") deployBase(c, id);
+      else {
+        if (!ensureRoom(c, frame)) return;
+        enterBattle(c, id);
+      }
+      return next();
+    }
+    case "pairSelf": {
+      const card = inst(c, frame.source);
+      const unit = targets(c, frame, instr.t)[0];
+      if (
+        (card.zone === "limbo" || card.zone === "trash") &&
+        unit !== undefined &&
+        inst(c, unit).pilot === null
+      ) {
+        pairPilot(c, frame.source, unit);
+      }
+      return next();
+    }
+    case "runPilotMain": {
+      next();
+      const pilot = inst(c, frame.source).pilot;
+      if (pilot !== null) runCommand(c, pilot, me, "main");
       return;
     }
+    case "runMainOf": {
+      next();
+      const card = targets(c, frame, instr.t, ["trash", "hand", "limbo"])[0];
+      if (card !== undefined) runCommand(c, card, me, "main");
+      return;
+    }
+    case "runAction":
+      next();
+      runCommand(c, frame.source, me, "action");
+      return;
+    case "fight": {
+      // Both deal battle damage at the same time; nothing but the damage step happens.
+      const a = targets(c, frame, instr.a)[0];
+      const b = targets(c, frame, instr.b)[0];
+      if (a === undefined || b === undefined) return next();
+      const apA = apOf(c, a);
+      const apB = apOf(c, b);
+      dealDamage(c, b, apA, "battle", a);
+      dealDamage(c, a, apB, "battle", b);
+      const victim = inst(c, b);
+      if (victim.damage > 0 && victim.damage >= hpOf(c, b)) raise(c, "destroysUnit", a, b);
+      return next();
+    }
+    case "deploySelfAsUnit": {
+      const card = inst(c, frame.source);
+      if (card.zone !== "limbo") return next();
+      if (!ensureRoom(c, frame)) return;
+      enterBattle(c, frame.source, false, { ap: instr.ap, hp: instr.hp });
+      return next();
+    }
+    case "runMain":
+      next();
+      runCommand(c, frame.source, me, "main");
+      return;
   }
 }
 
@@ -409,6 +562,8 @@ export function answer(c: Ctx, action: Action): void {
         else frame.vars[DEPLOY] = [card];
         return;
       case DISCARD:
+        if (instr.op === "discard" && instr.as)
+          frame.vars[instr.as] = [...(frame.vars[instr.as] ?? []), card!];
         moveTo(c, card!, "trash");
         c.ev.push({ t: "toTrash", card: card!, reason: "discard" });
         frame.repeat = (frame.repeat ?? 1) - 1;

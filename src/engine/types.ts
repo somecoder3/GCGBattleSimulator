@@ -41,6 +41,10 @@ export interface CardInstance {
   /** Turn number in which the card last entered the battle area (3-2-4). */
   enteredTurn: number;
   token: boolean;
+  /** A Pilot deployed as a Unit with these values (Master Asia's 【Burst】); gone when it moves. */
+  asUnit?: { ap: number; hp: number };
+  /** Kind of the last damage it received (for "destroyed with effect damage"). */
+  lastDamage?: "battle" | "effect";
 }
 
 export interface PlayerState {
@@ -213,6 +217,12 @@ export interface GameState {
   passes: number;
   /** Turn in which each "Once per Turn" effect was last used, by "<cardId>:<effect>". */
   oncePerTurn: Record<string, number>;
+  /**
+   * Things that happened, with the turn they last happened in, for conditions like "if you have
+   * activated a … Command card's 【Main】 during this turn": "cmd:<player>:<card no>",
+   * "ownDestroyed:<player>:<source card no>".
+   */
+  marks: Record<string, number>;
   /** Running effects; the last one is executing (10-1-6-7: new triggers resolve first). */
   frames: Frame[];
   /** Triggered effects waiting to be resolved, in order. */

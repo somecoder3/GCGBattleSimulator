@@ -46,6 +46,7 @@ export function cloneState(s: GameState): GameState {
     priority: s.priority,
     passes: s.passes,
     oncePerTurn: { ...s.oncePerTurn },
+    marks: { ...s.marks },
     frames: s.frames.map(cloneFrame),
     queue: s.queue.map((t) => ({ ...t, ref: { ...t.ref } })),
     pending: s.pending ? { ...s.pending, options: s.pending.options.slice() } : null,

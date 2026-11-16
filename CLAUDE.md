@@ -82,13 +82,28 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
     Starter bei v1: ST04 58 %, ST01 58 %, ST03 49 %, ST02 35 %.
   - Tests: 130 (neu: v1 2, Runner/Pool/Statistik 6, cloneState 1).
   - `npm run fuzz` läuft jetzt über den Runner auf allen Kernen: 100 000 Spiele mit Invarianten in 30 s, 0 Fehler.
+- **M5 (Meta) fertig.** Beschreibung: **`docs/META.md`**, Effekt-Erweiterungen in `docs/EFFECTS.md`.
+  - `src/meta/`: Limitless-Client (`limitless.ts`, **keine Spielernamen speichern**), Archetypen mit
+    Gewichtung/Konsensliste/Legalität (`archetypes.ts`), Bannliste (`banlist.ts`, Stand 25. Sep. 2026, von
+    Hand), Decks `M01…` (`decks.ts`). `npm run meta` schreibt `data/meta/<datum>.json` (committet, im App-
+    Bundle per `import.meta.glob`); GitHub Action `.github/workflows/meta.yml` montags 05:00 UTC.
+  - Erster Snapshot 16. Nov.: 72 Listen aus 6 Turnieren mit Listen (16 Turniere ≥ 8 Spieler in 8 Wochen),
+    15 Archetypen; Top 8: Shining Gundam 21,8 %, White Red Zaft 10,9 %, Freedom Blockers, Strike Freedom
+    (Base/Aile/Victory), Sazabi, Nu Gundam. **Alle 113 Karten der Top 8 voll unterstützt**; gesamt 59,5 %
+    (vorher 51,6 %). Konsenslisten sind legal (2 Hauptfarben, Bann-Paare aufgelöst).
+  - Meta-Decks in Spiel und Simulator wählbar (`src/app/lib/decks.ts`), CLI `--decks meta`/`meta12`/`M03`.
+  - KI-Mulligan gelockert (Unit bis Lv. 3 oder zwei Karten bis Lv. 4): Mulligans bei Meta-Decks 44 % → 2 %.
+  - Gefundene Engine-Fehler: Pilot blieb zurück, wenn seine Unit unter das Deck ging oder ins Exil (jetzt
+    geht er mit). `Engine.card()` berücksichtigt Piloten, die als Unit eingesetzt wurden.
+  - Tests: 158 (neu: 21 Meta-Kartentests in `tests/cards/meta.test.ts`, 6 Meta-Pipeline-Tests).
+    `npm run sim -- --decks meta --ai v1 --check`: 2000 Spiele ohne Fehler.
 - Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: **M5** Meta-Pipeline (Limitless, Archetypen, Konsenslisten, Banliste, Snapshot) und
-  Meta-Karten (~200) umsetzen. Danach M6 (schöne Oberfläche, Ziehen & Ablegen, Handy, intelligente Stopps
-  im Action Step), M7 (ISMCTS, Gewichts-Tuning).
-- Commits: M3 `e3bdd8e`.
+- Nächster Schritt: **M6** schöne Oberfläche (Animationen, Ziehen & Ablegen, Handy-Layouts, Zeitleiste,
+  intelligente Stopps im Action Step, PWA/offline). Danach M7 (ISMCTS, Gewichts-Tuning), M8 (Simulator-
+  Dashboard, Replays), M9 (restliche Karten).
+- Commits: M3 `e3bdd8e`, M4 `4f03529` (beide gepusht).
 
 ## Svelte-Fallen
 
@@ -97,6 +112,10 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   dann nie. Darum hieß der Set-Filter der Kartenliste nicht mehr `set`, sondern `setCode` (gefunden am 16. Nov.).
 
 ## Entscheidungen
+
+- **Meta (M5):** Konsensliste statt nur bestplatzierter Liste (stabiler bei wenigen Listen); unbenannte
+  Decks zum ähnlichsten Archetyp ab Jaccard 0,5. Nutzer-Auftrag: nach M5 selbstständig weiterarbeiten und
+  verbessern (16. Nov.), dabei committen und pushen.
 
 - **KI v1 (M4):** Vorausschau bis Ende des Zuges statt bis zur nächsten Entscheidung (37–58 % → ~75 % gegen
   v0). Hohe Strafe für geruhte Units macht passiv und schadet (`exposed` 0,15). Gewichte von Hand, Tuning in M7.

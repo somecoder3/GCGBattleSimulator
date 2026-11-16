@@ -43,9 +43,10 @@ npm run images -- --download          # fehlende Bilder langsam von gundam-gcg.c
 | `npm run sim`      | KI-Spiele auf allen Kernen mit Statistik (siehe unten)      |
 | `npm run fuzz`     | 100 000 Zufallsspiele mit Invarianten-Prüfung               |
 | `npm run coverage` | Wie viele Kartentexte die Engine versteht (`-- --set ST01`) |
+| `npm run meta`     | Aktuelle Turnierdecks von Limitless laden (`-- --report`)   |
 
 Aufbau der Regel-Engine: [docs/ENGINE.md](docs/ENGINE.md), Karteneffekte: [docs/EFFECTS.md](docs/EFFECTS.md),
-KI und Stärkemessungen: [docs/AI.md](docs/AI.md).
+KI und Stärkemessungen: [docs/AI.md](docs/AI.md), Meta-Decks: [docs/META.md](docs/META.md).
 
 ## Simulieren
 
@@ -57,7 +58,8 @@ npm run sim -- --ai v1 --decks starters --games 10000         # Deck-Matrix
 npm run sim -- --decks ST01,ST03 --ai v1 --json out.json      # nur diese Decks, Ergebnisse als JSON
 ```
 
-KIs: `random`, `v0`, `v1` (= `heuristic`). Decks: `random` (Zufallsdecks), `starters` oder Liste.
+KIs: `random`, `v0`, `v1` (= `heuristic`). Decks: `random` (Zufallsdecks), `starters`, `meta` (Top 8
+der Meta, `meta12` für 12 …) oder eine Liste (`ST01,M03`).
 Weitere Schalter: `--seed`, `--workers` (0 = ohne Threads), `--max-turns`, `--check` (Invarianten), `--verbose`.
 Jedes Spiel folgt aus Job und Nummer und ist damit wiederholbar.
 

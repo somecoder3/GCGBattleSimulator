@@ -8,7 +8,10 @@
 //   npm run sim -- --workers 0                            in this process (for profiling)
 //   npm run sim -- --json out.json                        write all game summaries
 //
-// AIs: random, v0 (heuristic-v0), v1 (heuristic-v1, = heuristic).
+//   npm run sim -- --ai v1 --decks meta                    the 8 most played archetypes (meta12: 12, …)
+//
+// AIs: random, v0 (heuristic-v0), v1 (heuristic-v1, = heuristic). Decks: random, starters, meta[N] or a
+// list of ids (ST01, M01, …).
 
 import { writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
@@ -20,7 +23,8 @@ import { Engine } from "../src/engine/engine";
 import { runPool, type ChunkWorker, type WorkerResponse } from "../src/sim/pool";
 import { runRange, type DeckEntry, type GameSummary, type SimJob } from "../src/sim/runner";
 import { computeStats, formatStats } from "../src/sim/stats";
-import { loadLib } from "./lib";
+import { loadLib, loadSnapshot } from "./lib";
+import { metaDecks } from "../src/meta/decks";
 
 const { values: args } = parseArgs({
   options: {
@@ -41,8 +45,16 @@ if (ai.length === 1) ai.push(ai[0]!);
 
 function decks(spec: string): DeckEntry[] {
   if (spec === "random") return [];
-  const all = STARTER_DECKS.map((d) => ({ id: d.id, name: `${d.id} ${d.name}`, deck: d.deck }));
-  if (spec === "starters") return all;
+  const starters = STARTER_DECKS.map((d) => ({ id: d.id, name: `${d.id} ${d.name}`, deck: d.deck }));
+  if (spec === "starters") return starters;
+  const meta = metaDecks(loadSnapshot(), loadLib()).map((d) => ({
+    id: d.id,
+    name: `${d.id} ${d.name}${d.supported ? "" : " (unvollständig)"}`,
+    deck: d.deck,
+  }));
+  const metaMatch = spec.match(/^meta(\d+)?$/);
+  if (metaMatch) return meta.slice(0, Number(metaMatch[1] ?? 8));
+  const all = [...starters, ...meta];
   return spec.split(",").map((id) => {
     const deck = all.find((d) => d.id === id.trim().toUpperCase());
     if (!deck)

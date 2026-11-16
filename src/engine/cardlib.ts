@@ -41,6 +41,8 @@ export interface EngineCard {
   keywords: Keywords;
   /** Name used for link conditions when paired: the Pilot's name, or the name after 【Pilot】 on a Command. */
   pilotName: string | null;
+  /** "This card's name is also treated as [X]". */
+  aliases: string[];
   /** Can be paired as a Pilot (Pilot cards and Commands with a Pilot effect, 3-4-6). */
   pairable: boolean;
   token: boolean;
@@ -92,6 +94,11 @@ export function commandPilotName(text: string): string | null {
   return m ? m[1]!.trim() : null;
 }
 
+/** "This card's name is also treated as [Mu La Flaga]." */
+export function nameAliases(text: string): string[] {
+  return [...text.matchAll(/This card's name is also treated as \[([^\]]+)\]/g)].map((m) => m[1]!.trim());
+}
+
 export function toEngineCard(def: CardDef, ctx: ParseContext): EngineCard {
   const commandPilot = def.type === "COMMAND" ? commandPilotName(def.text) : null;
   return {
@@ -108,6 +115,7 @@ export function toEngineCard(def: CardDef, ctx: ParseContext): EngineCard {
     link: def.link,
     keywords: def.type === "UNIT" || def.type === "UNIT TOKEN" ? parseKeywords(def.text) : { ...NO_KEYWORDS },
     pilotName: def.type === "PILOT" ? def.name : commandPilot,
+    aliases: nameAliases(def.text),
     pairable: def.type === "PILOT" || commandPilot !== null,
     token: def.token,
     text: def.text,
@@ -134,6 +142,31 @@ export class CardLib {
     return card;
   }
 
+  private readonly unitForms = new Map<string, EngineCard>();
+
+  /** A Pilot card deployed as a Unit with fixed values and no effects ("Don't treat it as a Pilot"). */
+  unitForm(no: string, ap: number, hp: number): EngineCard {
+    const key = `${no}:${ap}:${hp}`;
+    let card = this.unitForms.get(key);
+    if (!card) {
+      const base = this.get(no);
+      card = {
+        ...base,
+        type: "UNIT",
+        ap,
+        hp,
+        keywords: { ...NO_KEYWORDS },
+        pilotName: null,
+        aliases: [],
+        pairable: false,
+        link: [],
+        script: { ...base.script, effects: [], granted: [], compiled: [], compiledGranted: [] },
+      };
+      this.unitForms.set(key, card);
+    }
+    return card;
+  }
+
   has(no: string): boolean {
     return this.byNo.has(no);
   }
@@ -146,7 +179,8 @@ export class CardLib {
 /** Does `pilot` fulfil one of the Unit's link conditions (3-2-6, 3-2-6-4)? */
 export function satisfiesLink(unit: EngineCard, pilot: EngineCard): boolean {
   if (!pilot.pilotName) return false;
+  const names = [pilot.pilotName, ...pilot.aliases];
   return unit.link.some((c) =>
-    "pilotName" in c ? pilot.pilotName!.includes(c.pilotName) : pilot.traits.includes(c.trait),
+    "pilotName" in c ? names.some((n) => n.includes(c.pilotName)) : pilot.traits.includes(c.trait),
   );
 }

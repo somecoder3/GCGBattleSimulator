@@ -1,0 +1,44 @@
+name: Meta snapshot
+
+# Loads the current tournament decks from Limitless once a week and commits a new snapshot to
+# data/meta/ if the tests still pass with it.
+
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: meta-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Load snapshot
+        run: npm run meta
+      - name: Tests with the new snapshot
+        run: npm test
+      - name: Commit if changed
+        run: |
+          git add data/meta
+          if git diff --cached --quiet; then
+            echo "No new snapshot."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update meta snapshot $(date -u +%Y-%m-%d)"
+          git push

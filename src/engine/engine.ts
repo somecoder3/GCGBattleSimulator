@@ -12,12 +12,14 @@ import {
   breakShields,
   canPlay,
   candidates,
+  costOf,
+  mark,
+  pairPilot,
   createCard,
   damageShieldArea,
   dealDamage,
   def,
   deployBase,
-  detach,
   draw,
   effectsOf,
   endGame,
@@ -89,6 +91,7 @@ export class Engine {
       priority: first,
       passes: 0,
       oncePerTurn: {},
+      marks: {},
       frames: [],
       queue: [],
       pending: null,
@@ -132,8 +135,9 @@ export class Engine {
   }
 
   // Queries for UI, AI and statistics.
+  /** Rules data of a card where it is (a Pilot deployed as a Unit counts as that Unit). */
   card(state: GameState, id: CardId): EngineCard {
-    return this.lib.get(state.cards[id]!.no);
+    return def(newCtx(this.lib, state), id);
   }
   ap(state: GameState, id: CardId): number {
     return apOf(newCtx(this.lib, state), id);
@@ -432,7 +436,7 @@ function commandOptions(c: Ctx, p: PlayerId, timing: "main" | "action"): Action[
   const options: Action[] = [];
   for (const id of uniqueByNo(c, c.s.players[p].hand)) {
     const card = def(c, id);
-    if (card.type !== "COMMAND" || !canPlay(c, p, card)) continue;
+    if (card.type !== "COMMAND" || !canPlay(c, p, id)) continue;
     const idx = commandIndex(card, timing);
     if (idx < 0) continue;
     if (!firstTargetAvailable(c, card.script.compiled[idx]!.program, p, id)) continue;
@@ -471,10 +475,17 @@ function actionStepOptions(c: Ctx, p: PlayerId): Action[] {
 function canAttack(c: Ctx, id: CardId): boolean {
   const card = inst(c, id);
   if (card.rested || hasFlag(c, id, "cantAttack")) return false;
-  return card.enteredTurn < c.s.turn || isLinked(c, id);
+  return card.enteredTurn < c.s.turn || isLinked(c, id) || hasFlag(c, id, "attackOnDeploy");
 }
 
 function attackTargets(c: Ctx, unit: CardId, p: PlayerId): Action[] {
+  // "Enemy Units other than Link Units choose this rested Unit as their attack target if possible" (GD05-086).
+  if (!isLinked(c, unit)) {
+    const taunting = c.s.players[other(p)].battle.filter(
+      (id) => inst(c, id).rested && hasFlag(c, id, "taunt"),
+    );
+    if (taunting.length) return taunting.map((target): Action => ({ type: "attack", unit, target }));
+  }
   const options: Action[] = [];
   if (!hasFlag(c, unit, "cantAttackPlayer")) options.push({ type: "attack", unit, target: "player" });
   const active = flagFilters(c, unit, "attackActive") ?? [];
@@ -494,7 +505,7 @@ function mainOptions(c: Ctx): Action[] {
 
   for (const id of uniqueByNo(c, me.hand)) {
     const card = def(c, id);
-    if (!canPlay(c, p, card)) continue;
+    if (!canPlay(c, p, id)) continue;
     if (card.type === "UNIT") {
       if (me.battle.length < LIMITS.battle) options.push({ type: "deployUnit", card: id });
       else for (const replace of me.battle) options.push({ type: "deployUnit", card: id, replace }); // 11-4-2
@@ -547,33 +558,26 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       return;
     }
     case "deployUnit": {
-      pay(c, p, def(c, action.card).cost);
+      pay(c, p, costOf(c, p, action.card));
       if (action.replace !== undefined) toTrash(c, action.replace, "overflow"); // not destroyed (11-4-2-1)
       enterBattle(c, action.card);
       return;
     }
     case "pair": {
-      pay(c, p, def(c, action.card).cost);
-      const card = inst(c, action.card);
-      detach(c, card);
-      card.zone = "pilot";
-      card.pairedTo = action.unit;
-      inst(c, action.unit).pilot = action.card;
-      const link = isLinked(c, action.unit);
-      c.ev.push({ t: "pair", player: p, card: action.card, unit: action.unit, link });
-      raise(c, "whenPaired", action.unit, null, action.card); // 13-2-9
-      if (link) raise(c, "whenLinked", action.unit); // 13-2-11
+      pay(c, p, costOf(c, p, action.card));
+      pairPilot(c, action.card, action.unit);
       return;
     }
     case "deployBase":
-      pay(c, p, def(c, action.card).cost);
+      pay(c, p, costOf(c, p, action.card));
       deployBase(c, action.card);
       return;
     case "playCommand": {
       const card = def(c, action.card);
-      pay(c, p, card.cost);
+      pay(c, p, costOf(c, p, action.card));
       moveTo(c, action.card, "limbo"); // 3-4-3
       c.ev.push({ t: "play", player: p, card: action.card });
+      mark(c, "cmd", p, card.no);
       const timing = decision.kind === "main" ? "main" : "action";
       startEffect(c, {
         ref: { no: card.no, idx: commandIndex(card, timing), granted: false },
@@ -653,14 +657,14 @@ function resolveBattleDamage(c: Ctx): void {
     if (shieldAreaProtected(c, defender, attacker)) return; // e.g. ST02-013
     if (enemy.base.length) {
       const base = enemy.base[0]!;
-      dealDamage(c, base, atkAp, "battle"); // 8-5-2-4
+      dealDamage(c, base, atkAp, "battle", attacker); // 8-5-2-4
       rulesManagement(c);
-      if (inst(c, base).zone !== "base") raise(c, "destroysShieldAreaCard", attacker, base);
+      if (inst(c, base).zone !== "base") destroyedByAttacker(c, attacker, base, "destroysShieldAreaCard");
     } else if (enemy.shields.length) {
       if (atkAp > 0) {
         const top = enemy.shields[0]!;
         breakShields(c, defender, kw.suppression ? 2 : 1); // 8-5-2-3, 13-1-7
-        raise(c, "destroysShieldAreaCard", attacker, top);
+        destroyedByAttacker(c, attacker, top, "destroysShieldAreaCard");
       }
     } else if (atkAp > 0) {
       c.ev.push({ t: "playerDamage", player: defender, amount: atkAp }); // 8-5-2-2, 11-2-1-1
@@ -673,13 +677,13 @@ function resolveBattleDamage(c: Ctx): void {
   const targetAp = apOf(c, target);
   if (kw.firstStrike) {
     // 13-1-5-2: the attacker deals damage first; a destroyed target deals none.
-    dealDamage(c, target, battleDamageTo(c, target, attacker, atkAp), "battle");
+    dealDamage(c, target, battleDamageTo(c, target, attacker, atkAp), "battle", attacker);
     rulesManagement(c);
     if (inst(c, target).zone === "battle")
-      dealDamage(c, attacker, battleDamageTo(c, attacker, target, targetAp), "battle");
+      dealDamage(c, attacker, battleDamageTo(c, attacker, target, targetAp), "battle", target);
   } else {
-    dealDamage(c, target, battleDamageTo(c, target, attacker, atkAp), "battle"); // 8-5-3-2
-    dealDamage(c, attacker, battleDamageTo(c, attacker, target, targetAp), "battle");
+    dealDamage(c, target, battleDamageTo(c, target, attacker, atkAp), "battle", attacker); // 8-5-3-2
+    dealDamage(c, attacker, battleDamageTo(c, attacker, target, targetAp), "battle", target);
   }
   const attackerInPlay = inst(c, attacker).zone === "battle";
   if (attackerInPlay) raiseIfDestroyed(c, attacker, target);
@@ -687,7 +691,7 @@ function resolveBattleDamage(c: Ctx): void {
   if (inst(c, target).zone === "battle") return;
   // <Breach> also when both Units are destroyed (13-1-2-3).
   if (kw.breach > 0 && !shieldAreaProtected(c, defender, attacker))
-    damageShieldArea(c, defender, kw.breach, "effect");
+    damageShieldArea(c, defender, kw.breach, "effect", attacker);
 }
 
 /**
@@ -696,5 +700,18 @@ function resolveBattleDamage(c: Ctx): void {
  */
 function raiseIfDestroyed(c: Ctx, attacker: CardId, target: CardId): void {
   const t = inst(c, target);
-  if (t.damage > 0 && t.damage >= hpOf(c, target)) raise(c, "destroysUnit", attacker, target);
+  if (t.damage > 0 && t.damage >= hpOf(c, target)) destroyedByAttacker(c, attacker, target, "destroysUnit");
+}
+
+/** The attacker destroyed an enemy card with battle damage: its triggers and "draw 1" effects (GD05-002). */
+export function destroyedByAttacker(
+  c: Ctx,
+  attacker: CardId,
+  victim: CardId,
+  kind: "destroysUnit" | "destroysShieldAreaCard",
+): void {
+  raise(c, kind, attacker, victim);
+  raise(c, "destroysCard", attacker, victim);
+  const draws = c.s.modifiers.filter((m) => m.target === attacker && m.flag === "drawOnBattleDestroy").length;
+  if (draws) draw(c, inst(c, attacker).owner, draws);
 }

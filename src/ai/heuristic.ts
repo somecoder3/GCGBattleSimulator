@@ -129,8 +129,11 @@ class Ctx {
 
   mulligan(options: Action[]): Action {
     const hand = this.s.players[this.me].hand.filter((id) => this.known(id));
-    const early = hand.filter((id) => this.card(id).type === "UNIT" && this.card(id).level <= 3).length;
-    const keep = early >= 2 || (early === 1 && hand.some((id) => this.card(id).level <= 2));
+    // Keep a hand that can do something in the first turns: a Unit up to Lv.3 or two cards up to Lv.4.
+    const level = (id: CardId) => this.card(id).level;
+    const keep =
+      hand.some((id) => this.card(id).type === "UNIT" && level(id) <= 3) ||
+      hand.filter((id) => level(id) <= 4).length >= 2;
     return options.find((o) => o.type === (keep ? "keepHand" : "redraw"))!;
   }
 
@@ -310,7 +313,7 @@ class Ctx {
     if (instr.op !== "choose") return { kind: "neutral", damage: 0 };
     const as = instr.as ?? "it";
     for (const next of program.slice(frame.pc + 1)) {
-      if (!("t" in next) || next.t !== as) continue;
+      if (!("t" in next) || typeof next.t !== "string" || !next.t.split("+").includes(as)) continue;
       return classify(next);
     }
     return { kind: "neutral", damage: 0 };

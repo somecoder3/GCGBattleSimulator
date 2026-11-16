@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { AI_LABELS, AI_NAMES, type AiName } from "../../../ai/registry";
-  import { STARTER_DECKS } from "../../../data/decks";
+  import type { CardPool } from "../../../data/cards";
+  import { SNAPSHOT, deckChoices } from "../../lib/decks";
   import { runPool } from "../../../sim/pool";
   import type { DeckEntry, GameSummary, SimJob } from "../../../sim/runner";
   import { computeStats, type Rate, type SimStats } from "../../../sim/stats";
@@ -9,9 +10,18 @@
 
   // Simulator: many AI games in Web Workers, with live statistics.
 
-  const DECKS: DeckEntry[] = STARTER_DECKS.map((d) => ({ id: d.id, name: d.name, deck: d.deck }));
+  let { pool }: { pool: CardPool } = $props();
 
-  let selectedDecks = $state<string[]>(DECKS.map((d) => d.id));
+  // svelte-ignore state_referenced_locally
+  const CHOICES = deckChoices(pool);
+  const DECKS: DeckEntry[] = CHOICES.map((d) => ({ id: d.id, name: d.name, deck: d.deck }));
+
+  // Default: the eight most played archetypes.
+  let selectedDecks = $state<string[]>(
+    CHOICES.filter((d) => d.group === "meta")
+      .slice(0, 8)
+      .map((d) => d.id),
+  );
   let randomDecks = $state(false);
   let aiA = $state<AiName>("heuristic-v1");
   let aiB = $state<AiName>("heuristic-v1");
@@ -132,11 +142,21 @@
         ><input type="checkbox" bind:checked={randomDecks} /> Zufallsdecks aus allen Karten</label
       >
       {#if !randomDecks}
-        {#each DECKS as d (d.id)}
-          <label class="check">
+        {#each CHOICES as d, i (d.id)}
+          {#if i === 0 || CHOICES[i - 1]!.group !== d.group}
+            <span class="group">
+              {d.group === "meta" ? `Meta${SNAPSHOT ? ` (bis ${SNAPSHOT.to})` : ""}` : "Starter-Decks"}
+            </span>
+          {/if}
+          <label class="check" class:partial={!d.supported}>
             <input type="checkbox" checked={selectedDecks.includes(d.id)} onchange={() => toggleDeck(d.id)} />
-            {d.id}
-            {d.name}
+            <span>
+              {d.id}
+              {d.name}
+              {#if d.share !== undefined}<small>{(d.share * 100).toFixed(1)} %</small>{/if}
+              {#if !d.supported}<small title="Nicht alle Kartentexte werden verstanden">unvollständig</small
+                >{/if}
+            </span>
           </label>
         {/each}
         <p class="hint">Jedes Paar einmal, auch Spiegelspiele.</p>
@@ -329,6 +349,20 @@
     gap: 4px;
     font-size: 13px;
     color: var(--text-dim);
+  }
+  .group {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  label.check small {
+    margin-left: 6px;
+    color: var(--text-dim);
+  }
+  label.check.partial {
+    opacity: 0.7;
   }
   label.check {
     flex-direction: row;

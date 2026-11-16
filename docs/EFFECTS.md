@@ -1,6 +1,6 @@
 # Karteneffekte
 
-Stand: M2 (16. Nov. 2026). Wie Kartentexte zu ausführbaren Effekten werden, und wie man eine Karte
+Stand: M5 (16. Nov. 2026). Wie Kartentexte zu ausführbaren Effekten werden, und wie man eine Karte
 ergänzt oder korrigiert.
 
 ## Überblick
@@ -50,8 +50,39 @@ npm run coverage -- --set GD01,ST05       # dazu jede nicht verstandene Zeile mi
 npm run coverage -- --card ST01-015       # Skript einer Karte
 ```
 
-Stand 16. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **51,6 % vollständig** (164 ohne Text,
-411 automatisch, 4 von Hand), 544 teilweise. **ST01–ST04 zu 100 %.** Die Meta-Karten folgen in M5.
+Stand 16. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **59,5 % vollständig** (164 ohne Text,
+496 automatisch, 8 von Hand), 455 teilweise. **ST01–ST04 und alle 113 Karten der Top-8-Archetypen zu
+100 %** (M5, `docs/META.md`). Vor M5: 51,6 %.
+
+## Erweiterungen in M5
+
+- **Satzmuster:** Mehrfachwahl „Choose 1 of your Units and 1 enemy Unit“ (Referenz `t0+t1`), „Destroy/Rest
+  all …“, „It may attack on the turn it is deployed“, „Return it to the bottom of its owner's deck“, „deal N
+  damage to the first card in your opponent's shield area“, „Deploy it“, „Activate this card's 【Action】“,
+  „Activate 【Main】 on the card paired with this Unit“, „Begin a battle … only perform the damage step“,
+  Schadensreduktion für eine Runde, „Reduce its AP by … the number of …“, „deploy 1 to 2 … tokens“, „When this
+  effect destroys an enemy Unit, …“, „Look at the top card … Return it to the top or bottom“, „Look at the top
+  3 cards … return 1 to the top. Return the remaining cards to the bottom“; Qualifier `with "X" in its card
+name`, `with the lowest Lv.`, `whose Lv./AP is equal to or lower/less than this/that Unit`, `non-battling`.
+- **Bedingungen:** „you have an (Orb) Pilot in play“, „this is an (Orb)/(…) Unit“, „you have a Unit with "X"
+  in its card name in play“, „you are attacking the enemy player“, „another friendly … is in play“, „you have
+  activated a (Special Move) Command card's 【Main】/【Action】 during this turn“, „one of your Units has been
+  destroyed by one of your (Neo Zeon) card's effects during this turn“, zwei Bedingungen mit „and“, „During
+  your turn, if …“.
+- **Kosten mit Auswahl** („Rest 1 of your other (League Militaire) Units“, „exile 1 Pilot card from your
+  trash“) werden zu Schritten vor dem Effekt; ein Activate-Effekt wird nur angeboten, wenn die erste Wahl
+  Kandidaten hat. Der Kostentrenner darf auch „: “ sein.
+- **Dauereffekte:** „While …, this Unit gets …“, Schutz und Reduktion von gegnerischem Effektschaden,
+  Schadenserhöhung für eigene (Trait)-Karten (GD06-033), Traits verleihen („All your Units gain (Neo Zeon)“),
+  Angriffszwang (GD05-086), günstigeres Ausspielen aus der Hand (`handCost`, GD05-004), Namensalias
+  („This card's name is also treated as [X]“, für Links und Namensfilter).
+- **Ereignis-Trigger:** eigene (Trait)-Unit eingesetzt (`allyDeployed`), Pilot mit eigener (Farbe/Trait)-Unit
+  gepaart (`allyPaired`), „destroys an enemy card with battle damage“ (`destroysCard`), gegnerische Unit
+  durch Effektschaden zerstört, während diese Unit angreift.
+- **Handskripte:** GD05-049 Sazabi (der Gegner wählt), GD05-089 Master Asia (Burst als AP3/HP3-Unit),
+  GD05-097 Domon Kasshu (abgeworfene Special Move ausführen), GD05-121 Cyclone Punch (aus dem Trash pairen).
+- **Zug-Markierungen** (`GameState.marks`): gespielte Commands und durch eigene Effekte zerstörte eigene
+  Units, für Bedingungen „during this turn“.
 
 ## Eine Karte ergänzen oder korrigieren
 
@@ -76,6 +107,14 @@ Stand 16. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **51,6 % vollständi
   im Spiel ist (auch wenn beide zerstört werden).
 - ST01 Starter-Deckliste: Die Quelle ergibt 51 Karten; Guntank (ST01-004) ist mit 3 statt 4 gezählt
   (`src/data/decks.ts`).
+- „You may choose N … (N > 1). Exile them. If you do, …“: nur mit genau N Karten; nach der ersten Wahl
+  folgen die übrigen zwingend.
+- „Discard N. If you do, …“ und „You may discard N. If you do, …“ nur mit mindestens N Handkarten.
+- „Choose 1 of your Units and 1 enemy Unit“: Fehlt eine der beiden, entfällt der Effekt.
+- Geht eine Unit unter das Deck, geht ihr Pilot mit (wie bei Trash und Hand, 3-3-6).
+- „Begin a battle … and only perform the damage step“: gleichzeitiger Kampfschaden, keine Angriffs- oder
+  Block-Effekte, kein First Strike.
+- Mehrere Freedom Gundam lösen beim Pairen jeweils aus (je Karte einmal pro Zug).
 - „Choose N of your (rested) Resources. Set it/them as active.“ wird ohne Auswahl zu `readyResource`:
   Ressourcen sind gleichwertig, die Wahl einer aktiven Ressource würde den Effekt nur verschenken
   (ST01-011, GD05-066, GD06-053, ST07-001).

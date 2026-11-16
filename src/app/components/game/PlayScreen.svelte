@@ -1,9 +1,8 @@
 <script lang="ts">
   import type { CardPool } from "../../../data/cards";
   import { AI_LABELS, AI_NAMES, type AiName } from "../../../ai/registry";
-  import { STARTER_DECKS } from "../../../data/decks";
-  import { CardLib } from "../../../engine/cardlib";
   import { Engine } from "../../../engine/engine";
+  import { SNAPSHOT, cardLib, deckChoices, deckLabel } from "../../lib/decks";
   import type { PlayerId } from "../../../engine/types";
   import { GameSession, type SavedSession } from "../../../sim/session";
   import Board from "./Board.svelte";
@@ -12,13 +11,19 @@
 
   const STORAGE_KEY = "gcg-battle-simulator.game";
   // svelte-ignore state_referenced_locally
-  const engine = new Engine(CardLib.fromPool(pool));
+  const engine = new Engine(cardLib(pool));
+  // svelte-ignore state_referenced_locally
+  const DECKS = deckChoices(pool);
+  const groups = [
+    { key: "meta", label: SNAPSHOT ? `Meta (Turniere bis ${SNAPSHOT.to})` : "Meta" },
+    { key: "starter", label: "Starter-Decks" },
+  ] as const;
 
   let session = $state.raw<GameSession>();
   let saved = $state.raw<SavedSession | undefined>(load());
 
-  let myDeck = $state(STARTER_DECKS[0]!.id);
-  let aiDeck = $state(STARTER_DECKS[2]!.id);
+  let myDeck = $state(DECKS[0]!.id);
+  let aiDeck = $state(DECKS[1]!.id);
   let starter = $state<"random" | "me" | "ai">("random");
   let aiName = $state<AiName>("heuristic-v1");
   let seed = $state(randomSeed());
@@ -47,8 +52,8 @@
   }
 
   function start() {
-    const mine = STARTER_DECKS.find((d) => d.id === myDeck)!;
-    const theirs = STARTER_DECKS.find((d) => d.id === aiDeck)!;
+    const mine = DECKS.find((d) => d.id === myDeck)!;
+    const theirs = DECKS.find((d) => d.id === aiDeck)!;
     const human: PlayerId = 0;
     const s = seed >>> 0;
     const firstPlayer: PlayerId = starter === "me" ? human : starter === "ai" ? 1 : ((s % 2) as PlayerId);
@@ -78,26 +83,35 @@
   }
 </script>
 
+{#snippet deckOptions()}
+  {#each groups as g (g.key)}
+    <optgroup label={g.label}>
+      {#each DECKS.filter((d) => d.group === g.key) as d (d.id)}<option value={d.id}>{deckLabel(d)}</option
+        >{/each}
+    </optgroup>
+  {/each}
+{/snippet}
+
 {#if session}
   <Board {engine} {pool} {session} onsave={save} onnew={newGame} />
 {:else}
   <section class="setup" aria-labelledby="setup-title">
     <h1 id="setup-title">Spiel gegen die KI</h1>
     <p class="lead">
-      Starter-Decks gegen eine KI (Standard: Heuristik v1). Alle Entscheidungen lassen sich zurücknehmen;
-      dieselben Karten kommen wieder.
+      Aktuelle Meta-Decks (Konsenslisten der Turnierdecks) oder Starter-Decks gegen eine KI. Alle
+      Entscheidungen lassen sich zurücknehmen; dieselben Karten kommen wieder.
     </p>
     <div class="grid">
       <label>
         Dein Deck
         <select bind:value={myDeck}>
-          {#each STARTER_DECKS as d (d.id)}<option value={d.id}>{d.id} {d.name} ({d.colors})</option>{/each}
+          {@render deckOptions()}
         </select>
       </label>
       <label>
         Deck der KI
         <select bind:value={aiDeck}>
-          {#each STARTER_DECKS as d (d.id)}<option value={d.id}>{d.id} {d.name} ({d.colors})</option>{/each}
+          {@render deckOptions()}
         </select>
       </label>
       <label>

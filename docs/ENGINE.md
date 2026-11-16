@@ -1,6 +1,6 @@
 # Regel-Engine
 
-Stand: M4 (16. Nov. 2026). Regelgrundlage: Comprehensive Rules **Ver. 1.10.0**; Regelnummern stehen im
+Stand: M5 (16. Nov. 2026). Regelgrundlage: Comprehensive Rules **Ver. 1.10.0**; Regelnummern stehen im
 Code und in den Tests.
 
 ## Schnittstelle
@@ -85,6 +85,14 @@ Step), Activate-Effekte mit Kosten, Bursts, Dauereffekte, Pilot-Texte für die U
 „can't attack“, „may attack active Units“, Schutz vor Schaden. Neue Optionen: `playCommand`, `activate`;
 Effekt-Entscheidungen haben `kind: "effect"`. Im Action Step wechselt nach einer Aktion die Priorität
 (9-4-1).
+
+## Umgesetzt (M5)
+
+Neue Mechaniken für die Meta-Karten (Details in `docs/EFFECTS.md`): Schaden mit Quelle (`dealDamage(…,
+source)`) für Schutz/Reduktion/Erhöhung, `pairPilot` (auch aus dem Trash), Trigger anderer eigener Units,
+`traitsOf` mit verliehenen Traits, Hand-Kostensenkung (`levelOf`/`costOf`), Angriff im Einsatzzug per Flag,
+Angriffszwang, Pilot als Unit (`CardInstance.asUnit`, `CardLib.unitForm`), Zug-Markierungen
+(`GameState.marks`), Wahl durch den Gegner (`choose … by: "opponent"`).
 
 ## Offen
 

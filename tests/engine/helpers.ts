@@ -147,6 +147,7 @@ export function scenario(spec: ScenarioSpec = {}): GameState {
     priority: 0,
     passes: 0,
     oncePerTurn: {},
+    marks: {},
     frames: [],
     queue: [],
     pending: null,
