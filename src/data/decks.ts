@@ -1,4 +1,4 @@
-// Fixed deck lists. Starter decks from the published lists (coolstuffinc.com, 17 Jul 2025); ST01 sums
+// Fixed deck lists. Starter decks ST01–ST04 from the published lists (coolstuffinc.com, 17 Jul 2025); ST01 sums
 // to 51 there, so Guntank (ST01-004) is counted 3× like the third Unit of the other starters.
 
 import { DEFAULT_RESOURCE, RESOURCE_DECK_SIZE } from "../engine/deck";
@@ -44,5 +44,109 @@ export const STARTER_DECKS: NamedDeck[] = [
     name: "SEED Strike",
     colors: "White/Red",
     deck: list(starter("ST04", [2, 4, 4, 3, 3, 2, 4, 3, 3, 4, 4, 3, 3, 2, 3, 3])),
+  },
+  // ST05–ST14 (16 Nov 2026): product lists from exburst.dev/gundam/starter-decks (ST11 also matches
+  // tcgtalk.com). ST05: an earlier pre-release list (essential-japan.com) differs in six counts; the
+  // list after release is used. Reprints from other sets are part of some boxes (e.g. ST01-014 in ST05).
+  {
+    id: "ST05",
+    name: "Iron Bloom",
+    colors: "Purple/White",
+    deck: list({
+      ...starter("ST05", [2, 4, 4, 4, 4, 3, 2, 4, 3, 4, 3, 3, 2, 2, 4]),
+      "ST01-014": 2,
+    }),
+  },
+  {
+    id: "ST06",
+    name: "Clan Unity",
+    colors: "Red/Green",
+    deck: list({ ...starter("ST06", [2, 4, 4, 4, 2, 4, 4, 4, 4, 4, 2, 4, 2, 2, 2]), "ST03-013": 2 }),
+  },
+  {
+    id: "ST07",
+    name: "Celestial Drive",
+    colors: "Purple/Green",
+    deck: list({ ...starter("ST07", [2, 4, 4, 3, 2, 4, 3, 4, 3, 3, 3, 3, 2, 4, 4]), "ST05-014": 2 }),
+  },
+  {
+    id: "ST08",
+    name: "Flash of Radiance",
+    colors: "Red/Blue",
+    deck: list({ ...starter("ST08", [2, 4, 3, 4, 3, 2, 4, 4, 3, 4, 4, 3, 3, 3, 2]), "ST02-014": 2 }),
+  },
+  // ST09 "Destiny Ignition" holds cards for two decks; these are the two official builds from
+  // gundam-gcg.com/en/decks/deck-026.php and deck-027.php.
+  {
+    id: "ST09W",
+    name: "Destiny Ignition (Purple-White)",
+    colors: "Purple/White",
+    deck: list({
+      "GD01-118": 4,
+      "GD02-076": 2,
+      "GD02-110": 3,
+      "ST04-002": 3,
+      "ST04-010": 4,
+      "ST04-015": 2,
+      "ST09-001": 4,
+      "ST09-002": 4,
+      "ST09-004": 4,
+      "ST09-005": 4,
+      "ST09-006": 4,
+      "ST09-007": 4,
+      "ST09-008": 4,
+      "ST09-010": 4,
+    }),
+  },
+  {
+    id: "ST09R",
+    name: "Destiny Ignition (Red-Purple)",
+    colors: "Red/Purple",
+    deck: list({
+      "GD01-049": 3,
+      "GD01-054": 4,
+      "ST04-007": 4,
+      "ST04-011": 4,
+      "ST04-016": 2,
+      "ST09-001": 4,
+      "ST09-002": 4,
+      "ST09-003": 4,
+      "ST09-005": 4,
+      "ST09-006": 4,
+      "ST09-007": 4,
+      "ST09-008": 4,
+      "ST09-009": 2,
+      "ST09-010": 3,
+    }),
+  },
+  {
+    id: "ST10",
+    name: "Generation Pulse",
+    colors: "Blue/White",
+    deck: list(starter("ST10", [2, 3, 4, 3, 4, 2, 3, 4, 4, 3, 4, 4, 2, 2, 2, 4])),
+  },
+  {
+    id: "ST11",
+    name: "Aquatic Assault",
+    colors: "Blue/Purple",
+    deck: list(starter("ST11", [2, 3, 3, 4, 3, 2, 3, 4, 4, 3, 4, 4, 2, 3, 2, 4])),
+  },
+  {
+    id: "ST12",
+    name: "Raging Onslaught",
+    colors: "Red/Purple",
+    deck: list(starter("ST12", [2, 2, 4, 3, 4, 2, 4, 3, 4, 3, 4, 4, 2, 3, 2, 4])),
+  },
+  {
+    id: "ST13",
+    name: "Silent Barrage",
+    colors: "Green/Red",
+    deck: list(starter("ST13", [2, 3, 4, 3, 3, 2, 2, 3, 4, 4, 4, 4, 3, 2, 3, 4])),
+  },
+  {
+    id: "ST14",
+    name: "Heavy Dominion",
+    colors: "Green/White",
+    deck: list(starter("ST14", [2, 3, 3, 4, 2, 2, 4, 3, 4, 3, 4, 4, 3, 3, 2, 4])),
   },
 ];

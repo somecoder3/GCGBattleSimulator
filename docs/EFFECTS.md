@@ -1,6 +1,6 @@
 # Karteneffekte
 
-Stand: M5 (16. Nov. 2026). Wie Kartentexte zu ausführbaren Effekten werden, und wie man eine Karte
+Stand: alle Starter-Decks (16. Nov. 2026). Wie Kartentexte zu ausführbaren Effekten werden, und wie man eine Karte
 ergänzt oder korrigiert.
 
 ## Überblick
@@ -50,9 +50,9 @@ npm run coverage -- --set GD01,ST05       # dazu jede nicht verstandene Zeile mi
 npm run coverage -- --card ST01-015       # Skript einer Karte
 ```
 
-Stand 16. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **65,1 % vollständig** (164 ohne Text,
-553 automatisch, 15 von Hand), 391 teilweise. **ST01–ST04 und alle Karten aller 15 Meta-Archetypen zu
-100 %** (`npm run coverage -- --meta`, `docs/META.md`). Vor M5: 51,6 %.
+Stand 16. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **73,2 % vollständig** (164 ohne Text,
+640 automatisch, 18 von Hand), 301 teilweise. **Alle Starter-Sets ST01–ST14 und alle Karten aller 15
+Meta-Archetypen zu 100 %** (`npm run coverage -- --meta`, `docs/META.md`). Vor M5: 51,6 %.
 
 ## Erweiterungen in M5
 
@@ -104,6 +104,39 @@ name`, `with the lowest Lv.`, `whose Lv./AP is equal to or lower/less than this/
   Gegner auch bei „You and that player each choose“ (ST12-013).
 - Handskripte: GD01-003, GD03-109, GD06-050, GD06-115, ST11-006, ST12-012, ST12-013.
 
+## Erweiterungen für die Starter-Decks ST05–ST14
+
+Die neuen Satzmuster gelten für alle Sets; dadurch sind 91 weitere Karten vollständig (65,1 % → 73,2 %).
+
+- **Text:** „■…“-Zeilen gehören zur Zeile davor. „When playing this card, choose 1 of the following effects
+  and activate it：■A ■B“ wird zu einer Wahl (`choice`). 【Deploy･Development N】/【When Linked･Development N】:
+  „You may exile the specified number of (Trait) cards in your trash …“ (genau N oder nichts), dann der
+  ■-Effekt. 【During Pair･Lv.5 or Higher Pilot】 (Bedingung `selfPilot`).
+- **Bezüge:** „this“ (ST06-001), „they“, „it“ als diese Unit in Ereignis-Triggern, „Unit card/Pilot card“,
+  „with the highest Lv.“, „battling this Unit“, „other than Unit tokens“, „with AP equal to or less than it“.
+- **Bedingungen:** „this (Unit) is damaged“, „this is a blue Unit“, „this Unit is attacking an enemy Unit /
+  the enemy player“, „a (rested) friendly … (is) in play“, „N or more rested Units are in play“, „there are
+  N or more purple/Command/(CB) cards in your trash“.
+- **„instead“:** „If …, choose 1 enemy Unit instead“ und „If …, deal 2 damage instead“ ersetzen die letzte
+  Wahl bzw. den letzten Schaden (`if`/`else`).
+- **Neue Schritte:** `mill` mit Variable („If you place a (CB) card with this effect, draw 1“), `redirect`
+  („Change the attack target of the battling enemy Unit to it“), `deploy` geruht, `lookTop` mit Einsetzen
+  („You may deploy 1 Unit card … among them“), `placeResource` (geruhte Ressource), `grantEffect` (ein Effekt
+  dieser Karte gilt für die gewählte Unit, ST12-014), „Reveal 1 … from your hand. Return it to the bottom of
+  your deck“, „That player chooses 2 Unit cards from their trash. Exile them“.
+- **Trigger:** eigene Unit linkt (`allyLinked`, ST06-015, ST14-016), „When you draw with an effect“
+  (`effectDraw`, ST08-011), „destroys an enemy Unit with damage“ (`anyDamage`: auch durch Effektschaden
+  dieser Unit, über `CardInstance.lastSource`).
+- **Dauereffekte:** „While …, it gets/gains …“, „this Base can't receive damage from enemy Units …“
+  (`noDamageFrom`, ST07-015), „Each enemy player's rested Units with the lowest Lv. won't be set as active“
+  (ST14-001), 【Once per Turn】„When this Unit would receive battle damage from …, it doesn't receive that
+  damage“ (`noBattleDamageFromOnce`), Rabatt „for each enemy Unit in play“ (ST08-001).
+- **Alternative Kosten:** ST10-014 „you may discard 1 (G Generation) Unit card. If you do, play this card as
+  if it has 2 Lv. and cost“ ist eine eigene Option `playCommand` mit `discard` (je abwerfbarer Karte).
+- **Handskripte:** ST07-009 (AP+1 oder alle (CB) Units, „instead“), ST12-014 (Effekt für eine Unit während
+  des Kampfes), ST14-015 (geruhte Ressource, dann eine aktiv, wenn diesen Zug noch keine durch Effekt).
+- Kartentests: `tests/cards/starters2.test.ts`.
+
 ## Eine Karte ergänzen oder korrigieren
 
 1. `npm run coverage -- --card <Nr>` zeigt Text, Skript und nicht verstandene Zeilen.
@@ -138,3 +171,15 @@ name`, `with the lowest Lv.`, `whose Lv./AP is equal to or lower/less than this/
 - „Choose N of your (rested) Resources. Set it/them as active.“ wird ohne Auswahl zu `readyResource`:
   Ressourcen sind gleichwertig, die Wahl einer aktiven Ressource würde den Effekt nur verschenken
   (ST01-011, GD05-066, GD06-053, ST07-001).
+- Zwei Spieler: „Choose 1 enemy player“ ist immer der Gegner, „a number of cards equal to the number of
+  enemy players“ ist 1.
+- „When this Unit destroys an enemy Unit with damage“ (ST12-001, ST12-003) zählt Kampfschaden und den
+  Effektschaden dieser Unit; Epyon kann sich dadurch verketten, Tallgeese III nur einmal pro Zug.
+- ST07-013 Armed Intervention wirkt nur während des Angriffs einer gegnerischen Unit; sonst verpufft es.
+- ST07-015 Ptolemaios hält jeden Schaden solcher Units ab, auch <Breach>.
+- ST14-001 The-O: Welche Units geruht bleiben, wird vor dem Aktivsetzen bestimmt.
+- ST13-014 Final Duty setzt die Karte nur ein, wenn Platz ist.
+- Starter-Decklisten ST05–ST14: Produktlisten von exburst.dev (ST11 stimmt mit tcgtalk.com überein; für
+  ST05 weicht eine Vorab-Liste von essential-japan.com in sechs Anzahlen ab). ST09 enthält Karten für
+  zwei Decks; beide offiziellen Rezepte (gundam-gcg.com `deck-026` Lila-Weiß, `deck-027` Rot-Lila) sind
+  als `ST09W` und `ST09R` hinterlegt.

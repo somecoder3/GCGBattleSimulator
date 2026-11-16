@@ -16,6 +16,7 @@
   import { db, download, type SavedRun } from "../../lib/db";
   import { SNAPSHOT, deckChoices, preset, type DeckChoice } from "../../lib/decks";
   import { createWorkers, defaultWorkerCount, type BrowserWorker } from "../../lib/simworkers";
+  import HoverTip from "../HoverTip.svelte";
 
   // Simulator: many AI games in Web Workers, live statistics, saved runs, card performance, replays.
 
@@ -46,6 +47,18 @@
   let aiB = $state<AiName>("heuristic-v1");
   let games = $state(1000);
   let seed = $state(1);
+  const randomSeed = () => Math.floor(Math.random() * 1_000_000_000);
+
+  // Matchup matrix: deck names of the hovered cell (row and column) as a tooltip.
+  let tip = $state<{ anchor: DOMRect; row: string; col?: string; text?: string } | null>(null);
+  function showTip(e: PointerEvent, row: string, col?: string, text?: string) {
+    tip = {
+      anchor: (e.currentTarget as HTMLElement).getBoundingClientRect(),
+      row,
+      ...(col ? { col } : {}),
+      ...(text ? { text } : {}),
+    };
+  }
   let workerCount = $state(defaultWorkerCount());
 
   let running = $state(false);
@@ -306,7 +319,18 @@
         </label>
         <div class="row">
           <label>Spiele <input type="number" min="1" step="100" bind:value={games} /></label>
-          <label>Seed <input type="number" min="0" bind:value={seed} /></label>
+          <label
+            >Seed
+            <span class="seed">
+              <input type="number" min="0" bind:value={seed} />
+              <button
+                type="button"
+                onclick={() => (seed = randomSeed())}
+                title="Zufälliger Seed"
+                aria-label="Zufälliger Seed">⟳</button
+              >
+            </span>
+          </label>
           <label>Worker <input type="number" min="1" max="64" bind:value={workerCount} /></label>
         </div>
         <p class="hint">Genauigkeit einer Siegquote: 200 Spiele ≈ ±7 %, 1000 ≈ ±3 % (95 %).</p>
@@ -457,19 +481,31 @@
             <table class="matrix">
               <thead
                 ><tr
-                  ><th></th>{#each matrixDecks as b (b)}<th title={deckName(b)}>{b}</th>{/each}</tr
+                  ><th></th>{#each matrixDecks as b (b)}<th
+                      class:hot={tip?.col === b || (tip && !tip.col && tip.row === b)}
+                      aria-label={deckName(b)}
+                      onpointerenter={(e) => showTip(e, b)}
+                      onpointerleave={() => (tip = null)}>{b}</th
+                    >{/each}</tr
                 ></thead
               >
               <tbody>
                 {#each matrixDecks as a (a)}
                   <tr>
-                    <th title={deckName(a)}>{a}</th>
+                    <th
+                      class:hot={tip?.row === a}
+                      aria-label={deckName(a)}
+                      onpointerenter={(e) => showTip(e, a)}
+                      onpointerleave={() => (tip = null)}>{a}</th
+                    >
                     {#each matrixDecks as b (b)}
                       {@const r = stats.matrix[a]?.[b]}
                       {#if r && a !== b}
                         <td
                           style="background: {heat(r.rate)}"
-                          title="{deckName(a)} gegen {deckName(b)}: {interval(r)}"
+                          aria-label="{deckName(a)} gegen {deckName(b)}: {interval(r)}"
+                          onpointerenter={(e) => showTip(e, a, b, interval(r))}
+                          onpointerleave={() => (tip = null)}
                         >
                           {pct(r.rate)}
                         </td>
@@ -482,6 +518,16 @@
               </tbody>
             </table>
           </div>
+          {#if tip}
+            <HoverTip anchor={tip.anchor}>
+              <div class="tip-deck"><b>{tip.row}</b> {deckName(tip.row)}</div>
+              {#if tip.col}
+                <div class="tip-vs">gegen</div>
+                <div class="tip-deck"><b>{tip.col}</b> {deckName(tip.col)}</div>
+                <div class="tip-rate">{tip.text}</div>
+              {/if}
+            </HoverTip>
+          {/if}
         {:else}
           <p class="hint">Für eine Matrix braucht es mindestens zwei Decks.</p>
         {/if}
@@ -845,6 +891,33 @@
   .no {
     color: var(--text-dim);
     font-size: 12px;
+  }
+  .seed {
+    display: flex;
+    gap: 6px;
+  }
+  .seed input {
+    flex: 1;
+    min-width: 0;
+  }
+  .seed button {
+    width: 36px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-sunken);
+    color: inherit;
+    cursor: pointer;
+  }
+  .matrix th.hot {
+    color: var(--accent);
+  }
+  .tip-vs {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+  .tip-rate {
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
   }
   .matrix td {
     text-align: center;

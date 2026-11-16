@@ -48,7 +48,10 @@ export function cleanLines(text: string): string[] {
     // "<Blocker> (Rest this Unit …)" — the reminder may contain nested parentheses.
     const kw = line.match(/^((?:【[^】]+】)*<[^>]+>)\s*\(/);
     if (kw) line = kw[1]!;
-    out.push(line.replace(/[・]/g, "･").replace(/' /g, "'"));
+    line = line.replace(/[・]/g, "･").replace(/' /g, "'");
+    // "■…" lines are part of the effect before them ("choose 1 of the following effects", Development).
+    if (line.startsWith("■") && out.length) out[out.length - 1] += ` ${line}`;
+    else out.push(line);
   }
   return out;
 }
@@ -112,12 +115,15 @@ function qualifiers(rest: string, filter: Filter): void {
         filter.side = "friendly";
       }) ||
       take(/^with the lowest Lv\.?/, () => (filter.lowestLv = true)) ||
-      take(/^card /, () => undefined) ||
+      take(/^with the highest Lv\.?/, () => (filter.highestLv = true)) ||
+      take(/^cards?(?= |$)/, () => undefined) ||
+      take(/^other than Unit tokens/, () => (filter.token = false)) ||
+      take(/^battling this Unit/, () => (filter.battlingSelf = true)) ||
       take(/^whose Lv\.? ?is equal to or lower than (this|that) Unit/, (m) => {
         filter.lvMaxOf = m[1] === "this" ? "self" : "that";
       }) ||
-      take(/^(?:whose AP is|with AP) equal to or less than (this|that) Unit/, (m) => {
-        filter.apMaxOf = m[1] === "this" ? "self" : "that";
+      take(/^(?:whose AP is|with AP) equal to or less than (this Unit|that Unit|it)/, (m) => {
+        filter.apMaxOf = m[1] === "that Unit" ? "that" : "self";
       }) ||
       take(/^in play/, () => undefined) ||
       take(/^(?:and|,)/, () => undefined);
@@ -138,7 +144,7 @@ function traitsOf(s: string): string[] {
 const NP = new RegExp(
   "^(?<count>\\d+ to \\d+|\\d+|all|an?)\\s+(?:(?<ofYour>of your|of the enemy's|of your opponent's)\\s+)?" +
     "(?<adjs>(?:(?:rested|active|damaged|enemy|friendly|other|non-battling|blue|green|red|white|purple|token|Link|\\([^()]+\\)(?:/\\([^()]+\\))*)\\s+)*)" +
-    "(?<noun>Unit tokens?|Unit cards?|Units?|Bases?|Resources?|Pilots?|Command cards?|cards?|Shields?)" +
+    "(?<noun>Unit tokens?|Unit card\\/Pilot card|Unit cards?|Units?|Bases?|Resources?|Pilots?|Command cards?|cards?|Shields?)" +
     "(?<rest>(?:\\s.*)?)$",
 );
 
@@ -167,7 +173,8 @@ export function nounPhrase(text: string): NounPhrase {
     else throw new ParseError(`unknown adjective ${word}`);
   }
   const noun = g.noun!;
-  if (/^Unit token/.test(noun)) {
+  if (noun === "Unit card/Pilot card") filter.types = ["UNIT", "PILOT"];
+  else if (/^Unit token/.test(noun)) {
     filter.token = true;
     filter.types = ["UNIT TOKEN"];
   } else if (/^Unit card/.test(noun)) filter.types = ["UNIT"];
@@ -202,15 +209,15 @@ interface Scope {
 /** Resolves "it", "them", "this Unit", "this Base", "this card". */
 function ref(word: string, scope: Scope): string {
   const w = word.toLowerCase();
-  if (w === "this unit" || w === "this base" || w === "this card") return "self";
-  if (w === "it" || w === "them" || w === "that unit" || w === "those units") {
+  if (w === "this unit" || w === "this base" || w === "this card" || w === "this") return "self";
+  if (w === "it" || w === "them" || w === "they" || w === "that unit" || w === "those units") {
     if (!scope.it) throw new ParseError(`"${word}" without a chosen card`);
     return scope.it;
   }
   throw new ParseError(`unknown reference ${word}`);
 }
 
-const TARGET = "(it|them|this Unit|this Base|that Unit)";
+const TARGET = "(it|them|they|this Unit|this Base|that Unit|this)";
 
 function apHp(s: string): { ap?: number; hp?: number } {
   const out: { ap?: number; hp?: number } = {};
@@ -278,6 +285,8 @@ function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
     }
   }
 
+  // Two players: "Choose 1 enemy player" is always the opponent.
+  if (/^[Cc]hoose 1 enemy player$/.test(sentence)) return;
   // Choosing.
   if ((m = sentence.match(/^[Cc]hoose (.+)$/))) {
     const np = nounPhrase(m[1]!);
@@ -352,6 +361,73 @@ function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
   if ((m = sentence.match(new RegExp(`^[Rr]eturn ${TARGET} to (?:its|their) owners?'s? ?hands?$`)))) {
     return push({ op: "bounce", t: ref(m[1]!, scope) });
   }
+  // "It recovers 2 HP and gets AP+2 during this turn"
+  if (
+    (m = sentence.match(
+      new RegExp(
+        `^${TARGET} recovers? (\\d+) HP and gets? ((?:AP|HP)[+-]\\d+) during this (turn|battle)$`,
+        "i",
+      ),
+    ))
+  ) {
+    const t = ref(m[1]!, scope);
+    push({ op: "recover", t, amount: num(m[2]!) });
+    return push({ op: "mod", t, ...apHp(m[3]!), until: DURATION[m[4]!.toLowerCase()]! });
+  }
+  if ((m = sentence.match(/^All (.+?) recover (\d+) HP$/))) {
+    const np = nounPhrase(`all ${m[1]!.replace(/^your /, "friendly ")}`);
+    const as = `t${scope.vars++}`;
+    push({ op: "all", filter: np.filter, as });
+    return push({ op: "recover", t: as, amount: num(m[2]!) });
+  }
+  if (
+    (m = sentence.match(new RegExp(`^Enemy Units can't choose ${TARGET} as their attack target this turn$`)))
+  ) {
+    return push({ op: "flag", t: ref(m[1]!, scope), flag: "cantBeAttacked", until: "turn" });
+  }
+  if ((m = sentence.match(new RegExp(`^[Dd]eploy ${TARGET} rested$`))))
+    return push({ op: "deploy", t: ref(m[1]!, scope), rested: true });
+  if (
+    (m = sentence.match(new RegExp(`^[Cc]hange the attack target of the battling enemy Unit to ${TARGET}$`)))
+  )
+    return push({ op: "redirect", t: ref(m[1]!, scope) });
+  if (
+    (m = sentence.match(
+      new RegExp(
+        `^${TARGET} can't choose the same enemy player or enemy team as its attack target during this turn$`,
+        "i",
+      ),
+    ))
+  ) {
+    return push({ op: "flag", t: ref(m[1]!, scope), flag: "cantAttackPlayer", until: "turn" });
+  }
+  if ((m = sentence.match(/^That player chooses (\d+) (.+?) from their trash$/))) {
+    const np = nounPhrase(`${m[1]!} ${m[2]!}`);
+    const as = `t${scope.vars++}`;
+    push({
+      op: "choose",
+      filter: { ...np.filter, zone: "trash", side: "enemy" },
+      count: np.count === "all" ? 1 : np.count,
+      by: "opponent",
+      as,
+    });
+    scope.it = as;
+    return;
+  }
+  if ((m = sentence.match(/^[Rr]eveal (1 .+) from your hand$/))) {
+    const np = nounPhrase(m[1]!);
+    const as = `t${scope.vars++}`;
+    push({ op: "choose", filter: { ...np.filter, zone: "hand", side: "friendly" }, count: 1, as });
+    scope.it = as;
+    return;
+  }
+  if ((m = sentence.match(new RegExp(`^[Rr]eturn ${TARGET} to the bottom of your deck$`))))
+    return push({ op: "toDeck", t: ref(m[1]!, scope), pos: "bottom" });
+  // Two players: "a number of cards equal to the number of enemy players" is 1.
+  if (/^[Dd]raw a number of cards equal to the number of enemy players$/.test(sentence))
+    return push({ op: "draw", n: 1 });
+  if (/^[Dd]iscard the same number of cards you drew with this effect$/.test(sentence))
+    return push({ op: "discard", n: 1 });
   if ((m = sentence.match(new RegExp(`^${TARGET} recovers? (\\d+) HP$`, "i")))) {
     return push({ op: "recover", t: ref(m[1]!, scope), amount: num(m[2]!) });
   }
@@ -392,10 +468,10 @@ function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
   }
   if (
     (m = sentence.match(
-      /^(?:During this turn, )?(it|this Unit) may choose an active enemy Unit ?(.*) as its attack target(?: during this turn)?$/i,
+      /^(?:During this turn, )?(it|this Unit) may choose an? (damaged )?active enemy Unit ?(.*) as its attack target(?: during this turn)?$/i,
     ))
   ) {
-    const np = nounPhrase(`1 enemy Unit ${m[2]!}`.trim());
+    const np = nounPhrase(`1 ${m[2] ?? ""}enemy Unit ${m[3]!}`.trim());
     // "If this is a (CB) Unit, it may choose …" (Pilot text): "it" is the Unit itself.
     const t = m[1]!.toLowerCase() === "it" && !scope.it ? "self" : ref(m[1]!, scope);
     return push({ op: "flag", t, flag: "attackActive", filter: np.filter, until: "turn" });
@@ -481,13 +557,18 @@ function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
       until: "turn",
     });
   }
-  if ((m = sentence.match(/^Reduce its AP by an amount equal to the number of (.+) during this turn$/))) {
+  if (
+    (m =
+      sentence.match(/^Reduce its AP by an amount equal to the number of (.+) during this (turn|battle)$/) ??
+      sentence.match(/^Reduce its AP during this (turn|battle) by an amount equal to the number of (.+)$/))
+  ) {
+    const [count, until] = /^Reduce its AP by/.test(sentence) ? [m[1]!, m[2]!] : [m[2]!, m[1]!];
     return push({
       op: "modByCount",
       t: ref("it", scope),
-      count: nounPhrase(`all ${m[1]!}`).filter,
+      count: nounPhrase(`all ${count}`).filter,
       sign: -1,
-      until: "turn",
+      until: DURATION[until]!,
     });
   }
   if ((m = sentence.match(new RegExp(`^[Dd]eploy 1 to 2 ${TOKEN_SPEC} Unit tokens$`)))) {
@@ -534,7 +615,10 @@ function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
   }
   if (
     (m = sentence.match(
-      new RegExp(`^${TARGET} can't receive battle damage from enemy Units (.+) during this battle$`, "i"),
+      new RegExp(
+        `^${TARGET} can't receive battle damage from enemy Units (.+) during this (turn|battle)$`,
+        "i",
+      ),
     ))
   ) {
     const np = nounPhrase(`1 enemy Unit ${m[2]!}`);
@@ -543,7 +627,7 @@ function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
       t: ref(m[1]!, scope),
       flag: "noBattleDamageFrom",
       filter: np.filter,
-      until: "battle",
+      until: DURATION[m[3]!.toLowerCase()]!,
     });
   }
   if (
@@ -572,7 +656,13 @@ const COND_PATTERNS: [RegExp, (m: RegExpMatchArray) => Cond][] = [
     }),
   ],
   [/^you deploy this Unit from your trash$/, () => ({ selfFrom: "trash" })],
-  [/^this Unit is damaged$/, () => ({ selfIs: { damaged: true } })],
+  [/^this(?: Unit)? is damaged$/, () => ({ selfIs: { damaged: true } })],
+  [
+    /^this is an? (blue|green|red|white|purple) Unit$/,
+    (m) => ({ selfIs: { colors: [COLOR_WORDS[m[1]!]!] } }),
+  ],
+  [/^this Unit is attacking the enemy player$/, () => ({ attackingPlayer: true })],
+  [/^this Unit is attacking an enemy Unit$/, () => ({ attackingUnit: true })],
   [
     /^there are (\d+) or more cards with "([^"]+)" in their card name in your trash$/,
     (m) => ({ count: { side: "friendly", zone: "trash", names: [m[2]!] }, min: num(m[1]!) }),
@@ -623,8 +713,8 @@ const COND_PATTERNS: [RegExp, (m: RegExpMatchArray) => Cond][] = [
     (m) => ({ count: { ...nounPhrase(`1 friendly other ${m[1]!}`).filter }, min: 1 }),
   ],
   [
-    /^an? (friendly|enemy) (.+?) is in play$/,
-    (m) => ({ count: nounPhrase(`1 ${m[1]!} ${m[2]!}`).filter, min: 1 }),
+    /^an? ((?:(?:rested|active|damaged) )*(?:friendly|enemy) .+?) (?:is )?in play$/,
+    (m) => ({ count: nounPhrase(`1 ${m[1]!}`).filter, min: 1 }),
   ],
   [
     /^you have no (.+?) in play$/,
@@ -632,9 +722,14 @@ const COND_PATTERNS: [RegExp, (m: RegExpMatchArray) => Cond][] = [
   ],
   [/^(\d+) or more enemy Units are in play$/, (m) => ({ count: { side: "enemy" }, min: num(m[1]!) })],
   [
-    /^there are (\d+) or more (?:(\([^()]+\)(?:\/\([^()]+\))*) )?cards in your trash$/,
+    /^(\d+) or more (.+?) are in play$/,
+    (m) => ({ count: nounPhrase(`1 ${m[2]!.replace(/Units$/, "Unit")}`).filter, min: num(m[1]!) }),
+  ],
+  [
+    // "(CB) cards", "purple cards", "Command cards"
+    /^there are (\d+) or more (.+?) in your trash$/,
     (m) => ({
-      count: { side: "friendly", zone: "trash", ...(m[2] ? { traits: traitsOf(m[2]) } : {}) },
+      count: { ...nounPhrase(`1 ${m[2]!}`).filter, side: "friendly", zone: "trash" },
       min: num(m[1]!),
     }),
   ],
@@ -665,9 +760,26 @@ export function condition(text: string): Cond {
 }
 
 /** Parses an effect body into segments (split at "Then,"). */
-export function parseBody(body: string, ctx: ParseContext): Step[][] {
+export function parseBody(body: string, ctx: ParseContext, it: string | null = null): Step[][] {
+  // "When playing this card, choose 1 of the following effects and activate it： ■A ■B"
+  if (body.includes("■")) {
+    const [head, ...parts] = body.split(/\s*■/);
+    if (
+      /^When playing this card, choose 1 of the following effects and activate it[：:]?$/.test(head!.trim())
+    ) {
+      return [
+        [
+          {
+            op: "choice",
+            options: parts.map((p) => ({ label: p.trim(), do: parseBody(p.trim(), ctx).flat() })),
+          },
+        ],
+      ];
+    }
+    throw new ParseError(`unknown effect list "${head}"`);
+  }
   const segments: Step[][] = [[]];
-  const scope: Scope = { steps: segments[0]!, it: null, vars: 0 };
+  const scope: Scope = { steps: segments[0]!, it, vars: 0 };
   let lastMay: Step[] | null = null;
 
   let look: Extract<Step, { op: "lookTop" }> | null = null;
@@ -682,6 +794,38 @@ export function parseBody(body: string, ctx: ParseContext): Step[][] {
     }
     // "If it is your turn, look at the top 2 cards …": the condition first, then the look patterns below.
     let pre: RegExpMatchArray | null;
+    // "… If there are 4 or more Command cards in your trash, choose 1 enemy Unit instead." The last
+    // choice (or damage) becomes the alternative.
+    if ((pre = s.match(/^If (.+?), (?:choose (.+)|deal (\d+) damage) instead$/))) {
+      const cond = condition(pre[1]!);
+      const steps = scope.steps;
+      const i = steps.findLastIndex((x) => x.op === (pre![2] ? "choose" : "damage"));
+      const old = steps[i];
+      let alt: Step;
+      if (old?.op === "choose") {
+        const np = nounPhrase(pre[2]!);
+        if (np.count === "all") throw new ParseError("choose all");
+        alt = { ...old, filter: np.filter, count: np.count };
+        if (np.upTo) alt.upTo = true;
+        else delete alt.upTo;
+      } else if (old?.op === "damage") alt = { ...old, amount: num(pre[3]!) };
+      else throw new ParseError(`"instead" without a step`);
+      steps.splice(i, 1, { op: "if", cond, then: [alt], else: [old] });
+      continue;
+    }
+    // "Place the top 2 cards of your deck into your trash. If you place a (CB) card with this effect, draw 1."
+    if ((pre = s.match(/^If you place an? (.+?) with this effect, (.+)$/))) {
+      const mill = scope.steps.findLast((x) => x.op === "mill");
+      if (mill?.op !== "mill") throw new ParseError(`"place" without a mill`);
+      mill.as = `t${scope.vars++}`;
+      const then: Step[] = [];
+      const filter = nounPhrase(`1 ${pre[1]!}`).filter;
+      scope.steps.push({ op: "if", cond: { varMatches: mill.as, filter }, then });
+      scope.steps = then;
+      s = capital(pre[2]!);
+    }
+    // "Destroy it. If you do, look at the top 4 cards …": a failed choice already skips the segment.
+    if ((pre = s.match(/^If you do, (look at the top .+)$/))) s = capital(pre[1]!);
     if ((pre = s.match(/^If (.+?), (look at the top .+)$/))) {
       const then: Step[] = [];
       scope.steps.push({ op: "if", cond: condition(pre[1]!), then });
@@ -749,6 +893,24 @@ export function parseBody(body: string, ctx: ParseContext): Step[][] {
         },
       );
       look = null;
+      continue;
+    }
+    if (
+      look &&
+      /^You may reveal a number of cards equal to the number of enemy players among them and add them to your hand$/.test(
+        s,
+      )
+    ) {
+      look.pick = {};
+      look.pickCount = 1; // two players
+      look.may = true;
+      continue;
+    }
+    if (look && (lm = s.match(/^You may deploy 1 (.+?) among them$/))) {
+      look.pick = nounPhrase(`1 ${lm[1]!}`).filter;
+      look.pickCount = 1;
+      look.may = true;
+      look.deploy = true;
       continue;
     }
     if (look && (lm = s.match(/^You may reveal (\d+) (.+?) among them and add (?:it|them) to your hand$/))) {
@@ -866,6 +1028,11 @@ function parseCost(text: string): { cost: Cost; steps: Step[] } {
       );
     } else if (/^return this Unit to the bottom of its owner's deck$/i.test(part)) {
       cost.selfToDeckBottom = true;
+    } else if ((m = part.match(/^[Dd]estroy (1 .+)$/))) {
+      // "Destroy 1 friendly Unit token"
+      const np = nounPhrase(m[1]!.replace(/^1 friendly /, "1 of your "));
+      const as = `cost${steps.length}`;
+      steps.push({ op: "choose", filter: np.filter, count: 1, as }, { op: "destroy", t: as });
     } else if ((m = part.match(/^[Ee]xile (\d+) cards in your trash from the game$/))) {
       const as = `cost${steps.length}`;
       steps.push(
@@ -902,7 +1069,7 @@ function staticSentence(sentence: string): Effect | Effect[] {
   }
   if (
     (m = s.match(
-      /^(During your turn, )?[Ww]hile (.+?), this Unit gets ((?:AP|HP)[+-]\d+(?: and (?:AP|HP)[+-]\d+)?)$/,
+      /^(During your turn, )?[Ww]hile (.+?), (?:this Unit|it) gets ((?:AP|HP)[+-]\d+(?: and (?:AP|HP)[+-]\d+)?)$/,
     ))
   ) {
     const cond = condition(m[2]!);
@@ -913,7 +1080,7 @@ function staticSentence(sentence: string): Effect | Effect[] {
       cond: m[1] ? { and: [{ yourTurn: true }, cond] } : cond,
     };
   }
-  if ((m = s.match(/^While (.+?), this Unit gains <([^>]+)>$/))) {
+  if ((m = s.match(/^While (.+?), (?:this Unit|it) gains <([^>]+)>$/))) {
     const amount = Number(m[2]!.match(/ (\d+)$/)?.[1] ?? 0);
     return {
       kind: "static",
@@ -935,6 +1102,38 @@ function staticSentence(sentence: string): Effect | Effect[] {
     "On the turn this Unit is deployed, it may choose a rested enemy Unit as its attack target and attack it"
   ) {
     return { kind: "static", target: "self", flag: "attackUnitOnDeploy" };
+  }
+  if ((m = s.match(/^While (.+?), this (?:Base|Unit) can't receive damage from enemy Units (.+)$/))) {
+    return {
+      kind: "static",
+      target: "self",
+      flag: "noDamageFrom",
+      flagFilter: nounPhrase(`1 enemy Unit ${m[2]!}`).filter,
+      cond: condition(m[1]!),
+    };
+  }
+  if (
+    /^Each enemy player's rested Units with the lowest Lv\.? ?won't be set as active during the start phase of their turn$/.test(
+      s,
+    )
+  ) {
+    return {
+      kind: "static",
+      target: { side: "enemy", rested: true, lowestLv: true, types: ["UNIT", "UNIT TOKEN"] },
+      flag: "stayRested",
+    };
+  }
+  if (
+    (m = s.match(
+      /^When this Unit would receive battle damage from an enemy Unit (.+?), it doesn't receive that damage$/,
+    ))
+  ) {
+    return {
+      kind: "static",
+      target: "self",
+      flag: "noBattleDamageFrom",
+      flagFilter: nounPhrase(`1 enemy Unit ${m[1]!}`).filter,
+    };
   }
   if ((m = s.match(/^While (.+?), enemy Units can't choose this Unit as their attack target$/))) {
     return { kind: "static", target: "self", flag: "cantBeAttacked", cond: condition(m[1]!) };
@@ -1028,13 +1227,13 @@ function staticSentence(sentence: string): Effect | Effect[] {
   }
   if (
     (m = s.match(
-      /^While you have no (.+?) in play, this card in your hand gets Lv\. ?-(\d+) and cost -\2 for each of your (.+?) in play$/,
+      /^While you have no (.+?) in play, this card in your hand gets Lv\. ?-(\d+) and cost -\2 for each (?:of your (.+?)|enemy Units?) in play$/,
     ))
   ) {
     return {
       kind: "handCost",
       unless: { count: nounPhrase(`1 friendly ${m[1]!.replace(/s(?= |$)/, "")}`).filter, min: 1 },
-      count: nounPhrase(`all friendly ${m[3]!}`).filter,
+      count: m[3] ? nounPhrase(`all friendly ${m[3]}`).filter : nounPhrase("all enemy Units").filter,
       per: num(m[2]!),
     };
   }
@@ -1100,6 +1299,8 @@ function parseLineEffect(
   let activated: "main" | "action" | null = null;
   const command: ("main" | "action")[] = [];
   let burst = false;
+  let development = 0;
+  let dm: RegExpMatchArray | null;
 
   for (const h of heads) {
     if (h === "Once per Turn") continue;
@@ -1110,7 +1311,12 @@ function parseLineEffect(
     else if (h === "Activate･Action") activated = "action";
     else if (h === "During Link") conds.push({ selfLinked: true });
     else if (h === "During Pair") conds.push({ selfPaired: true });
-    else if (TRIGGERS[h]) trigger = TRIGGERS[h]!;
+    else if (h.startsWith("During Pair･"))
+      conds.push({ selfPilot: pilotQualifier(h.slice("During Pair･".length)) });
+    else if ((dm = h.match(/^(Deploy|When Linked)･Development (\d+)$/))) {
+      trigger = TRIGGERS[dm[1]!]!;
+      development = num(dm[2]!);
+    } else if (TRIGGERS[h]) trigger = TRIGGERS[h]!;
     else if (h.startsWith("When Paired･")) {
       trigger = "whenPaired";
       pilot = pilotQualifier(h.slice("When Paired･".length));
@@ -1148,7 +1354,7 @@ function parseLineEffect(
       ...(pilot ? { pilot } : {}),
       ...(cond ? { cond } : {}),
       ...(once ? { once } : {}),
-      segments: parseBody(rest, ctx),
+      segments: development ? developmentBody(rest, development, ctx) : parseBody(rest, ctx),
     };
   }
 
@@ -1156,18 +1362,55 @@ function parseLineEffect(
   let m: RegExpMatchArray | null;
   if (
     (m = rest.match(
-      /^(During your turn, )?when this Unit destroys an enemy (Unit|shield area card) with battle damage, (.+)$/,
-    ))
+      /^(During your turn, )?when this Unit destroys an enemy (Unit|shield area card) with (battle )?damage, (.+)$/i,
+    )) &&
+    (m[3] || m[2] === "Unit")
   ) {
     const yourTurn: Cond = { yourTurn: true };
     const all = m[1] ? (cond ? { and: [cond, yourTurn] } : yourTurn) : cond;
     return {
       kind: "trigger",
       on: m[2] === "Unit" ? "destroysUnit" : "destroysShieldAreaCard",
+      // "destroys an enemy Unit with damage": battle damage or this Unit's effect damage.
+      ...(m[3] ? {} : { anyDamage: true }),
       ...(all ? { cond: all } : {}),
       ...(once ? { once } : {}),
-      segments: parseBody(m[3]!.charAt(0).toUpperCase() + m[3]!.slice(1), ctx),
+      segments: parseBody(capital(m[4]!), ctx, "self"),
     };
+  }
+  // "【Once per Turn】During your turn, when a friendly (Clan) Unit links, it gains <Breach 3> during this turn."
+  if ((m = rest.match(/^(During your turn, )?when an? friendly (.*?)Unit links, (.+)$/i))) {
+    const all: Cond | undefined = m[1]
+      ? cond
+        ? { and: [cond, { yourTurn: true }] }
+        : { yourTurn: true }
+      : cond;
+    return {
+      kind: "trigger",
+      on: "allyLinked",
+      filter: nounPhrase(`1 friendly ${m[2]!.trim() ? `${m[2]!.trim()} ` : ""}Unit`).filter,
+      self: true,
+      ...(all ? { cond: all } : {}),
+      ...(once ? { once } : {}),
+      segments: parseBody(capital(m[3]!), ctx, "event"),
+    };
+  }
+  if ((m = rest.match(/^When you draw with an effect, (.+)$/))) {
+    return {
+      kind: "trigger",
+      on: "effectDraw",
+      ...(cond ? { cond } : {}),
+      ...(once ? { once } : {}),
+      segments: parseBody(capital(m[1]!), ctx, "self"),
+    };
+  }
+  if (
+    (m = rest.match(
+      /^When playing this card from your hand, you may discard 1 (.+?)\. If you do, play this card as if it has (\d+) Lv\. and cost\.?$/,
+    ))
+  ) {
+    const level = num(m[2]!);
+    return { kind: "altCost", level, cost: level, discard: nounPhrase(`1 ${m[1]!}`).filter };
   }
   const allyTrigger = (
     on: "allyDeployed" | "allyPaired",
@@ -1244,9 +1487,39 @@ function parseLineEffect(
   if (st.length !== 1) throw new ParseError(`unknown text "${rest}"`);
   const effects = [staticSentence(st[0]!)].flat();
   for (const effect of effects) {
-    if (cond && effect.kind === "static") effect.cond = effect.cond ? { and: [cond, effect.cond] } : cond;
+    if (effect.kind !== "static") continue;
+    if (cond) effect.cond = effect.cond ? { and: [cond, effect.cond] } : cond;
+    if (once) {
+      if (effect.flag !== "noBattleDamageFrom") throw new ParseError("【Once per Turn】 constant effect");
+      effect.flag = "noBattleDamageFromOnce";
+    }
   }
   return effects;
+}
+
+/**
+ * "【Deploy･Development 2】You may exile the specified number of (G Generation) cards in your trash from the
+ * game. If you do, activate the following effect: ■…"
+ */
+function developmentBody(rest: string, n: number, ctx: ParseContext): Step[][] {
+  const m = rest.match(
+    /^You may exile the specified number of ((?:\([^()]+\))+) cards in your trash from the game\. If you do, activate the following effect[：:]?\s*■(.+)$/,
+  );
+  if (!m) throw new ParseError(`unknown Development text "${rest}"`);
+  return [
+    [
+      {
+        op: "choose",
+        filter: { side: "friendly", zone: "trash", traits: traitsOf(m[1]!) },
+        count: n,
+        may: true,
+        exact: true,
+        as: "dev",
+      },
+      { op: "exile", t: "dev" },
+      ...parseBody(m[2]!.trim(), ctx).flat(),
+    ],
+  ];
 }
 
 function capital(s: string): string {

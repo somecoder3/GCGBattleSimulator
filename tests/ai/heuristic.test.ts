@@ -8,7 +8,10 @@ import { HIDDEN, viewFor } from "../../src/engine/view";
 import { runRange, type SimJob } from "../../src/sim/runner";
 import { computeStats } from "../../src/sim/stats";
 import { CardPool } from "../../src/data/cards";
-import { STARTER_DECKS } from "../../src/data/decks";
+import { STARTER_DECKS as ALL_STARTERS } from "../../src/data/decks";
+
+// The measurements use the first four starter decks (ST01–ST04).
+const STARTER_DECKS = ALL_STARTERS.slice(0, 4);
 import type { RawCardsDoc } from "../../src/data/types";
 import { CardLib } from "../../src/engine/cardlib";
 import { Engine } from "../../src/engine/engine";

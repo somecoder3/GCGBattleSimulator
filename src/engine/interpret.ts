@@ -49,6 +49,15 @@ const DISCARD = "__discard";
 const LOOK = "__look";
 const ARRANGE = "__arrange";
 
+/** Draws with an effect and raises "When you draw with an effect" (ST08-011). */
+export function effectDraw(c: Ctx, p: PlayerId, n: number): void {
+  const before = c.s.players[p].hand.length;
+  draw(c, p, n);
+  if (c.s.players[p].hand.length === before) return;
+  const me = c.s.players[p];
+  for (const id of [...me.battle, ...me.base]) raise(c, "effectDraw", id);
+}
+
 export function startEffect(c: Ctx, t: PendingTrigger): void {
   const compiled = effectByRef(c, t.ref);
   if (compiled.effect.kind === "trigger" || compiled.effect.kind === "activated") {
@@ -254,7 +263,10 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       for (const id of targets(c, frame, instr.t)) rest(c, id);
       return next();
     case "ready":
-      for (const id of targets(c, frame, instr.t)) ready(c, id);
+      for (const id of targets(c, frame, instr.t)) {
+        if (inst(c, id).zone === "resources" && inst(c, id).rested) c.s.marks[`readyRes:${me}`] = c.s.turn;
+        ready(c, id);
+      }
       return next();
     case "damage":
       for (const id of targets(c, frame, instr.t)) dealDamage(c, id, instr.amount, "effect", frame.source);
@@ -285,7 +297,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       }
       return next();
     case "toDeck":
-      for (const id of targets(c, frame, instr.t)) {
+      for (const id of targets(c, frame, instr.t, [...IN_PLAY, "hand"])) {
         // The paired Pilot goes along, as when a Unit goes to the trash or hand (3-3-6).
         const pilot = inst(c, id).pilot;
         moveTo(c, id, "deck", instr.pos);
@@ -350,7 +362,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     }
 
     case "draw":
-      draw(c, me, instr.n);
+      effectDraw(c, me, instr.n);
       return next();
     case "discard": {
       const left = frame.repeat ?? instr.n;
@@ -370,9 +382,44 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     case "exResource":
       for (let i = 0; i < instr.n; i++) placeExResource(c, me);
       return next();
-    case "mill":
-      for (const id of c.s.players[me].deck.slice(0, instr.n)) toTrash(c, id, "mill");
+    case "mill": {
+      const milled = c.s.players[me].deck.slice(0, instr.n);
+      for (const id of milled) toTrash(c, id, "mill");
+      if (instr.as) frame.vars[instr.as] = milled;
       return next();
+    }
+    case "redirect": {
+      // "Change the attack target of the battling enemy Unit to it."
+      const b = c.s.battle;
+      const to = targets(c, frame, instr.t)[0];
+      if (b && to !== undefined && b.attackerOwner !== me && inst(c, to).owner === me && b.target !== to) {
+        b.target = to;
+        c.ev.push({ t: "block", blocker: to });
+      }
+      return next();
+    }
+    case "grantEffect":
+      for (const id of targets(c, frame, instr.t)) {
+        c.s.modifiers.push({
+          target: id,
+          ap: 0,
+          hp: 0,
+          effect: { no: inst(c, frame.source).no, idx: instr.idx, granted: false },
+          until: instr.until,
+          source: frame.source,
+        });
+      }
+      return next();
+    case "placeResource": {
+      const player = c.s.players[me];
+      if (player.resourceDeck.length && player.resources.length < LIMITS.resources) {
+        const id = player.resourceDeck[0]!;
+        moveTo(c, id, "resources", "bottom");
+        if (instr.rested) inst(c, id).rested = true;
+        c.ev.push({ t: "resource", player: me, card: id });
+      }
+      return next();
+    }
     case "token": {
       let left = frame.repeat ?? instr.count ?? 1;
       if (instr.forOwnerOf !== undefined) {
@@ -451,6 +498,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     }
     case "readyResource": {
       const rested = c.s.players[me].resources.filter((id) => inst(c, id).rested).slice(0, instr.n);
+      if (rested.length) c.s.marks[`readyRes:${me}`] = c.s.turn;
       for (const id of rested) ready(c, id);
       return next();
     }
@@ -507,7 +555,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       if (def(c, id).type === "BASE") deployBase(c, id);
       else {
         if (!ensureRoom(c, frame)) return;
-        enterBattle(c, id);
+        enterBattle(c, id, !!instr.rested);
       }
       delete frame.vars.__paid;
       return next();
@@ -615,6 +663,13 @@ export function answer(c: Ctx, action: Action): void {
         return;
       case LOOK:
         if (card === null) {
+          frame.repeat = 0;
+        } else if (instr.op === "lookTop" && instr.deploy) {
+          // "You may deploy 1 Unit card … among them": only with room in the battle area.
+          if (c.s.players[frame.controller].battle.length < LIMITS.battle) {
+            frame.looking = frame.looking!.filter((id) => id !== card);
+            enterBattle(c, card);
+          }
           frame.repeat = 0;
         } else {
           frame.looking = frame.looking!.filter((id) => id !== card);

@@ -23,7 +23,7 @@ const doc = JSON.parse(
   readFileSync(new URL("../../gcgdb/data/cards.json", import.meta.url), "utf8"),
 ) as RawCardsDoc;
 const engine = new Engine(CardLib.fromPool(new CardPool(doc)));
-const decks = STARTER_DECKS.map((d) => ({ id: d.id, name: d.name, deck: d.deck }));
+const decks = STARTER_DECKS.slice(0, 4).map((d) => ({ id: d.id, name: d.name, deck: d.deck }));
 
 const strip = (g: GameSummary) => ({ ...g, ms: 0 });
 

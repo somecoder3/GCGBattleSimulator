@@ -45,6 +45,8 @@ export interface CardInstance {
   asUnit?: { ap: number; hp: number };
   /** Kind of the last damage it received (for "destroyed with effect damage"). */
   lastDamage?: "battle" | "effect";
+  /** The card that dealt the last damage (for "this Unit destroys an enemy Unit with damage"). */
+  lastSource?: CardId;
   /** Where it was deployed from ("if you deploy this Unit from your trash"). */
   from?: "hand" | "trash" | "other";
 }
@@ -76,6 +78,8 @@ export interface Modifier {
   amount?: number;
   flag?: FlagName;
   filter?: Filter;
+  /** A gained effect (an effect of another card's script, e.g. ST12-014). */
+  effect?: EffectRef;
   until: "turn" | "battle" | "nextStart";
   source: CardId;
 }
@@ -165,7 +169,8 @@ export type Action =
   | { type: "noBlock" }
   | { type: "pass" }
   | { type: "discard"; card: CardId }
-  | { type: "playCommand"; card: CardId }
+  /** `discard`: played for its alternative cost by discarding that card (ST10-014). */
+  | { type: "playCommand"; card: CardId; discard?: CardId }
   | { type: "activate"; card: CardId; effect: number }
   | { type: "target"; card: CardId }
   | { type: "done" }

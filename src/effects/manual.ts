@@ -462,4 +462,83 @@ export const MANUAL: Record<string, ManualScript> = {
     ],
     granted: [],
   },
+
+  // Setsuna F. Seiei: 【Burst】Add this card to your hand. 【Attack】This Unit gets AP+1 during this turn. If
+  // there are 7 or more (CB) cards in your trash, all your (CB) Units get AP+1 instead.
+  "ST07-009": {
+    effects: [PILOT_BURST],
+    granted: [
+      {
+        kind: "trigger",
+        on: "attack",
+        segments: [
+          [
+            {
+              op: "if",
+              cond: { count: { side: "friendly", zone: "trash", traits: ["CB"] }, min: 7 },
+              then: [
+                { op: "all", filter: { side: "friendly", traits: ["CB"], types: [...UNITS] }, as: "t" },
+                { op: "mod", t: "t", ap: 1, until: "turn" },
+              ],
+              else: [{ op: "mod", t: "self", ap: 1, until: "turn" }],
+            },
+          ],
+        ],
+      },
+    ],
+  },
+
+  // Wise Leader's Pride: 【Action】Choose 1 friendly Unit. It gains the following effect during this battle:
+  // ■When this Unit destroys an enemy Unit with battle damage, choose 1 enemy Unit with 2 or less AP.
+  // Destroy it. 【Pilot】[M'Quve]
+  // Effect 1 is only ever used as the gained effect (the Command itself is never in play with it).
+  "ST12-014": {
+    effects: [
+      {
+        kind: "command",
+        timing: ["action"],
+        segments: [
+          [
+            { op: "choose", filter: { side: "friendly" }, count: 1, as: "t" },
+            { op: "grantEffect", t: "t", idx: 1, until: "battle" },
+          ],
+        ],
+      },
+      {
+        kind: "trigger",
+        on: "destroysUnit",
+        segments: [
+          [
+            { op: "choose", filter: { ...ENEMY_UNIT, apMax: 2 }, count: 1, as: "t" },
+            { op: "destroy", t: "t" },
+          ],
+        ],
+      },
+    ],
+    granted: [],
+  },
+
+  // Battlefield Emotions: 【Burst】Place 1 EX Resource. 【Main】Place 1 rested Resource. Then, if you have not
+  // set one of your Resources as active with an effect this turn, choose a number of your Resources equal to
+  // the number of enemy players. Set them as active.
+  "ST14-015": {
+    effects: [
+      { kind: "burst", segments: [[{ op: "exResource", n: 1 }]] },
+      {
+        kind: "command",
+        timing: ["main"],
+        segments: [
+          [{ op: "placeResource", rested: true }],
+          [
+            {
+              op: "if",
+              cond: { not: { readiedResource: true } },
+              then: [{ op: "readyResource", n: 1 }],
+            },
+          ],
+        ],
+      },
+    ],
+    granted: [],
+  },
 };

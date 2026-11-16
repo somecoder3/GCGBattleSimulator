@@ -53,8 +53,8 @@ KI und Stärkemessungen: [docs/AI.md](docs/AI.md), Meta-Decks: [docs/META.md](do
 ## Simulieren
 
 Im Reiter „Simulator“ (Web Worker): Decks wählen (Meta, Starter, eigene), „Jeder gegen jeden“ oder
-„Gauntlet“ (ein Deck gegen das Feld), KIs, Spiele, Seed. Ergebnisse mit Siegquoten und 95-%-Intervallen
-pro KI und Deck, meta-gewichteter Siegquote, Matchup-Matrix, **Kartenleistung** (Siegquote, wenn eine Karte
+„Gauntlet“ (ein Deck gegen das Feld), KIs, Spiele, Seed (⟳ = zufällig). Ergebnisse mit Siegquoten und 95-%-Intervallen
+pro KI und Deck, meta-gewichteter Siegquote, Matchup-Matrix (Deck-Namen beim Überfahren), **Kartenleistung** (Siegquote, wenn eine Karte
 auf der Hand, gespielt oder in der Starthand war) und Spieleliste mit **Replay**. Läufe werden im Browser
 gespeichert und lassen sich als JSON oder CSV exportieren.
 
@@ -77,12 +77,12 @@ Jedes Spiel folgt aus Job und Nummer und ist damit wiederholbar.
   bestplatzierte Liste mit Kartenbildern, Bannliste; „Neu von Limitless laden“ (Zeitraum, Mindestgröße,
   Top-N) speichert den neuen Stand im Browser. Von dort direkt spielen oder gegen das Feld simulieren.
 - **Decks:** eigene Decks anlegen, aus Meta/Starter kopieren, Listen importieren (alle Formate von GCGDBs
-  `parseList`), mit Kartensuche bearbeiten, prüfen (Deckbau-Regeln, Bannliste, Kartenunterstützung),
+  `parseList`), mit Kartensuche bearbeiten (Liste mit Kartenbildchen, großes Bild beim Überfahren), prüfen (Deckbau-Regeln, Bannliste, Kartenunterstützung),
   speichern (IndexedDB), exportieren, spielen und simulieren.
 
 ## Spielen
 
-Im Reiter „Spielen“ Deck (Meta oder Starter), KI-Deck, Gegner-KI, Startspieler und Seed wählen. Leuchtende
+Im Reiter „Spielen“ Deck (Meta, Starter ST01–ST14 mit beiden ST09-Varianten, eigene), KI-Deck, Gegner-KI, Startspieler und Seed wählen. Leuchtende
 Karten sind nutzbar: anklicken und im Menü oder direkt auf dem Feld das Ziel wählen (rot pulsierend; die
 Schildzone steht für den Spielerangriff), oder die Karte auf das Ziel bzw. das eigene Feld **ziehen** (Maus
 und Touch). „Anhalten“ legt fest, wann das Spiel im Action Step für dich stoppt. Es fragt nur, wenn du

@@ -1,4 +1,5 @@
-// One scenario per card with effects in the starter decks ST01–ST04, with the real card data.
+// One scenario per card with effects in the starter decks ST01–ST04, with the real card data, and
+// games with all starter decks (ST05–ST14: tests/cards/starters2.test.ts).
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -75,11 +76,11 @@ describe("starter deck lists", () => {
     }
   });
 
-  it("play 100 games per pairing with all invariants", () => {
+  it("play 2 games per pairing with all invariants", () => {
     let seed = 1;
     for (const a of STARTER_DECKS) {
       for (const b of STARTER_DECKS) {
-        for (let g = 0; g < 25; g++, seed++) {
+        for (let g = 0; g < 2; g++, seed++) {
           const record = playMatch(
             engine,
             [a.deck, b.deck],
@@ -96,7 +97,7 @@ describe("starter deck lists", () => {
         }
       }
     }
-  });
+  }, 120_000);
 });
 
 describe("ST01 Heroic Beginnings", () => {

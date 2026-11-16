@@ -70,6 +70,10 @@ export function effectsOf(c: Ctx, id: CardId): ScriptEntry[] {
       out.push({ ref: { no: p.no, idx, granted: true }, compiled }),
     );
   }
+  // Effects gained from another card ("It gains the following effect during this battle", ST12-014).
+  for (const m of c.s.modifiers) {
+    if (m.target === id && m.effect) out.push({ ref: m.effect, compiled: effectByRef(c, m.effect) });
+  }
   return out;
 }
 
@@ -105,8 +109,12 @@ function activeStatics(c: Ctx): { source: CardId; effect: StaticEffect }[] {
 }
 
 function staticApplies(c: Ctx, st: { source: CardId; effect: StaticEffect }, id: CardId): boolean {
-  if (st.effect.target === "self") return st.source === id;
-  return matches(c, id, st.effect.target, inst(c, st.source).owner, st.source);
+  const target = st.effect.target;
+  if (target === "self") return st.source === id;
+  const owner = inst(c, st.source).owner;
+  // "rested Units with the lowest Lv.": compared among all matching cards.
+  if (target.lowestLv || target.highestLv) return candidates(c, target, owner, st.source).includes(id);
+  return matches(c, id, target, owner, st.source);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -239,6 +247,12 @@ export function matches(
   if (f.types && !f.types.includes(d.type)) return false;
   if (f.other && id === source) return false;
   if (f.notBattling && c.s.battle && (id === c.s.battle.attacker || id === c.s.battle.target)) return false;
+  if (f.battlingSelf) {
+    const b = c.s.battle;
+    if (!b || source === null) return false;
+    if (!((b.attacker === source && b.target === id) || (b.target === source && b.attacker === id)))
+      return false;
+  }
   if (f.lvMaxOf === "self" && source !== null && d.level > def(c, source).level) return false;
   if (f.apMaxOf === "self" && source !== null) {
     const ap = card.zone === "battle" ? apOf(c, id) : d.ap;
@@ -294,6 +308,10 @@ export function candidates(c: Ctx, f: Filter, controller: PlayerId, source: Card
   if (filter.lowestLv && out.length) {
     const min = Math.min(...out.map((id) => def(c, id).level));
     return out.filter((id) => def(c, id).level === min);
+  }
+  if (filter.highestLv && out.length) {
+    const max = Math.max(...out.map((id) => def(c, id).level));
+    return out.filter((id) => def(c, id).level === max);
   }
   return out;
 }
@@ -355,6 +373,15 @@ export function evalCond(c: Ctx, cond: Cond, source: CardId, controller: PlayerI
     const b = c.s.battle;
     return b !== null && b.attacker === source && b.target === "player";
   }
+  if ("attackingUnit" in cond) {
+    const b = c.s.battle;
+    return b !== null && b.attacker === source && b.target !== "player";
+  }
+  if ("selfPilot" in cond) {
+    const pilot = inst(c, source).pilot;
+    return pilot !== null && matches(c, pilot, cond.selfPilot, controller, source, true);
+  }
+  if ("readiedResource" in cond) return c.s.marks[`readyRes:${controller}`] === c.s.turn;
   if ("played" in cond) return markedThisTurn(c, "cmd", controller, cond.played);
   if ("selfFrom" in cond) return inst(c, source).from === cond.selfFrom;
   if ("pairedKill" in cond) return c.s.marks[`pairedKill:${controller}`] === c.s.turn;
@@ -441,6 +468,7 @@ export function moveTo(
   card.damage = 0;
   delete card.asUnit;
   delete card.lastDamage;
+  delete card.lastSource;
   delete card.from;
   if (card.token && !FIELD.has(zone) && zone !== "limbo") {
     card.zone = "gone"; // 5-17-2-5
@@ -599,6 +627,7 @@ export function pairPilot(c: Ctx, pilot: CardId, unit: CardId): void {
   if (link) raise(c, "whenLinked", unit); // 13-2-11
   const me = c.s.players[owner];
   for (const ally of [...me.battle, ...me.base]) raise(c, "allyPaired", ally, unit);
+  if (link) for (const ally of [...me.battle, ...me.base]) raise(c, "allyLinked", ally, unit);
 }
 
 export function deployBase(c: Ctx, id: CardId): void {
@@ -626,6 +655,11 @@ export function dealDamage(
 ): void {
   const target = inst(c, id);
   const fromEnemy = source !== null && inst(c, source).owner !== target.owner;
+  // "This Base can't receive damage from enemy Units that are Lv.3 or lower" (ST07-015).
+  if (fromEnemy && def(c, source).type.startsWith("UNIT")) {
+    const shields = flagFilters(c, id, "noDamageFrom");
+    if (shields?.some((f) => matches(c, source, f, target.owner, id))) return;
+  }
   if (fromEnemy && amount > 0 && target.zone === "battle") amount += damageBoost(c, source);
   if (fromEnemy && kind === "effect") {
     if (hasFlag(c, id, "noEnemyEffectDamage")) amount = 0;
@@ -645,6 +679,8 @@ export function dealDamage(
   if (amount <= 0) return; // 5-5-5
   target.damage += amount;
   target.lastDamage = kind;
+  if (source !== null) target.lastSource = source;
+  else delete target.lastSource;
   c.ev.push({ t: "damage", card: id, amount, kind });
 }
 
@@ -738,6 +774,14 @@ export function rulesManagement(c: Ctx): void {
     }
     if (!doomed.length) return;
     for (const id of doomed) raise(c, "destroyed", id);
+    // "When this Unit destroys an enemy Unit with damage" also counts this Unit's effect damage (ST12-001).
+    for (const id of doomed) {
+      const card = inst(c, id);
+      const by = card.lastSource;
+      if (card.lastDamage !== "effect" || by === undefined || card.zone !== "battle") continue;
+      if (inst(c, by).zone === "battle" && inst(c, by).owner !== card.owner)
+        raise(c, "destroysUnit", by, id, undefined, true);
+    }
     // "When an enemy Unit is destroyed with effect damage while this Unit is attacking" (ST13-012).
     const attacker = c.s.battle?.attacker;
     if (attacker !== undefined && inst(c, attacker).zone === "battle") {
@@ -772,14 +816,17 @@ export function raise(
   id: CardId,
   event: CardId | null = null,
   pilot?: CardId,
+  /** Only effects that also count effect damage ("destroys an enemy Unit with damage"). */
+  anyDamage = false,
 ): void {
   const controller = inst(c, id).owner;
   for (const { ref, compiled } of effectsOf(c, id)) {
     const effect = compiled.effect;
     if (effect.kind !== "trigger" || effect.on !== kind) continue;
+    if (anyDamage && !effect.anyDamage) continue;
     if (effect.pilot && (pilot === undefined || !matches(c, pilot, effect.pilot, controller, id, true)))
       continue;
-    if (kind === "allyDeployed" || kind === "allyPaired") {
+    if (kind === "allyDeployed" || kind === "allyPaired" || kind === "allyLinked") {
       const isSelf = event === id;
       const fits =
         event !== null &&

@@ -129,10 +129,20 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   `setSnapshot`) und **Decks** (`DecksScreen`, GCGDB `parseList`/`formatList`, Deckbau, Prüfung, IndexedDB).
   IndexedDB-Schicht `src/app/lib/db.ts` (Stores `runs`, `decks`, `meta`). Vorauswahl zwischen Reitern über
   `preset` in `src/app/lib/decks.ts`. Im Browser durchgeklickt (Desktop).
+- **Alle Starter-Decks (16. Nov., Nutzerwunsch):** ST05–ST14 in `src/data/decks.ts`, ST09 als `ST09W`
+  (Lila-Weiß) und `ST09R` (Rot-Lila) nach den offiziellen Rezepten deck-026/027; Quellen und Auslegungen in
+  `docs/EFFECTS.md`. Alle ST-Sets zu 100 % unterstützt (~25 neue Satzmuster, neue Schritte/Trigger/Flags,
+  3 Handskripte), dadurch **Abdeckung gesamt 73,2 %** (vorher 65,1 %). ST05 enthält 7 Vanilla-2/2-Units
+  (Bannliste: höchstens 4), ST02 3× ST02-016: wie verkauft, nicht turnierlegal. Tests, die Stärken messen,
+  nutzen weiter nur ST01–ST04 (`STARTER_DECKS.slice(0, 4)`); 199 Tests.
+  - Oberfläche: Zufalls-Seed (⟳) im Simulator, Matchup-Matrix mit eigenem Tooltip (Deck-Namen, Zeile/Spalte
+    hervorgehoben), Deckliste mit Bildchen (Bildausschnitt) und großer Kartenvorschau beim Überfahren
+    (nur Maus), gemeinsame Komponente `src/app/components/HoverTip.svelte`. Decks-Reiter am Handy lief über
+    den Rand (Grid `1fr` → `minmax(0, 1fr)`).
 - Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: **M9** restliche Karten (Abdeckung 65 %), Q&A-Regelfälle, Feinschliff, Vorbereitung
+- Nächster Schritt: **M9** restliche Karten (Abdeckung 73 %), Q&A-Regelfälle, Feinschliff, Vorbereitung
   GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles

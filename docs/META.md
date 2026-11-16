@@ -45,8 +45,8 @@ Limitless-API ──limitless.ts──▶ Snapshot (data/meta/<datum>.json) ─�
 
 Verboten GD01-020; ST02-016 höchstens 2×; verbotene Paare ST01-010 + ST05-010 sowie GD01-008 (Guntank) mit
 den Vanilla-Units „Lv.2, Kosten 1, 2 AP, 2 HP, ohne Effekt“ (Liste plus alle Karten, die die Beschreibung
-erfüllen), von denen insgesamt höchstens 4 im Deck sein dürfen. Das Starter-Deck ST02 enthält ST02-016 3×
-(wie verkauft); für Turniere wäre es so nicht legal.
+erfüllen), von denen insgesamt höchstens 4 im Deck sein dürfen. Das Starter-Deck ST02 enthält ST02-016 3×,
+ST05 sieben solche Vanilla-Units (wie verkauft); für Turniere wären beide so nicht legal.
 
 ## Stand 16. Nov. 2026
 

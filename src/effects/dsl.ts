@@ -39,8 +39,11 @@ export interface Filter {
   /** AP/Lv. at most that of a card: "self" (the effect's card) or a variable of the running effect. */
   apMaxOf?: Ref;
   lvMaxOf?: Ref;
-  /** Only the matching cards with the lowest Lv. */
+  /** Only the matching cards with the lowest/highest Lv. */
   lowestLv?: boolean;
+  highestLv?: boolean;
+  /** In the current battle with the source card ("battling this Unit"). */
+  battlingSelf?: boolean;
   /** Card name contains none of these ("without "X" in its card name"). */
   notNames?: string[];
 }
@@ -61,8 +64,13 @@ export type Cond =
   | { pilotInPlay: Filter }
   /** The effect's card matches the filter (for Pilot texts: the Unit, "if this is a (Trait) Unit"). */
   | { selfIs: Filter }
-  /** The effect's card is attacking the enemy player. */
+  /** The effect's card is attacking the enemy player / an enemy Unit. */
   | { attackingPlayer: true }
+  | { attackingUnit: true }
+  /** The effect's card has a paired Pilot matching the filter (【During Pair･Lv.5 or Higher Pilot】). */
+  | { selfPilot: Filter }
+  /** The controller set one of their Resources as active with an effect this turn. */
+  | { readiedResource: true }
   /** The controller activated the 【Main】/【Action】 of a matching Command card this turn. */
   | { played: Filter }
   /** One of the controller's Units was destroyed this turn by the effect of a matching own card. */
@@ -90,6 +98,10 @@ export type FlagName =
   | "stayRested"
   /** Can't receive battle damage from enemy Units matching the filter. */
   | "noBattleDamageFrom"
+  /** As noBattleDamageFrom, once per turn (ST14-006). */
+  | "noBattleDamageFromOnce"
+  /** Can't receive any damage from enemy Units matching the filter (ST07-015). */
+  | "noDamageFrom"
   /** (On a player) Shield area cards can't receive damage from enemy Units matching the filter. */
   | "protectShieldArea"
   /** May attack in the turn it was deployed. */
@@ -172,9 +184,16 @@ export type Prim =
   | { op: "exResource"; n: number }
   /** `forOwnerOf`: the token goes to the owner of the card(s) in that variable ("the destroyed Unit's owner"). */
   | { op: "token"; no: string; count?: number; rested?: boolean; forOwnerOf?: Ref }
-  | { op: "mill"; n: number }
+  /** `as` keeps the milled cards ("If you place a (CB) card with this effect"). */
+  | { op: "mill"; n: number; as?: string }
+  /** The battling enemy Unit attacks the chosen card instead (ST07-013). */
+  | { op: "redirect"; t: Ref }
+  /** The chosen card gains effect `idx` of this card's script until the end of the turn/battle (ST12-014). */
+  | { op: "grantEffect"; t: Ref; idx: number; until: Duration }
+  /** Place the top card of the resource deck (ST14-015). */
+  | { op: "placeResource"; rested?: boolean }
   /** Look at the top n cards, optionally take matching ones to the hand, the rest to the bottom in random order. */
-  | { op: "lookTop"; n: number; pick?: Filter; pickCount?: number; may?: boolean }
+  | { op: "lookTop"; n: number; pick?: Filter; pickCount?: number; may?: boolean; deploy?: boolean }
   /**
    * Look at the top n cards, put one on top (or into the hand) and the rest at the bottom (or into the
    * trash) (ST02-015, ST09-010).
@@ -190,7 +209,7 @@ export type Prim =
   /** Damage to the first card of the enemy shield area (Base, else the top Shield). */
   | { op: "damageShieldArea"; amount: number }
   /** Deploy the chosen card (from the trash or hand): Units to the battle area, Bases to the base section. */
-  | { op: "deploy"; t: Ref; pay?: boolean }
+  | { op: "deploy"; t: Ref; pay?: boolean; rested?: boolean }
   /** Deploy an EX Base (replacing a Base in play). */
   | { op: "exBase" }
   /** The chosen cards go into their owner's deck, which is then shuffled. */
@@ -237,6 +256,10 @@ export type TriggerKind =
   | "destroyed"
   | "whenPaired"
   | "whenLinked"
+  /** A friendly Unit matching the filter links (the event is that Unit). */
+  | "allyLinked"
+  /** The controller drew cards with an effect. */
+  | "effectDraw"
   /** "When this Unit destroys an enemy Unit with battle damage" */
   | "destroysUnit"
   /** "When this Unit destroys an enemy shield area card with battle damage" */
@@ -265,6 +288,8 @@ export type Effect =
       /** allyDeployed/allyPaired: the Unit the event is about must match (or be this card, if `self`). */
       filter?: Filter;
       self?: boolean;
+      /** destroysUnit: also when this Unit's effect damage destroys the enemy Unit ("with damage"). */
+      anyDamage?: boolean;
       cond?: Cond;
       once?: boolean;
       segments: Step[][];
@@ -309,7 +334,19 @@ export type Effect =
       fixed?: number;
       unless?: Cond;
       when?: Cond;
-    };
+    }
+  | AltCost;
+
+/**
+ * "When playing this card from your hand, you may discard 1 (G Generation) Unit card. If you do, play this
+ * card as if it has 2 Lv. and cost." (ST10-014)
+ */
+export interface AltCost {
+  kind: "altCost";
+  level: number;
+  cost: number;
+  discard: Filter;
+}
 
 export type CardStatus = "vanilla" | "auto" | "manual" | "partial";
 

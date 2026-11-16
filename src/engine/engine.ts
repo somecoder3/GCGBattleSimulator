@@ -47,7 +47,7 @@ import {
   toTrash,
   type Ctx,
 } from "./core";
-import { answer, startEffect, stepFrame } from "./interpret";
+import { answer, effectDraw, startEffect, stepFrame } from "./interpret";
 import { seedRng, shuffle } from "./rng";
 import type { Effect } from "../effects/dsl";
 import type {
@@ -272,9 +272,10 @@ const STEPS: Record<Step, (c: Ctx) => void> = {
     const s = c.s;
     c.ev.push({ t: "turnStart", turn: s.turn, player: s.active });
     const player = s.players[s.active];
-    for (const id of [...player.battle, ...player.resources, ...player.base]) {
-      if (!hasFlag(c, id, "stayRested")) inst(c, id).rested = false; // 7-2-3
-    }
+    // Decided before anything is set active: "rested Units with the lowest Lv." (ST14-001) would change.
+    const all = [...player.battle, ...player.resources, ...player.base];
+    const stay = new Set(all.filter((id) => hasFlag(c, id, "stayRested")));
+    for (const id of all) if (!stay.has(id)) inst(c, id).rested = false; // 7-2-3
     // "Won't be set as active during the start phase of … next turn" ends now.
     s.modifiers = s.modifiers.filter(
       (m) => !(m.until === "nextStart" && m.target >= 0 && inst(c, m.target).owner === s.active),
@@ -443,13 +444,25 @@ function commandOptions(c: Ctx, p: PlayerId, timing: "main" | "action"): Action[
   const options: Action[] = [];
   for (const id of uniqueByNo(c, c.s.players[p].hand)) {
     const card = def(c, id);
-    if (card.type !== "COMMAND" || !canPlay(c, p, id)) continue;
+    if (card.type !== "COMMAND") continue;
     const idx = commandIndex(card, timing);
     if (idx < 0) continue;
     if (!firstTargetAvailable(c, card.script.compiled[idx]!.program, p, id)) continue;
-    options.push({ type: "playCommand", card: id });
+    if (canPlay(c, p, id)) options.push({ type: "playCommand", card: id });
+    for (const discard of altCostDiscards(c, p, id)) options.push({ type: "playCommand", card: id, discard });
   }
   return options;
+}
+
+/** "Play this card as if it has 2 Lv. and cost" by discarding a matching card (ST10-014): the cards to discard. */
+function altCostDiscards(c: Ctx, p: PlayerId, id: CardId): CardId[] {
+  const alt = def(c, id).script.effects.find((e) => e.kind === "altCost");
+  if (!alt || alt.kind !== "altCost") return [];
+  const me = c.s.players[p];
+  if (me.resources.length < alt.level || me.resources.filter((r) => !inst(c, r).rested).length < alt.cost)
+    return [];
+  const hand = me.hand.filter((h) => h !== id && matches(c, h, alt.discard, p, id, true));
+  return uniqueByNo(c, hand);
 }
 
 function activateOptions(c: Ctx, p: PlayerId, timing: "main" | "action"): Action[] {
@@ -594,7 +607,12 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       return;
     case "playCommand": {
       const card = def(c, action.card);
-      pay(c, p, costOf(c, p, action.card));
+      if (action.discard !== undefined) {
+        const alt = card.script.effects.find((e) => e.kind === "altCost");
+        pay(c, p, alt?.kind === "altCost" ? alt.cost : costOf(c, p, action.card));
+        moveTo(c, action.discard, "trash");
+        c.ev.push({ t: "toTrash", card: action.discard, reason: "discard" });
+      } else pay(c, p, costOf(c, p, action.card));
       moveTo(c, action.card, "limbo"); // 3-4-3
       c.ev.push({ t: "play", player: p, card: action.card });
       mark(c, "cmd", p, card.no);
@@ -669,8 +687,21 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
 
 /** Battle damage a Unit receives from an attacker, after "can't receive battle damage" effects. */
 function battleDamageTo(c: Ctx, target: CardId, from: CardId, amount: number): number {
+  const owner = inst(c, target).owner;
   const filters = flagFilters(c, target, "noBattleDamageFrom");
-  if (filters && filters.some((f) => matches(c, from, f, inst(c, target).owner, target))) return 0;
+  if (filters && filters.some((f) => matches(c, from, f, owner, target))) return 0;
+  // "【Once per Turn】When this Unit would receive battle damage from …, it doesn't receive that damage."
+  const once = flagFilters(c, target, "noBattleDamageFromOnce");
+  const key = `${target}:noBattleDamageOnce`;
+  if (
+    amount > 0 &&
+    once &&
+    c.s.oncePerTurn[key] !== c.s.turn &&
+    once.some((f) => matches(c, from, f, owner, target))
+  ) {
+    c.s.oncePerTurn[key] = c.s.turn;
+    return 0;
+  }
   return amount;
 }
 
@@ -763,5 +794,5 @@ export function destroyedByAttacker(
     c.s.marks[`pairedKill:${inst(c, attacker).owner}`] = c.s.turn;
   }
   const draws = c.s.modifiers.filter((m) => m.target === attacker && m.flag === "drawOnBattleDestroy").length;
-  if (draws) draw(c, inst(c, attacker).owner, draws);
+  if (draws) effectDraw(c, inst(c, attacker).owner, draws);
 }

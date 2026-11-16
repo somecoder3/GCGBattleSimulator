@@ -16,6 +16,7 @@
   import { db, download, type UserDeck } from "../../lib/db";
   import { cardLib, deckChoices, deckColors, preset, setUserDecks } from "../../lib/decks";
   import CardImage from "../CardImage.svelte";
+  import HoverTip from "../HoverTip.svelte";
   import CardDetail from "../CardDetail.svelte";
 
   // Own decks: import, build, check, save (IndexedDB), export, and use them in the game and simulator.
@@ -212,6 +213,13 @@
     "…",
     "(ExBurst, Limitless, TTS, Namen …)",
   ].join("\n");
+
+  // Card shown large beside a hovered row of the deck list (mouse only; touch opens the detail).
+  let hovered = $state<{ card: CardDef; anchor: DOMRect } | null>(null);
+  function hover(e: PointerEvent, card: CardDef) {
+    if (e.pointerType !== "mouse") return;
+    hovered = { card, anchor: (e.currentTarget as HTMLElement).getBoundingClientRect() };
+  }
 </script>
 
 <section class="decks">
@@ -314,15 +322,36 @@
                       aria-label="Eine mehr"
                       disabled={c.n >= MAX_COPIES}>+</button
                     >
-                    <button class="cardname" onclick={() => (detail = c.card)}>
+                    <button
+                      class="cardname"
+                      onclick={() => (detail = c.card)}
+                      onpointerenter={(e) => hover(e, c.card)}
+                      onpointerleave={() => (hovered = null)}
+                    >
+                      <span class="thumb" data-color={c.card.color?.toLowerCase() ?? "none"}>
+                        <img
+                          src={cardImageUrl(c.card, "small")}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
+                        />
+                      </span>
                       <span class="lv">Lv.{c.card.level ?? "–"}</span>
-                      {c.card.name} <small>{c.no}</small>
+                      <span class="title">{c.card.name} <small>{c.no}</small></span>
                     </button>
                   </li>
                 {/each}
               </ul>
             {/if}
           {/each}
+          {#if hovered}
+            <HoverTip anchor={hovered.anchor} place="side">
+              <div class="preview">
+                <CardImage card={hovered.card} src={cardImageUrl(hovered.card, "small")} eager />
+              </div>
+            </HoverTip>
+          {/if}
         </div>
         <div class="search">
           <input
@@ -545,11 +574,59 @@
   }
   .cardname {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 2px 6px;
     border: 0;
+    border-radius: 6px;
     background: none;
     text-align: left;
     font-size: 14px;
+  }
+  .cardname:hover {
+    background: var(--bg-sunken);
+  }
+  .cardname .title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The artwork part of the card as a small strip. */
+  .thumb {
+    flex: none;
+    width: 48px;
+    height: 30px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--tint, var(--line)) 35%, var(--bg-sunken));
+  }
+  .thumb[data-color="blue"] {
+    --tint: var(--c-blue);
+  }
+  .thumb[data-color="green"] {
+    --tint: var(--c-green);
+  }
+  .thumb[data-color="red"] {
+    --tint: var(--c-red);
+  }
+  .thumb[data-color="white"] {
+    --tint: var(--c-white);
+  }
+  .thumb[data-color="purple"] {
+    --tint: var(--c-purple);
+  }
+  .thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 28%;
+  }
+  .preview {
+    width: 240px;
   }
   .cardname small,
   .lv {
@@ -586,7 +663,7 @@
   @media (max-width: 960px) {
     .decks,
     .editor {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>

@@ -57,7 +57,9 @@ export function actionLabel(action: Action, name: (id: CardId) => string): strin
     case "deployBase":
       return "Base einsetzen";
     case "playCommand":
-      return "Ausspielen";
+      return action.discard === undefined
+        ? "Ausspielen"
+        : `Günstiger ausspielen, ${name(action.discard)} abwerfen`;
     case "activate":
       return `Effekt aktivieren${action.effect > 0 ? ` (${action.effect + 1})` : ""}`;
     case "attack":
