@@ -4,20 +4,41 @@
 //   npm run coverage -- --set ST01,ST02    plus every unsupported line of these sets
 //   npm run coverage -- --card GD01-001    the compiled script of one card
 //   npm run coverage -- --json             machine-readable (for the app later)
+//   npm run coverage -- --meta             meta archetypes of the newest snapshot and their missing lines
 
 import { parseArgs } from "node:util";
 import { buildScript, parseContext } from "../src/effects/scripts";
-import { loadPool } from "./lib";
+import { CardLib } from "../src/engine/cardlib";
+import { metaDecks } from "../src/meta/decks";
+import { loadPool, loadSnapshot } from "./lib";
 
 const { values: args } = parseArgs({
   options: {
     set: { type: "string" },
     card: { type: "string" },
     json: { type: "boolean", default: false },
+    meta: { type: "boolean", default: false },
   },
 });
 
 const pool = loadPool();
+
+if (args.meta) {
+  const lib = CardLib.fromPool(pool);
+  const shown = new Set<string>();
+  for (const d of metaDecks(loadSnapshot(), lib)) {
+    const partial = d.archetype.partial;
+    console.log(
+      `${d.id} ${(d.share * 100).toFixed(1).padStart(5)} %  ${d.name}: ${partial.length ? `${partial.length} unvollständig` : "voll"}`,
+    );
+    for (const no of partial) {
+      if (shown.has(no)) continue;
+      shown.add(no);
+      for (const line of lib.get(no).script.unsupported) console.log(`    ${no}: ${line}`);
+    }
+  }
+  process.exit(0);
+}
 const ctx = parseContext(pool.cards);
 const cards = pool.cards.filter((c) => !c.token || c.type === "UNIT TOKEN" || c.set === "T");
 

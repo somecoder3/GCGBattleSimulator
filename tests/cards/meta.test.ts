@@ -292,3 +292,118 @@ describe("other new effects", () => {
     expect(s.players[0].hand).toHaveLength(1);
   });
 });
+
+describe("archetypes M09–M15", () => {
+  it("GD04-050 Destiny pays the cost of a (Minerva Squad) Unit from the trash; ST09-006 destroys when deployed from the trash", () => {
+    const s = scenario({
+      p0: { battle: [{ no: "GD04-050", pilot: "GD04-093" }], trash: ["ST09-006"], resources: 6 },
+      p1: { battle: [GM], shields: 6 },
+    });
+    attack(s, id(s, 0, "battle", "GD04-050"));
+    apply(s, target(id(s, 0, "trash", "ST09-006"))); // may choose → deploy, paying 2
+    expect(nos(s, 0, "battle")).toContain("ST09-006");
+    expect(s.players[0].resources.filter((r) => s.cards[r]!.rested)).toHaveLength(2);
+    expect(nos(s, 1, "trash")).toEqual([GM]); // Sword Impulse from the trash destroyed GM (Lv.2)
+  });
+
+  it("GD05-050 Exia Repair destroys a Lv.4 or lower Unit without Pilot it deals battle damage to", () => {
+    const s = scenario({ p0: { battle: ["GD05-050"] }, p1: { battle: [{ no: "GD02-079", rested: true }] } });
+    attack(s, id(s, 0, "battle", "GD05-050"), id(s, 1, "battle", "GD02-079"));
+    settle(s);
+    expect(nos(s, 1, "trash")).toEqual(["GD02-079"]); // 2 damage on 3 HP, destroyed by the effect
+  });
+
+  it("GD04-034 Kyrios gets AP+2 for each rested (CB) Unit while linked", () => {
+    const s = scenario({
+      p0: { battle: [{ no: "GD04-034", pilot: "GD04-090" }, { no: "GD05-050", rested: true }, "GD05-050"] },
+    });
+    const kyrios = id(s, 0, "battle", "GD04-034");
+    expect(ap(s, kyrios)).toBe(1 + engine.card(s, s.cards[kyrios]!.pilot!).ap + 2);
+  });
+
+  it("ST11-001 Char's Z'Gok can't be attacked with two other (Marine) Units while paired", () => {
+    const s = scenario({
+      p0: { battle: [GM] },
+      p1: {
+        battle: [
+          { no: "ST11-001", pilot: "GD05-093", rested: true },
+          { no: "ST11-002", rested: true },
+          "ST11-009",
+        ],
+      },
+    });
+    const targets = s.pending!.options.flatMap((o) => (o.type === "attack" ? [o.target] : []));
+    expect(targets).not.toContain(id(s, 1, "battle", "ST11-001"));
+    expect(targets).toContain(id(s, 1, "battle", "ST11-002"));
+  });
+
+  it("GD04-101 Kindhearted: friendly Units can't be destroyed by enemy effects this turn", () => {
+    const own = scenario({ p0: { hand: ["GD04-101"], battle: [GM] } });
+    play(own, "GD04-101");
+    expect(own.modifiers.some((m) => m.flag === "noEffectDestroy" && m.player === 0)).toBe(true);
+    // The opponent's Veteran's Pride (destroy a Lv.2 or lower Unit) then has no effect on player 0's GM.
+    const s = scenario({ active: 1, p0: { battle: [GM] }, p1: { hand: ["GD05-116"] } });
+    s.modifiers.push({
+      target: -1,
+      player: 0,
+      ap: 0,
+      hp: 0,
+      flag: "noEffectDestroy",
+      until: "turn",
+      source: 0,
+    });
+    play(s, "GD05-116");
+    expect(nos(s, 0, "battle")).toEqual([GM]);
+  });
+
+  it("GD04-093 Rey: the next damage to the chosen (ZAFT) Link Unit is reduced by 2, once", () => {
+    const s = scenario({
+      p0: { battle: ["GD06-050"], hand: ["GD04-093"] },
+      p1: { hand: ["ST03-013", "ST03-013"] },
+    });
+    pair(s, "GD04-093", id(s, 0, "battle", "GD06-050")); // links (Rey Za Burrel)
+    const legend = id(s, 0, "battle", "GD06-050");
+    expect(s.modifiers.some((m) => m.target === legend && m.flag === "reduceNextDamage")).toBe(true);
+  });
+
+  it("GD05-048 Kyrios (Flight Mode) may attack a rested Unit, not the player, on the turn it is deployed", () => {
+    const s = scenario({ p0: { hand: ["GD05-048"] }, p1: { battle: [{ no: GM, rested: true }] } });
+    play(s, "GD05-048");
+    settle(s);
+    const kyrios = id(s, 0, "battle", "GD05-048");
+    const targets = s.pending!.options.flatMap((o) =>
+      o.type === "attack" && o.unit === kyrios ? [o.target] : [],
+    );
+    expect(targets).toEqual([id(s, 1, "battle", GM)]);
+  });
+
+  it("GD06-115 Teaching New Techniques gives the destroyed Unit's owner a Nu Gundam token", () => {
+    const s = scenario({ p0: { hand: ["GD06-115"], resources: 4 }, p1: { battle: [GM] } });
+    play(s, "GD06-115");
+    expect(nos(s, 0, "battle")).toEqual(["T-033"]);
+    expect(nos(s, 1, "battle")).toEqual(["T-034"]);
+    expect(nos(s, 1, "trash")).toEqual([GM]);
+  });
+
+  it("ST12-006 Banshee's cost needs 4 cards in the trash", () => {
+    const three = scenario({ p0: { battle: [{ no: "ST12-006", pilot: "ST12-012" }], trash: [GM, GM, GM] } });
+    expect(three.pending!.options.some((o) => o.type === "activate")).toBe(false);
+    const s = scenario({ p0: { battle: [{ no: "ST12-006", pilot: "ST12-012" }], trash: [GM, GM, GM, GM] } });
+    apply(
+      s,
+      s.pending!.options.find((o) => o.type === "activate")!,
+    );
+    expect(s.players[0].removal).toHaveLength(4);
+    expect(engine.keywords(s, id(s, 0, "battle", "ST12-006")).firstStrike).toBe(true);
+  });
+
+  it("GD06-050 Legend costs 3 less in the trash while a (ZAFT) Link Unit is in play", () => {
+    const s = scenario({
+      p0: { battle: [{ no: "GD04-050", pilot: "ST09-008" }], trash: ["GD06-050"], resources: 3 },
+      p1: { battle: [GM, "ST01-005"] },
+    });
+    attack(s, id(s, 0, "battle", "GD04-050"));
+    apply(s, target(id(s, 0, "trash", "GD06-050"))); // cost 5 - 3 = 2, payable with 3 Resources
+    expect(nos(s, 0, "battle")).toContain("GD06-050");
+  });
+});

@@ -41,6 +41,8 @@ export interface Filter {
   lvMaxOf?: Ref;
   /** Only the matching cards with the lowest Lv. */
   lowestLv?: boolean;
+  /** Card name contains none of these ("without "X" in its card name"). */
+  notNames?: string[];
 }
 
 /** "self": the card with the effect (the Unit for Pilot-granted effects); "event": the card the trigger is about. */
@@ -65,6 +67,10 @@ export type Cond =
   | { played: Filter }
   /** One of the controller's Units was destroyed this turn by the effect of a matching own card. */
   | { ownDestroyedBy: Filter }
+  /** The effect's card was deployed from this location ("if you deploy this Unit from your trash"). */
+  | { selfFrom: "trash" | "hand" }
+  /** A friendly Unit with a paired Pilot destroyed an enemy Unit with battle damage this turn. */
+  | { pairedKill: true }
   /** A card chosen earlier in this effect has left the battle area (e.g. "when this effect destroys …"). */
   | { varGone: string }
   /** A card stored in a variable of this effect matches (e.g. the discarded card). */
@@ -101,7 +107,21 @@ export type FlagName =
   /** All enemy damage is reduced by `amount`. */
   | "reduceEnemyDamage"
   /** (Static) Damage dealt to enemy Units by friendly cards matching the flag filter is increased by `amount`. */
-  | "boostDamage";
+  | "boostDamage"
+  /** Enemy Units can't choose it as their attack target. */
+  | "cantBeAttacked"
+  /** In the turn it was deployed it may attack rested enemy Units (not the player). */
+  | "attackUnitOnDeploy"
+  /** The next damage it receives this turn is reduced by `amount` (then the flag is gone). */
+  | "reduceNextDamage"
+  /** Battle damage from enemy Units is reduced by `amount`. */
+  | "reduceEnemyBattleDamage"
+  /** (Static) Battle damage it deals to an enemy Unit matching the flag filter destroys that Unit. */
+  | "destroyOnBattleDamage"
+  /** (On a player) Friendly Units can't be destroyed by enemy "destroy" effects. */
+  | "noEffectDestroy"
+  /** (On a player) Enemy effect damage to friendly shield area cards is reduced by `amount`. */
+  | "reduceShieldAreaEffectDamage";
 
 /** Primitive steps; identical to the instructions of compiled programs. */
 export type Prim =
@@ -117,6 +137,8 @@ export type Prim =
       may?: boolean;
       as?: string;
       by?: "opponent";
+      /** All `count` cards or none (costs like "Exile 4 cards in your trash"). */
+      exact?: boolean;
     }
   /** Every matching card ("all enemy Units that ..."). */
   | { op: "all"; filter: Filter; as?: string }
@@ -148,12 +170,16 @@ export type Prim =
   | { op: "discard"; n: number; as?: string }
   | { op: "shieldToHand"; n: number }
   | { op: "exResource"; n: number }
-  | { op: "token"; no: string; count?: number; rested?: boolean }
+  /** `forOwnerOf`: the token goes to the owner of the card(s) in that variable ("the destroyed Unit's owner"). */
+  | { op: "token"; no: string; count?: number; rested?: boolean; forOwnerOf?: Ref }
   | { op: "mill"; n: number }
   /** Look at the top n cards, optionally take matching ones to the hand, the rest to the bottom in random order. */
   | { op: "lookTop"; n: number; pick?: Filter; pickCount?: number; may?: boolean }
-  /** Look at the top n cards and return one to the top and the rest to the bottom (ST02-015). */
-  | { op: "lookTopArrange"; n: number }
+  /**
+   * Look at the top n cards, put one on top (or into the hand) and the rest at the bottom (or into the
+   * trash) (ST02-015, ST09-010).
+   */
+  | { op: "lookTopArrange"; n: number; keep?: "top" | "hand"; rest?: "bottom" | "trash" }
   /** Deploy a card from the hand matching the filter without paying its cost. */
   | { op: "deployFromHand"; filter: Filter; may?: boolean; payCost?: boolean }
   /** Look at the top n cards without moving them (until unpeek/topToBottom). */
@@ -164,7 +190,11 @@ export type Prim =
   /** Damage to the first card of the enemy shield area (Base, else the top Shield). */
   | { op: "damageShieldArea"; amount: number }
   /** Deploy the chosen card (from the trash or hand): Units to the battle area, Bases to the base section. */
-  | { op: "deploy"; t: Ref }
+  | { op: "deploy"; t: Ref; pay?: boolean }
+  /** Deploy an EX Base (replacing a Base in play). */
+  | { op: "exBase" }
+  /** The chosen cards go into their owner's deck, which is then shuffled. */
+  | { op: "shuffleIntoDeck"; t: Ref }
   /** This card (in limbo or the trash) becomes the Pilot of the chosen Unit. */
   | { op: "pairSelf"; t: Ref }
   /** Run the 【Main】 of the card paired with this Unit / of the chosen card / this card's 【Action】. */
@@ -197,6 +227,8 @@ export type TriggerKind =
   | "allyDeployed"
   /** A Pilot is paired with a friendly Unit matching the filter (or this one, with `self`). */
   | "allyPaired"
+  /** At the start of the opponent's turn. */
+  | "opponentTurnStart"
   /** "When this Unit destroys an enemy card with battle damage" (Unit or shield area card). */
   | "destroysCard"
   /** An enemy Unit is destroyed with effect damage while this Unit is attacking. */
@@ -214,6 +246,8 @@ export type TriggerKind =
 
 export interface Cost {
   restSelf?: boolean;
+  /** "return this Unit to the bottom of its owner's deck" */
+  selfToDeckBottom?: boolean;
   resources?: number;
   destroySelf?: boolean;
 }
@@ -258,12 +292,24 @@ export type Effect =
       flagFilter?: Filter;
       /** Traits the targets gain ("All your Units gain (Neo Zeon)"). */
       traits?: string[];
+      /** "gets AP+2 for each of your rested (CB) Units" */
+      apPer?: { count: Filter; per: number };
     }
   /**
    * In the hand: Lv. and cost lower by `per` for each card matching `count`, unless `unless` holds
    * (GD05-004 Akatsuki).
    */
-  | { kind: "handCost"; count: Filter; per: number; unless?: Cond };
+  | {
+      kind: "handCost";
+      /** Where the reduction applies (default the hand). */
+      zone?: "hand" | "trash";
+      count?: Filter;
+      per?: number;
+      /** A fixed reduction instead of one per card. */
+      fixed?: number;
+      unless?: Cond;
+      when?: Cond;
+    };
 
 export type CardStatus = "vanilla" | "auto" | "manual" | "partial";
 

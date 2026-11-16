@@ -50,9 +50,9 @@ npm run coverage -- --set GD01,ST05       # dazu jede nicht verstandene Zeile mi
 npm run coverage -- --card ST01-015       # Skript einer Karte
 ```
 
-Stand 16. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **59,5 % vollständig** (164 ohne Text,
-496 automatisch, 8 von Hand), 455 teilweise. **ST01–ST04 und alle 113 Karten der Top-8-Archetypen zu
-100 %** (M5, `docs/META.md`). Vor M5: 51,6 %.
+Stand 16. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **65,1 % vollständig** (164 ohne Text,
+553 automatisch, 15 von Hand), 391 teilweise. **ST01–ST04 und alle Karten aller 15 Meta-Archetypen zu
+100 %** (`npm run coverage -- --meta`, `docs/META.md`). Vor M5: 51,6 %.
 
 ## Erweiterungen in M5
 
@@ -83,6 +83,26 @@ name`, `with the lowest Lv.`, `whose Lv./AP is equal to or lower/less than this/
   GD05-097 Domon Kasshu (abgeworfene Special Move ausführen), GD05-121 Cyclone Punch (aus dem Trash pairen).
 - **Zug-Markierungen** (`GameState.marks`): gespielte Commands und durch eigene Effekte zerstörte eigene
   Units, für Bedingungen „during this turn“.
+
+## Erweiterungen nach M5 (Archetypen M09–M15)
+
+- „Pay its cost to deploy it“ (Kosten mit Rabatten, Lv. egal), „If you deploy this Unit from your trash“
+  (`CardInstance.from`), Rabatt im Trash (`handCost` mit `zone: "trash"`, GD06-050), „Deploy 1 EX Base“,
+  „Return them to their owner's deck and shuffle it“, „look at the top 2 … Place the remaining card into your
+  trash“, „If it is a (CB) card, you may reveal it and add it to your hand“.
+- Kosten „return this Unit to the bottom of its owner's deck“ und „Exile 4 cards in your trash“ (alle oder
+  keine; der Activate-Effekt wird nur mit genug Karten angeboten).
+- Schaden: „reduce the next damage it receives by 2“ (einmal), Reduktion von gegnerischem Kampfschaden,
+  Reduktion von Effektschaden auf die Schildzone (Spieler-Flag), „When this Unit deals battle damage to an
+  enemy Unit that is Lv.4 or lower that has no paired Pilot, destroy that enemy Unit“.
+- Schutz: „enemy Units can't choose this Unit as their attack target“, „friendly Units can't be destroyed by
+  enemy effects“ (nur „Destroy“-Effekte, nicht Zerstörung durch Effektschaden).
+- Angriff: „On the turn this Unit is deployed, it may … attack a rested enemy Unit“ (nur Units).
+- Werte: „gets AP+2 for each of your rested (CB) Units“, „While you have a red (Super Soldier) Pilot in
+  play, this Unit gains <First Strike>“, „During your turn, while …, this Unit gets/can't receive …“.
+- Trigger zu Beginn des gegnerischen Zuges; Token für den Besitzer einer zerstörten Unit; Wahl durch den
+  Gegner auch bei „You and that player each choose“ (ST12-013).
+- Handskripte: GD01-003, GD03-109, GD06-050, GD06-115, ST11-006, ST12-012, ST12-013.
 
 ## Eine Karte ergänzen oder korrigieren
 

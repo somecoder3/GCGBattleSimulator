@@ -61,5 +61,6 @@ erfüllen), von denen insgesamt höchstens 4 im Deck sein dürfen. Das Starter-D
 | M07 | Nu Gundam                                  |  3,2 % |      3 | voll        |
 | M08 | Strike Freedom Gundam (Victory Gundam)     |  3,1 % |      3 | voll        |
 
-Dazu M09–M15 (je < 3 %), davon M11 und M13 voll unterstützt. Die Top 8 nutzen 113 verschiedene Karten.
+Dazu M09–M15 (je < 3 %), inzwischen **alle voll unterstützt** (`npm run coverage -- --meta`). Die Top 8
+nutzen 113 verschiedene Karten.
 Die Stichprobe ist klein (72 Listen); die Anteile schwanken entsprechend.

@@ -4,8 +4,13 @@
 import type { Cond, Filter, Ref } from "../effects/dsl";
 import type { Instr } from "../effects/compile";
 import {
+  EX_BASE,
   LIMITS,
+  activeResources,
   apOf,
+  costOf,
+  pay,
+  playerHasFlag,
   candidates,
   damageShieldArea,
   dealDamage,
@@ -35,6 +40,7 @@ import {
   createCard,
   type Ctx,
 } from "./core";
+import { shuffle } from "./rng";
 import type { Action, CardId, Decision, Frame, PendingTrigger, PlayerId } from "./types";
 
 const OVERFLOW = "__overflow";
@@ -218,7 +224,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       const left = (instr.count ?? 1) - chosen.length;
       // "You may choose 2 … from your trash. Exile them. If you do, …": the full number or nothing.
       // Once the first card is chosen, the rest must follow.
-      const exact = !!instr.may && !instr.upTo && (instr.count ?? 1) > 1;
+      const exact = !!instr.exact || (!!instr.may && !instr.upTo && (instr.count ?? 1) > 1);
       if (exact && !chosen.length && pool.length < left) {
         frame.pc = instr.fail;
         return;
@@ -255,7 +261,9 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       return next();
     case "destroy":
       for (const id of targets(c, frame, instr.t)) {
-        if (inst(c, id).owner === me) mark(c, "ownDestroyed", me, def(c, frame.source).no);
+        const owner = inst(c, id).owner;
+        if (owner !== me && playerHasFlag(c, owner, "noEffectDestroy")) continue; // GD04-101
+        if (owner === me) mark(c, "ownDestroyed", me, def(c, frame.source).no);
         destroy(c, id);
       }
       return next();
@@ -367,6 +375,19 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       return next();
     case "token": {
       let left = frame.repeat ?? instr.count ?? 1;
+      if (instr.forOwnerOf !== undefined) {
+        // "The destroyed Unit's owner deploys 1 … token": only with room (no choice for the other player).
+        const ids = instr.forOwnerOf === "self" ? [frame.source] : (frame.vars[instr.forOwnerOf] ?? []);
+        for (const id of ids) {
+          const owner = inst(c, id).owner;
+          for (let i = 0; i < left && c.s.players[owner].battle.length < LIMITS.battle; i++) {
+            const token = createCard(c, instr.no, owner, "limbo");
+            c.ev.push({ t: "token", player: owner, card: token.id });
+            enterBattle(c, token.id, !!instr.rested);
+          }
+        }
+        return next();
+      }
       while (left > 0) {
         if (!ensureRoom(c, frame)) {
           frame.repeat = left;
@@ -476,11 +497,35 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       const ids = targets(c, frame, instr.t, ["hand", "trash"]);
       const id = ids[0];
       if (id === undefined) return next();
+      if (instr.pay && !frame.vars.__paid?.includes(id)) {
+        // "Pay its cost to deploy it": only if the cost can be paid.
+        const cost = costOf(c, me, id);
+        if (activeResources(c, me).length < cost) return next();
+        pay(c, me, cost);
+        frame.vars.__paid = [id];
+      }
       if (def(c, id).type === "BASE") deployBase(c, id);
       else {
         if (!ensureRoom(c, frame)) return;
         enterBattle(c, id);
       }
+      delete frame.vars.__paid;
+      return next();
+    }
+    case "exBase": {
+      const base = createCard(c, EX_BASE, me, "limbo");
+      deployBase(c, base.id);
+      return next();
+    }
+    case "shuffleIntoDeck": {
+      const ids = targets(c, frame, instr.t, ["trash", "removal", ...IN_PLAY]);
+      const owners = new Set<PlayerId>();
+      for (const id of ids) {
+        owners.add(inst(c, id).owner);
+        moveTo(c, id, "deck", "bottom");
+        c.ev.push({ t: "toDeck", card: id, pos: "bottom" });
+      }
+      for (const p of owners) shuffle(c.s.rng, c.s.players[p].deck);
       return next();
     }
     case "pairSelf": {
@@ -579,10 +624,18 @@ export function answer(c: Ctx, action: Action): void {
         }
         return;
       case ARRANGE: {
+        const arrange = instr.op === "lookTopArrange" ? instr : null;
         const rest = frame.looking!.filter((id) => id !== card);
         for (const id of rest) {
-          moveTo(c, id, "deck", "bottom");
-          c.ev.push({ t: "toDeck", card: id, pos: "bottom" });
+          if (arrange?.rest === "trash") toTrash(c, id, "mill");
+          else {
+            moveTo(c, id, "deck", "bottom");
+            c.ev.push({ t: "toDeck", card: id, pos: "bottom" });
+          }
+        }
+        if (card !== null && arrange?.keep === "hand") {
+          c.ev.push({ t: "reveal", player: frame.controller, cards: [card] });
+          toHand(c, card);
         }
         delete frame.looking;
         frame.pc++;

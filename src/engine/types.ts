@@ -45,6 +45,8 @@ export interface CardInstance {
   asUnit?: { ap: number; hp: number };
   /** Kind of the last damage it received (for "destroyed with effect damage"). */
   lastDamage?: "battle" | "effect";
+  /** Where it was deployed from ("if you deploy this Unit from your trash"). */
+  from?: "hand" | "trash" | "other";
 }
 
 export interface PlayerState {

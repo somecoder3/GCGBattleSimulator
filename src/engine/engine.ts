@@ -13,7 +13,9 @@ import {
   canPlay,
   candidates,
   costOf,
+  destroy,
   mark,
+  playerHasFlag,
   pairPilot,
   createCard,
   damageShieldArea,
@@ -279,6 +281,8 @@ const STEPS: Record<Step, (c: Ctx) => void> = {
     );
     c.ev.push({ t: "setActive", player: s.active });
     raiseTurnTriggers(c, "turnStart"); // 7-2-4
+    const standby = c.s.players[other(s.active)];
+    for (const id of [...standby.battle, ...standby.base]) raise(c, "opponentTurnStart", id);
     setStep(c, "draw");
   },
 
@@ -427,9 +431,12 @@ function firstTargetAvailable(
   p: PlayerId,
   source: CardId,
 ): boolean {
-  const first = program.find((i) => i.op !== "jumpUnless");
+  const first = program.find((i) => i.op !== "jumpUnless") as
+    { op: string; filter?: unknown; may?: boolean; exact?: boolean; count?: number } | undefined;
   if (!first || first.op !== "choose" || first.may) return true;
-  return candidates(c, first.filter as never, p, source).length > 0;
+  // A cost that chooses several cards ("Exile 4 cards in your trash") needs all of them.
+  const needed = first.exact ? (first.count ?? 1) : 1;
+  return candidates(c, first.filter as never, p, source).length >= needed;
 }
 
 function commandOptions(c: Ctx, p: PlayerId, timing: "main" | "action"): Action[] {
@@ -475,7 +482,17 @@ function actionStepOptions(c: Ctx, p: PlayerId): Action[] {
 function canAttack(c: Ctx, id: CardId): boolean {
   const card = inst(c, id);
   if (card.rested || hasFlag(c, id, "cantAttack")) return false;
-  return card.enteredTurn < c.s.turn || isLinked(c, id) || hasFlag(c, id, "attackOnDeploy");
+  return (
+    card.enteredTurn < c.s.turn ||
+    isLinked(c, id) ||
+    hasFlag(c, id, "attackOnDeploy") ||
+    hasFlag(c, id, "attackUnitOnDeploy")
+  );
+}
+
+/** Attacking only thanks to "on the turn this Unit is deployed, it may … attack a rested enemy Unit". */
+function onlyUnitsOnDeploy(c: Ctx, id: CardId): boolean {
+  return inst(c, id).enteredTurn >= c.s.turn && !isLinked(c, id) && !hasFlag(c, id, "attackOnDeploy");
 }
 
 function attackTargets(c: Ctx, unit: CardId, p: PlayerId): Action[] {
@@ -487,10 +504,13 @@ function attackTargets(c: Ctx, unit: CardId, p: PlayerId): Action[] {
     if (taunting.length) return taunting.map((target): Action => ({ type: "attack", unit, target }));
   }
   const options: Action[] = [];
-  if (!hasFlag(c, unit, "cantAttackPlayer")) options.push({ type: "attack", unit, target: "player" });
+  if (!hasFlag(c, unit, "cantAttackPlayer") && !onlyUnitsOnDeploy(c, unit)) {
+    options.push({ type: "attack", unit, target: "player" });
+  }
   const active = flagFilters(c, unit, "attackActive") ?? [];
   for (const target of c.s.players[other(p)].battle) {
     const t = inst(c, target);
+    if (hasFlag(c, target, "cantBeAttacked")) continue;
     // 8-2-1: rested enemy Units; some effects allow active ones (e.g. ST02-001).
     if (t.rested || active.some((f) => matches(c, target, f, p, unit)))
       options.push({ type: "attack", unit, target });
@@ -596,6 +616,15 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       if (e.cost.restSelf) rest(c, action.card);
       startEffect(c, { ref, source: action.card, controller: p, event: null, origin: "activated" });
       if (e.cost.destroySelf) toTrash(c, action.card, "destroyed");
+      if (e.cost.selfToDeckBottom) {
+        const pilot = inst(c, action.card).pilot;
+        moveTo(c, action.card, "deck", "bottom");
+        c.ev.push({ t: "toDeck", card: action.card, pos: "bottom" });
+        if (pilot !== null) {
+          moveTo(c, pilot, "deck", "bottom");
+          c.ev.push({ t: "toDeck", card: pilot, pos: "bottom" });
+        }
+      }
       return;
     }
     case "attack": {
@@ -677,13 +706,12 @@ function resolveBattleDamage(c: Ctx): void {
   const targetAp = apOf(c, target);
   if (kw.firstStrike) {
     // 13-1-5-2: the attacker deals damage first; a destroyed target deals none.
-    dealDamage(c, target, battleDamageTo(c, target, attacker, atkAp), "battle", attacker);
+    battleHit(c, attacker, target, atkAp);
     rulesManagement(c);
-    if (inst(c, target).zone === "battle")
-      dealDamage(c, attacker, battleDamageTo(c, attacker, target, targetAp), "battle", target);
+    if (inst(c, target).zone === "battle") battleHit(c, target, attacker, targetAp);
   } else {
-    dealDamage(c, target, battleDamageTo(c, target, attacker, atkAp), "battle", attacker); // 8-5-3-2
-    dealDamage(c, attacker, battleDamageTo(c, attacker, target, targetAp), "battle", target);
+    battleHit(c, attacker, target, atkAp); // 8-5-3-2
+    battleHit(c, target, attacker, targetAp);
   }
   const attackerInPlay = inst(c, attacker).zone === "battle";
   if (attackerInPlay) raiseIfDestroyed(c, attacker, target);
@@ -704,6 +732,25 @@ function raiseIfDestroyed(c: Ctx, attacker: CardId, target: CardId): void {
 }
 
 /** The attacker destroyed an enemy card with battle damage: its triggers and "draw 1" effects (GD05-002). */
+/**
+ * Battle damage from one Unit to another. "When this Unit deals battle damage to an enemy Unit that is
+ * Lv.4 or lower that has no paired Pilot, destroy that enemy Unit" (GD05-050) is applied right away.
+ */
+function battleHit(c: Ctx, from: CardId, to: CardId, ap: number): void {
+  const before = inst(c, to).damage;
+  dealDamage(c, to, battleDamageTo(c, to, from, ap), "battle", from);
+  if (inst(c, to).damage <= before || inst(c, to).zone !== "battle") return;
+  const filters = flagFilters(c, from, "destroyOnBattleDamage");
+  const owner = inst(c, from).owner;
+  if (
+    filters &&
+    filters.some((f) => matches(c, to, f, owner, from)) &&
+    !playerHasFlag(c, inst(c, to).owner, "noEffectDestroy")
+  ) {
+    destroy(c, to);
+  }
+}
+
 export function destroyedByAttacker(
   c: Ctx,
   attacker: CardId,
@@ -712,6 +759,9 @@ export function destroyedByAttacker(
 ): void {
   raise(c, kind, attacker, victim);
   raise(c, "destroysCard", attacker, victim);
+  if (kind === "destroysUnit" && inst(c, attacker).pilot !== null) {
+    c.s.marks[`pairedKill:${inst(c, attacker).owner}`] = c.s.turn;
+  }
   const draws = c.s.modifiers.filter((m) => m.target === attacker && m.flag === "drawOnBattleDestroy").length;
   if (draws) draw(c, inst(c, attacker).owner, draws);
 }

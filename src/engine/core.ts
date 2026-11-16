@@ -115,8 +115,13 @@ function staticApplies(c: Ctx, st: { source: CardId; effect: StaticEffect }, id:
 function sumModifiers(c: Ctx, id: CardId, field: "ap" | "hp"): number {
   let sum = 0;
   for (const m of c.s.modifiers) if (m.target === id) sum += m[field];
-  for (const st of activeStatics(c))
+  for (const st of activeStatics(c)) {
     if (st.effect[field] && staticApplies(c, st, id)) sum += st.effect[field]!;
+    if (field === "ap" && st.effect.apPer && staticApplies(c, st, id)) {
+      const owner = inst(c, st.source).owner;
+      sum += candidates(c, st.effect.apPer.count, owner, st.source).length * st.effect.apPer.per;
+    }
+  }
   return sum;
 }
 
@@ -262,6 +267,7 @@ export function matches(
   if (f.colors && (!d.color || !f.colors.includes(d.color))) return false;
   if (f.names && !f.names.some((n) => d.name.includes(n) || d.aliases.some((a) => a.includes(n))))
     return false;
+  if (f.notNames && f.notNames.some((n) => d.name.includes(n))) return false;
   if (f.linked !== undefined && isLinked(c, id) !== f.linked) return false;
   if (f.paired !== undefined && (card.pilot !== null) !== f.paired) return false;
   if (f.token !== undefined && card.token !== f.token) return false;
@@ -316,6 +322,11 @@ export function mark(c: Ctx, kind: "cmd" | "ownDestroyed", p: PlayerId, no: stri
   c.s.marks[`${kind}:${p}:${no}`] = c.s.turn;
 }
 
+/** Players' flags from effects ("friendly Units can't be destroyed by enemy effects"). */
+export function playerHasFlag(c: Ctx, p: PlayerId, flag: FlagName): boolean {
+  return c.s.modifiers.some((m) => m.target === -1 && m.player === p && m.flag === flag);
+}
+
 export function evalCond(c: Ctx, cond: Cond, source: CardId, controller: PlayerId): boolean {
   if ("and" in cond) return cond.and.every((x) => evalCond(c, x, source, controller));
   if ("or" in cond) return cond.or.some((x) => evalCond(c, x, source, controller));
@@ -345,6 +356,8 @@ export function evalCond(c: Ctx, cond: Cond, source: CardId, controller: PlayerI
     return b !== null && b.attacker === source && b.target === "player";
   }
   if ("played" in cond) return markedThisTurn(c, "cmd", controller, cond.played);
+  if ("selfFrom" in cond) return inst(c, source).from === cond.selfFrom;
+  if ("pairedKill" in cond) return c.s.marks[`pairedKill:${controller}`] === c.s.turn;
   if ("ownDestroyedBy" in cond) return markedThisTurn(c, "ownDestroyed", controller, cond.ownDestroyedBy);
   // Conditions about the running effect's variables are evaluated by the interpreter.
   if ("varGone" in cond || "varMatches" in cond) return false;
@@ -428,6 +441,7 @@ export function moveTo(
   card.damage = 0;
   delete card.asUnit;
   delete card.lastDamage;
+  delete card.from;
   if (card.token && !FIELD.has(zone) && zone !== "limbo") {
     card.zone = "gone"; // 5-17-2-5
     c.ev.push({ t: "removed", card: id });
@@ -502,13 +516,16 @@ export function activeResources(c: Ctx, p: PlayerId): CardId[] {
   return c.s.players[p].resources.filter((id) => !inst(c, id).rested);
 }
 
-/** Reduction of Lv. and cost of a card in the hand (GD05-004 Akatsuki). */
+/** Reduction of Lv. and cost of a card in the hand or trash (GD05-004 Akatsuki, GD06-050 Legend). */
 function handDiscount(c: Ctx, p: PlayerId, id: CardId): number {
   let discount = 0;
+  const zone = inst(c, id).zone;
   for (const effect of def(c, id).script.effects) {
-    if (effect.kind !== "handCost") continue;
+    if (effect.kind !== "handCost" || (effect.zone ?? "hand") !== zone) continue;
     if (effect.unless && evalCond(c, effect.unless, id, p)) continue;
-    discount += candidates(c, effect.count, p, id).length * effect.per;
+    if (effect.when && !evalCond(c, effect.when, id, p)) continue;
+    discount +=
+      effect.fixed ?? (effect.count ? candidates(c, effect.count, p, id).length * (effect.per ?? 1) : 0);
   }
   return discount;
 }
@@ -553,8 +570,10 @@ export function placeExResource(c: Ctx, p: PlayerId): void {
 
 /** Puts a card into the battle area (deploy, 5-8) and raises its 【Deploy】 effects. The area must have room. */
 export function enterBattle(c: Ctx, id: CardId, rested = false, asUnit?: { ap: number; hp: number }): void {
+  const from = inst(c, id).zone;
   moveTo(c, id, "battle");
   const card = inst(c, id);
+  card.from = from === "hand" || from === "trash" ? from : "other";
   card.rested = rested;
   if (asUnit) card.asUnit = asUnit;
   c.ev.push({ t: "deploy", player: card.owner, card: id });
@@ -615,6 +634,14 @@ export function dealDamage(
     if (ignore.length && amount <= Math.max(...ignore)) amount = 0;
   }
   if (fromEnemy) for (const n of flagAmounts(c, id, "reduceEnemyDamage")) amount -= n;
+  if (fromEnemy && kind === "battle")
+    for (const n of flagAmounts(c, id, "reduceEnemyBattleDamage")) amount -= n;
+  // "Reduce the next damage it receives by 2": used up by the first damage.
+  const next = c.s.modifiers.findIndex((m) => m.target === id && m.flag === "reduceNextDamage");
+  if (next >= 0 && amount > 0) {
+    amount -= c.s.modifiers[next]!.amount ?? 0;
+    c.s.modifiers.splice(next, 1);
+  }
   if (amount <= 0) return; // 5-5-5
   target.damage += amount;
   target.lastDamage = kind;
@@ -671,6 +698,12 @@ export function damageShieldArea(
   kind: "battle" | "effect",
   source: CardId | null = null,
 ): void {
+  if (kind === "effect" && source !== null && inst(c, source).owner !== p) {
+    for (const f of c.s.modifiers) {
+      if (f.target === -1 && f.player === p && f.flag === "reduceShieldAreaEffectDamage")
+        amount -= f.amount ?? 0;
+    }
+  }
   if (amount <= 0) return;
   const player = c.s.players[p];
   if (player.base.length) dealDamage(c, player.base[0]!, amount, kind, source);
