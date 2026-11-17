@@ -3,7 +3,7 @@
   import { AI_LABELS, AI_NAMES, type AiName } from "../../../ai/registry";
   import type { CardPool } from "../../../data/cards";
   import { runPool } from "../../../sim/pool";
-  import type { DeckEntry, GameSummary, SimJob } from "../../../sim/runner";
+  import { fullRounds, roundSize, type DeckEntry, type GameSummary, type SimJob } from "../../../sim/runner";
   import {
     cardStats,
     computeStats,
@@ -87,17 +87,29 @@
       : [...selectedDecks, id];
   }
 
-  async function start() {
+  /** The decks and pairing mode the form currently describes. */
+  function selection() {
     const gauntlet = mode === "gauntlet" && !randomDecks;
     const chosen = randomDecks
       ? []
       : CHOICES.filter((d) => selectedDecks.includes(d.id) || (gauntlet && d.id === focus));
     const decks: DeckEntry[] = chosen.map((d) => ({ id: d.id, name: d.name, deck: d.deck }));
+    return { gauntlet, chosen, decks, ...(gauntlet ? { mode: "gauntlet" as const, focus } : {}) };
+  }
+
+  // Games are rounded up to full rounds, so every pairing is played equally often.
+  const planned = $derived.by(() => {
+    const sel = selection();
+    return { games: fullRounds(sel, games), round: roundSize(sel) };
+  });
+
+  async function start() {
+    const { gauntlet, chosen, decks } = selection();
     const shares = Object.fromEntries(chosen.filter((d) => d.share).map((d) => [d.id, d.share!]));
     const next: SimJob = {
       decks,
       ai: [aiA, aiB],
-      games: Math.max(1, Math.floor(games)),
+      games: planned.games,
       seed: Math.floor(seed) >>> 0,
       cardStats: true,
       shares,
@@ -309,6 +321,11 @@
           <label>Seed <input type="number" min="0" bind:value={seed} /></label>
           <label>Worker <input type="number" min="1" max="64" bind:value={workerCount} /></label>
         </div>
+        <p class="hint">
+          Gespielt werden {planned.games} Spiele: {planned.games / planned.round}
+          {planned.games / planned.round === 1 ? "Runde" : "Runden"} à {planned.round}, damit jede Paarung
+          gleich oft spielt (je 8 Spiele für beide Startspieler und Sitze).
+        </p>
         <p class="hint">Genauigkeit einer Siegquote: 200 Spiele ≈ ±7 %, 1000 ≈ ±3 % (95 %).</p>
       </fieldset>
 

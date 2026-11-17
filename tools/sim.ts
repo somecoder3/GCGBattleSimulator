@@ -20,7 +20,7 @@ import { parseAiName } from "../src/ai/registry";
 import { STARTER_DECKS } from "../src/data/decks";
 import { Engine } from "../src/engine/engine";
 import { runPool } from "../src/sim/pool";
-import { runRange, type DeckEntry, type GameSummary, type SimJob } from "../src/sim/runner";
+import { fullRounds, runRange, type DeckEntry, type GameSummary, type SimJob } from "../src/sim/runner";
 import { computeStats, formatStats } from "../src/sim/stats";
 import { loadLib, loadSnapshot } from "./lib";
 import { threadWorker } from "./node-pool";
@@ -63,10 +63,12 @@ function decks(spec: string): DeckEntry[] {
   });
 }
 
+const jobDecks = decks(args.decks);
 const job: SimJob = {
-  decks: decks(args.decks),
+  decks: jobDecks,
   ai: [ai[0]!, ai[1]!],
-  games: Number(args.games),
+  // Every pairing equally often (src/sim/runner.ts fullRounds).
+  games: fullRounds({ decks: jobDecks }, Number(args.games)),
   seed: Number(args.seed),
   ...(args["max-turns"] ? { maxTurns: Number(args["max-turns"]) } : {}),
   ...(args.check ? { check: true } : {}),

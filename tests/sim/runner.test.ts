@@ -9,8 +9,10 @@ import { runPool, type ChunkWorker } from "../../src/sim/pool";
 import {
   chunks,
   deckPairs,
+  fullRounds,
   gameSpec,
   recordGame,
+  roundSize,
   runGame,
   runRange,
   type GameSummary,
@@ -45,6 +47,25 @@ describe("match runner", () => {
     const combos = new Set(block.map((s) => `${s.firstPlayer}${s.ai[0]}${s.decks[0]}`));
     expect(combos.size).toBe(8);
     expect(new Set(block.map((s) => [...s.decks].sort().join()))).toEqual(new Set(["ST01,ST02"]));
+  });
+
+  it("rounds the number of games up to full rounds, so every pairing is played equally often", () => {
+    // 4 starter decks: 10 pairings, one round = 80 games. 64 games used to play only the first 8 pairings.
+    expect(roundSize({ decks })).toBe(80);
+    expect(fullRounds({ decks }, 64)).toBe(80);
+    expect(fullRounds({ decks }, 1000)).toBe(1040);
+    expect(fullRounds({ decks }, 800)).toBe(800);
+    expect(fullRounds({ decks: [] }, 100)).toBe(104); // random decks: blocks of 8
+    expect(roundSize({ decks, mode: "gauntlet", focus: "ST02" })).toBe(24);
+
+    const job: SimJob = { decks, ai: ["random", "random"], games: fullRounds({ decks }, 64), seed: 1 };
+    const perPairing = new Map<string, number>();
+    for (let i = 0; i < job.games; i++) {
+      const key = [...gameSpec(job, i).decks].sort().join("-");
+      perPairing.set(key, (perPairing.get(key) ?? 0) + 1);
+    }
+    expect(perPairing.size).toBe(10);
+    expect(new Set(perPairing.values())).toEqual(new Set([8]));
   });
 
   it("plays the same game again from job and index", () => {

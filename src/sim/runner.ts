@@ -87,8 +87,10 @@ export function deckPairs(n: number): [number, number][] {
   return pairs;
 }
 
+type PairingSpec = Pick<SimJob, "decks" | "mode" | "focus">;
+
 /** The pairings of a job (indices into job.decks). */
-export function jobPairs(job: SimJob): [number, number][] {
+export function jobPairs(job: PairingSpec): [number, number][] {
   if (job.mode === "gauntlet") {
     const focus = Math.max(
       0,
@@ -97,6 +99,21 @@ export function jobPairs(job: SimJob): [number, number][] {
     return job.decks.flatMap((_, i): [number, number][] => (i === focus ? [] : [[focus, i]]));
   }
   return deckPairs(job.decks.length);
+}
+
+/** Games in one round: a block of 8 for every pairing (8 with random decks). */
+export function roundSize(job: PairingSpec): number {
+  return 8 * (job.decks.length ? Math.max(1, jobPairs(job).length) : 1);
+}
+
+/**
+ * The wanted number of games rounded up to full rounds. Game i plays pairing ⌊i / 8⌋ mod pairings, so
+ * with fewer games only the first pairings would be played, and with a partial last round the first
+ * pairings would get one block more than the rest.
+ */
+export function fullRounds(job: PairingSpec, wanted: number): number {
+  const size = roundSize(job);
+  return Math.max(1, Math.ceil(Math.max(1, Math.floor(wanted)) / size)) * size;
 }
 
 /**
