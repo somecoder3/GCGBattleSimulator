@@ -86,9 +86,9 @@ GD05-015 (M1 Astray Shrike)** (gleicher Effekt). Die Vanilla-Units „Lv.2, Kost
 nur eine Sorte, höchstens 4. **Korrektur 17. Nov. 2026:** Bis dahin war Guntank fälschlich mit allen
 Vanilla-Units gepaart. Belege: In der Tabelle der offiziellen Seite stehen nur Guntank (A) und Shrike (B) als
 Paar, die Vanilla-Liste folgt ohne A/B; 13 echte Listen spielen Guntank mit einer Vanilla-Sorte (u. a. Platz 1
-eines offiziellen Regionals mit 208 Spielern), keine spielt zwei Vanilla-Sorten. Die Starter-Decks ST02
-(ST02-016 3×) und ST05 (zwei Vanilla-Sorten, ST05-004 und ST05-009) sind wie verkauft für Turniere nicht
-legal.
+eines offiziellen Regionals mit 208 Spielern), keine spielt zwei Vanilla-Sorten. Starter-Decks in ihrem unveränderten Aufbau bleiben trotz Bannliste legal (Auskunft des Nutzers, 17. Nov.
+2026), z. B. ST02 mit 3× ST02-016 und ST05 mit zwei Vanilla-Sorten (ST05-004, ST05-009);
+`isUnchangedStarter` in `src/meta/banlist.ts`. Sobald eine Karte geändert wird, gilt die Bannliste.
 
 ## Stand 17. Nov. 2026 (Limitless + Egman)
 

@@ -11,6 +11,7 @@ import {
   entryLabel,
   similarity,
 } from "../../src/meta/archetypes";
+import { STARTER_DECKS } from "../../src/data/decks";
 import { banlistProblems } from "../../src/meta/banlist";
 import { metaBaseId, metaDecks, newestSnapshot } from "../../src/meta/decks";
 import { fetchSnapshot, toMetaDeck } from "../../src/meta/limitless";
@@ -43,6 +44,14 @@ describe("banlist", () => {
     // Vanilla Lv.2/cost 1/2/2 Units: every two different ones are a banned pair.
     expect(banlistProblems({ "ST01-005": 2, "ST04-008": 2 }, get)).toHaveLength(1);
     expect(banlistProblems({ "ST01-005": 4 }, get)).toEqual([]);
+    // Starter decks as sold stay legal (ST02: 3× ST02-016, ST05: two vanilla 2/2 Units); changed ones don't.
+    const counts = (main: string[]) =>
+      main.reduce<Record<string, number>>((m, no) => ((m[no] = (m[no] ?? 0) + 1), m), {});
+    for (const d of STARTER_DECKS) expect(banlistProblems(counts(d.deck.main), get), d.id).toEqual([]);
+    const st02 = counts(STARTER_DECKS.find((d) => d.id === "ST02")!.deck.main);
+    expect(banlistProblems({ ...st02, "ST02-001": st02["ST02-001"]! - 1, "ST01-005": 1 }, get)).toHaveLength(
+      1,
+    );
   });
 });
 

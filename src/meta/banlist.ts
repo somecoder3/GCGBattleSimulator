@@ -1,6 +1,7 @@
 // Banned/Restricted list of the official site, as of 25 Sep 2026
 // (https://www.gundam-gcg.com/en/news/01_279.html, checked 16 Nov 2026). Update by hand when it changes.
 
+import { STARTER_DECKS } from "../data/decks";
 import type { EngineCard } from "../engine/cardlib";
 
 export const BANLIST_DATE = "2026-09-25";
@@ -63,11 +64,26 @@ export function isVanillaTwoTwo(card: EngineCard): boolean {
   );
 }
 
-/** Problems of a deck (card number → count) with the list; empty = legal. */
+/** Is the deck exactly one of the starter decks as sold (no card added, removed or swapped)? */
+export function isUnchangedStarter(counts: Record<string, number>): boolean {
+  const own = Object.entries(counts).filter(([, n]) => n > 0);
+  return STARTER_DECKS.some((d) => {
+    const starter: Record<string, number> = {};
+    for (const no of d.deck.main) starter[no] = (starter[no] ?? 0) + 1;
+    const entries = Object.entries(starter);
+    return entries.length === own.length && entries.every(([no, n]) => counts[no] === n);
+  });
+}
+
+/**
+ * Problems of a deck (card number → count) with the list; empty = legal. Starter decks in their unchanged
+ * form stay legal despite the list (e.g. ST02 with 3× ST02-016, ST05 with two vanilla 2/2 Units).
+ */
 export function banlistProblems(
   counts: Record<string, number>,
   get: (no: string) => EngineCard | undefined,
 ): string[] {
+  if (isUnchangedStarter(counts)) return [];
   const problems: string[] = [];
   for (const no of BANNED) if (counts[no]) problems.push(`${no} ist verboten`);
   for (const [no, max] of Object.entries(RESTRICTED)) {

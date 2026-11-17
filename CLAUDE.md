@@ -133,8 +133,9 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 - **Alle Starter-Decks (16. Nov., Nutzerwunsch):** ST05–ST14 in `src/data/decks.ts`, ST09 als `ST09W`
   (Lila-Weiß) und `ST09R` (Rot-Lila) nach den offiziellen Rezepten deck-026/027; Quellen und Auslegungen in
   `docs/EFFECTS.md`. Alle ST-Sets zu 100 % unterstützt (~25 neue Satzmuster, neue Schritte/Trigger/Flags,
-  3 Handskripte), dadurch **Abdeckung gesamt 73,2 %** (vorher 65,1 %). Nicht turnierlegal wie verkauft:
-  ST05 (zwei Vanilla-2/2-Sorten ST05-004 + ST05-009, nach der korrigierten Bannliste), ST02 (3× ST02-016).
+  3 Handskripte), dadurch **Abdeckung gesamt 73,2 %** (vorher 65,1 %). **Starter-Decks bleiben in
+  unverändertem Aufbau trotz Bannliste legal** (Nutzer, 17. Nov.; `isUnchangedStarter` in
+  `src/meta/banlist.ts`), z. B. ST02 (3× ST02-016) und ST05 (zwei Vanilla-2/2-Sorten); geändert gilt die Liste.
   Tests, die Stärken messen, nutzen weiter nur ST01–ST04 (`STARTER_DECKS.slice(0, 4)`).
   - **Zusammengeführt am 17. Nov.** mit den Korrekturen vom Arbeitsrechner (unten): Konflikte nur in
     `parse.ts` (beide Seiten hatten Nomen „Pilot card“ und die Trash-Bedingung erweitert; die allgemeinere
