@@ -2,7 +2,8 @@
 
 Privates Projekt des Nutzers: Kampfsimulator für das **Gundam Card Game** auf Basis von **GCGDB**
 (Repo `somecoder3/GCGDB`, hier als Submodul `gcgdb/`, siehe dessen `CLAUDE.md`). Vorbild für Aufbau und
-Abläufe ist **GCGScanner** (auf dem aktuellen Rechner `D:\programming\GCGScanner`, früher `E:\programming\…`). Kommunikation auf Deutsch. Der Nutzer kommt aus der
+Abläufe ist **GCGScanner** (neben diesem Repo: `D:\programming\GCGScanner` zu Hause, `E:\programming\GCGScanner`
+auf dem Arbeitsrechner). Kommunikation auf Deutsch. Der Nutzer kommt aus der
 Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 
 ## Ziele (aus der ursprünglichen Anfrage)
@@ -134,6 +135,25 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
   vom Nutzer gepusht, 16. Nov.; der Push aus der Sitzung war vom Sicherheitsfilter abgelehnt worden).
+- **Korrekturen 17. Nov. (Arbeitsrechner):**
+  - Spielfeld bei niedrigen Fenstern: Bei 1024×640 ragte die eigene Seite (unten ausgerichtet) 37 px in die
+    mittlere Leiste, „Main Phase beenden“ war per Maus nicht klickbar. Kartenbreite jetzt auch aus der Höhe
+    (`--fit` in `Board.svelte`: `(100dvh − 360px) / 5,8`, Handkarten × 1,06), mittlere Leiste mit `z-index`,
+    eigene Seite `safe flex-end`. Gemessen: 1024×640 48 px Karten, nichts überlappt; 1280×720 (62 px) und
+    1440×900 (89 px) wie vorher; Handy unverändert.
+  - Simulator: Spiel i spielt Paarung ⌊i/8⌋ mod Paarungen; bei 64 Spielen und 8 Decks liefen nur die
+    Paarungen mit M01. Spielzahl wird jetzt auf volle Runden (8 × Paarungen) aufgerundet (`fullRounds`/
+    `roundSize` in `src/sim/runner.ts`, im Formular angezeigt, ebenso `npm run sim` und `npm run tune`).
+  - KI v0 legt eine Base nur, wenn es sich lohnt (HP-Gewinn gegen Schildverlust, wie die v1-Bewertung,
+    `baseSwapGain` in `src/ai/heuristic.ts`); vorher ersetzte sie jede Base, auch gesunde, und als
+    Fortsetzung von v1/Suche nahm sie das für beide Spieler an. Spielstärke gleich (v1 neu gegen alt 50,4 %,
+    6912 Spiele). Dabei gefunden: Handlimit-Abwurf von v0 gab nie eine Wahl zurück (Punkte negativ), selten
+    (≈ 1/7000 Spiele), behoben. Messungen und Regel in `docs/AI.md`.
+  - Such-KI „letzte Chance“ (`src/ai/search.ts`): verliert in der Main Phase selbst die beste Option im
+    Schnitt, dann alle Optionen, bis 64 Stichproben, Simulation über zwei Runden (Abbruch nach 24 ohne
+    Ausweg). Prüfstellung „Base für den letzten Schild, vielleicht der Pilot zum Sieg“: Schwer 16/30 → 30/30,
+    Sehr schwer 25/30 → 29/30; Test in `tests/ai/search.test.ts`. Kosten +33 % Rechenzeit bei Suche-Läufen,
+    Stärke gleich. Leicht/Normal finden solche Auswege nicht. Details `docs/AI.md`.
 - Beobachtung: Shining Gundam (M01, meistgespielt) gewinnt bei v1 nur ~40 %; die Karten sind korrekt (Partie
   per `npm run game` geprüft), die KI spielt das Special-Move-Timing schlecht (v0 wirft z. B. Master Asia ab).
 
@@ -206,7 +226,8 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   sendet `Cross-Origin-Resource-Policy: same-site` (kein Einbinden von fremden Seiten). Bilder nicht ins Repo
   und nicht frei auf Pages (Pages ist öffentlich).
 - `gh` ist nicht installiert; GitHub-Oberfläche über Claude in Chrome (Nutzer angemeldet als `somecoder3`).
-  Auf dem aktuellen Rechner (Projekte unter `D:\programming`, 16. Nov.) Node v24.21, früher v26; Python vorhanden.
+  Zwei Rechner: zu Hause Projekte unter `D:\programming` (Node v24.21), Arbeitsrechner unter `E:\programming`
+  (Node v26.13); auf beiden Python 3.11. Nach dem Wechsel: `git pull`, `npm ci`, ggf. `npm run images`.
 
 ## Konventionen
 
@@ -214,4 +235,4 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Entscheidungen im selben Commit nachtragen, Veraltetes korrigieren.
 - Abhängigkeiten exakt pinnen und gegen die Registry prüfen; keine Version unter 2 Wochen Alter
   (auch GitHub Actions, per Commit-SHA).
-- Unter Windows mit Python-Pfaden `D:/...` statt `/d/...`.
+- Unter Windows mit Python-Pfaden `D:/...` bzw. `E:/...` statt `/d/...` (je nach Rechner).

@@ -10,6 +10,8 @@ import type { Policy } from "./types";
 
 /** Score of "do nothing more" in the main phase; options below it are never chosen. */
 const END_MAIN = 10;
+/** A Base is only deployed if that gains at least this much (see Ctx.baseSwapGain). */
+const MIN_BASE_GAIN = 0.5;
 
 const HARMFUL = new Set(["rest", "damage", "destroy", "bounce", "toDeck", "exile"]);
 const BENEFICIAL = new Set(["ready", "recover", "grant", "toHand"]);
@@ -36,7 +38,8 @@ export class HeuristicPolicy implements Policy {
       case "action":
         return best(options, (o) => ctx.actionScore(o)) ?? options[0]!;
       case "discard":
-        return best(options, (o) => (o.type === "discard" ? -ctx.keepValue(o.card) : -Infinity))!;
+        // The card least worth keeping; scores must be positive for best().
+        return best(options, (o) => (o.type === "discard" ? 1000 - ctx.keepValue(o.card) : 0)) ?? options[0]!;
       case "effect":
         return ctx.effect(decision);
     }
@@ -158,9 +161,11 @@ class Ctx {
         return 90 + pilot.level * 10 + (link ? 30 : 0) + this.unitValue(o.unit) * 0.5;
       }
       case "deployBase": {
+        const gain = this.baseSwapGain(o.card);
+        if (gain < MIN_BASE_GAIN) return -1;
         const current = me.base[0];
         const exBase = current === undefined || this.card(current).type === "EX BASE";
-        return exBase ? 85 : 15;
+        return exBase ? 85 : 15 + gain;
       }
       case "playCommand":
         return 80 + this.card(o.card).level * 5;
@@ -178,6 +183,42 @@ class Ctx {
       default:
         return 0;
     }
+  }
+
+  /** Shields a Base's 【Deploy】 moves to the hand ("Add 1 of your Shields to your hand"). */
+  shieldsToHand(card: CardId): number {
+    let n = 0;
+    for (const { effect, program } of this.card(card).script.compiled) {
+      if (effect.kind !== "trigger" || effect.on !== "deploy") continue;
+      for (const instr of program) if (instr.op === "shieldToHand") n += instr.n;
+    }
+    return n;
+  }
+
+  /**
+   * What deploying this Base is worth, in the units of the v1 evaluation (evaluate.ts): 0.8 per Base HP,
+   * the i-th remaining Shield 2 + 4/i, a card in the hand 2. A Shield that 【Deploy】 moves to the hand
+   * costs its value but brings a card, so 4/i; the fresh Base gains its HP over what the old one has left.
+   * Other effects of the new Base (tokens, activated effects …) add a little.
+   */
+  baseSwapGain(card: CardId): number {
+    const me = this.s.players[this.me];
+    const current = me.base[0];
+    const oldHp = current === undefined ? 0 : Math.max(0, this.hpLeft(current));
+    let gain = 0.8 * (this.card(card).hp - oldHp);
+    const shields = me.shields.length;
+    const moved = Math.min(this.shieldsToHand(card), shields);
+    for (let i = 0; i < moved; i++) gain -= 4 / (shields - i);
+    const other = this.card(card).script.compiled.filter(
+      ({ effect, program }) =>
+        effect.kind !== "burst" &&
+        !(
+          effect.kind === "trigger" &&
+          effect.on === "deploy" &&
+          program.every((i) => i.op === "shieldToHand")
+        ),
+    ).length;
+    return gain + other;
   }
 
   links(unit: CardId, pilot: CardId): boolean {

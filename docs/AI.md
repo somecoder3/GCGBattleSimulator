@@ -51,6 +51,20 @@ Hebel: eine bessere Fortsetzungspolitik (z. B. v1 für die eigenen Entscheidunge
 neu abstimmen, wenn die Suche sie nutzt (`npm run tune` mit `search`), echte Baumsuche über
 Makro-Aktionen (ganzer Zug als Plan).
 
+**Letzte Chance (17. Nov.):** Verliert in einer Main-Phase-Entscheidung selbst die beste Option im
+Durchschnitt der Stichproben, sucht die Suche weiter, bevor sie aufgibt: alle Optionen (bis 16) statt der 6
+besten nach v1, bis zu 64 Stichproben (Abbruch, sobald eine Option besser als „verloren“ steht, oder nach
+24 ohne jeden Ausweg) und Simulation über **zwei** Runden, damit „überlebt eine Runde durch einen Burst“ nicht
+als offene Stellung zählt. Prüfstellung (Gegner gewinnt sicher im nächsten Zug; eigene volle 6-HP-Base, ein
+Schild, Gundam + Base auf der Hand; die Base nimmt den Schild auf die Hand, ist er Amuro Ray, gewinnt Gundam
+sofort): Base gelegt vorher Schwer 16/30, Sehr schwer 25/30, jetzt **30/30** bzw. **29/30**, unabhängig davon,
+ob der Schild wirklich Amuro ist (die KI kennt ihn nicht). Gemessen in der Stellung: Base 9,5 % Sieg,
+Main Phase beenden 0 % Sieg, aber 14 % „überlebt eine Runde“ (über zwei Runden 0 %). Leicht und Normal
+erkennen solche Auswege nicht (v1 ersetzt verdeckte Karten durch Platzhalter). Kosten: Suche – v1 auf den
+Top-8-Meta-Decks 110 statt 83 s für 864 Spiele (+33 %), Spielstärke gleich (50,8 % gegen 50,8 % ohne).
+Hinweis: Suche – v1 lag in diesem Lauf bei 50,8 % (47,5–54,1 %, 864 Spiele), in M7 bei 54,3 % (800 Spiele);
+die Intervalle überlappen.
+
 **Schwierigkeitsgrade im Spiel** (`DIFFICULTIES` in `src/ai/registry.ts`): Leicht = v0, Normal = v1,
 Schwer = Suche (Standard), Sehr schwer = Suche stark.
 
@@ -100,8 +114,7 @@ beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (
 - **Wert einer Unit:** AP + verbleibende HP + Lv./2, Zuschläge für Keywords und Pilot.
 - **Mulligan:** behalten bei mindestens zwei Units bis Lv. 3 (oder einer und einer Karte bis Lv. 2).
 - **Main Phase** (Reihenfolge ergibt sich aus den Punkten): tödlicher Angriff › Units einsetzen (höheres
-  Lv. zuerst) › Pilot setzen (Link bevorzugt; Commands mit 【Pilot】 nur bei Link) › Base, wenn nur die EX Base
-  liegt › Commands › Activate-Effekte › Angriff auf eine geruhte Unit, die zerstört wird und die eigene
+  Lv. zuerst) › Pilot setzen (Link bevorzugt; Commands mit 【Pilot】 nur bei Link) › Base (siehe unten) › Commands › Activate-Effekte › Angriff auf eine geruhte Unit, die zerstört wird und die eigene
   überlebt › Spieler angreifen (außer ein aktiver <Blocker> würde die Unit ohne Verlust zerstören) ›
   Tausch, wenn die gegnerische Unit mehr wert ist.
 - **Blocken:** immer bei tödlichem Angriff; sonst wenn der Blocker überlebt oder einen wertvolleren Angreifer
@@ -111,6 +124,16 @@ beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (
   mit dem Ziel geschieht (Schaden, Zerstörung, Ruhen … = schaden; AP+, Bereitmachen, Erholen … = helfen) und
   wählt danach gegnerische bzw. eigene Karten, bei Schaden bevorzugt solche, die dadurch zerstört werden.
   Überzahl und Abwerfen trifft die schwächste Karte, „Look at the top“ nimmt die beste.
+- **Base legen (17. Nov.):** nur, wenn es sich in den Einheiten der v1-Bewertung lohnt: 0,8 × (HP der neuen
+  Base − verbleibende HP der alten), minus 4/i für jeden Schild, den 【Deploy】 auf die Hand nimmt (der i-te
+  verbleibende Schild ist 2 + 4/i wert, die Karte dafür 2), plus 1 je weiterem Effekt der neuen Base;
+  getauscht ab 0,5. Vorher legte v0 jede Base, sobald nichts Wichtigeres anstand, auch über eine
+  unbeschädigte. Eine angeschlagene Base wird ersetzt, eine gesunde nicht nur für „Schild gegen Karte“; bei
+  2 Schilden lohnt die EX Base (3 → 6 HP) nicht mehr. Entscheidet in den acht Prüfstellungen wie v1.
+  Spielstärke unverändert: neue v0 gegen alte 50,7 % (2304 Spiele), v1 mit neuer gegen v1 mit alter v0 als
+  Fortsetzung 50,4 % (49,3–51,6 %, 6912 Spiele, Top-8-Meta).
+- **Handlimit-Abwurf (Fehler bis 17. Nov.):** Die Punktzahl war negativ, `best()` nimmt nur positive; v0
+  lieferte keine Wahl, der Runner zählte das Spiel als Fehler (selten: etwa 1 von 7000 Spielen).
 
 Werte, die sich in der Sicht nicht berechnen lassen (ein Dauereffekt prüft verdeckte Karten), fallen auf
 die aufgedruckten Werte zurück.
