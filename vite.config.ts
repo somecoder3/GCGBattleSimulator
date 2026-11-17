@@ -42,5 +42,9 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
+    // Several tests play hundreds of games. The GitHub runner (2 cores, all test files in parallel) is
+    // 2–3× slower than a desktop: the 1000-game fuzz test took 5.8 s there (2.4 s locally) and hit the
+    // default limit of 5 s.
+    testTimeout: 30_000,
   },
 });

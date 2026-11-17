@@ -160,6 +160,9 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
     GPU-Frage des Nutzers: Engine auf GPU lohnt nicht (verzweigter Code); ein gelerntes Bewertungsnetz
     (Inferenz per WebGPU/ONNX) wäre ein eigenes Forschungsprojekt; „kleine Hebel“ (kürzere Simulationen,
     gemeinsame Ergebnisse) vom Nutzer zurückgestellt.
+  - CI-Lauf #10/#11 rot: Fuzz-Test (1000 Spiele) brauchte auf dem GitHub-Runner 5,8 s (lokal 2,4 s) und
+    lief ins Vitest-Standardlimit von 5 s. Jetzt `testTimeout: 30_000` in `vite.config.ts`. Simulationslastige
+    Tests sind auf dem Runner 2–3× langsamer als am Desktop; neue Tests nicht knapp an Grenzen bauen.
 - Beobachtung: Shining Gundam (M01, meistgespielt) gewinnt bei v1 nur ~40 %; die Karten sind korrekt (Partie
   per `npm run game` geprüft), die KI spielt das Special-Move-Timing schlecht (v0 wirft z. B. Master Asia ab).
 
