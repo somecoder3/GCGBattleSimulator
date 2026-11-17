@@ -172,6 +172,11 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   (`canStart`), „Then“ bleibt in der Bedingung (Q175/Q233). 239 Tests; Fuzz ohne Fehler; v1 Meta 310 ms/Spiel.
   - Falle: `git worktree remove --force` nach Junctions löschte `node_modules`/`gcgdb` (siehe oben); PDFs
     ohne Bibliothek: Streams mit `zlib` entpacken (Skript im Scratchpad, Text als `( … )Tj`).
+- **KI-Mulligan neu (17. Nov., Nutzerwunsch):** `src/ai/mulligan.ts`, Regel `units` = behalten nur mit
+  ≥ 2 Units bis Lv.4 (vorher `basic`: Unit bis Lv.3 oder zwei Karten bis Lv.4). Aus einer Studie mit
+  18 432 behaltenen Händen abgeleitet, im direkten Vergleich v1 gegen v1 **51,4 %** (50,9–51,9 %, 36 864
+  Spiele); Mulligans 2 % → 43 %. Regel pro KI-Platz wählbar (`SimJob.mulligans`, `makePolicy(…, mulligan)`),
+  Werkzeug `npm run mulligan`. Details `docs/AI.md` „Mulligan“.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles

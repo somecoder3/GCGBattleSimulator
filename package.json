@@ -25,7 +25,8 @@
     "meta": "tsx tools/meta-snapshot.ts",
     "game": "tsx tools/game-log.ts",
     "icons": "tsx tools/icons.ts",
-    "tune": "tsx tools/tune.ts"
+    "tune": "tsx tools/tune.ts",
+    "mulligan": "tsx tools/mulligan.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

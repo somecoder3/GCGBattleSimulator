@@ -4,6 +4,7 @@ import type { Engine } from "../engine/engine";
 import { DEFAULT_WEIGHTS, type Weights } from "./evaluate";
 import { HeuristicPolicy } from "./heuristic";
 import { LookaheadPolicy } from "./lookahead";
+import { withMulligan, type MulliganRule } from "./mulligan";
 import type { Knowledge } from "./opponent";
 import { RandomPolicy } from "./random";
 import { SearchPolicy } from "./search";
@@ -52,6 +53,19 @@ export function makePolicy(
   weights?: Partial<Weights>,
   /** What the search AI knows: its own list and the decks the opponent may play. */
   knowledge: Knowledge = {},
+  /** Another mulligan rule than the default (for comparison; not for the random AI). */
+  mulligan?: MulliganRule,
+): Policy {
+  const policy = basePolicy(name, engine, seed, weights, knowledge);
+  return mulligan && name !== "random" ? withMulligan(policy, engine, mulligan) : policy;
+}
+
+function basePolicy(
+  name: AiName,
+  engine: Engine,
+  seed: number,
+  weights: Partial<Weights> | undefined,
+  knowledge: Knowledge,
 ): Policy {
   const w = weights ? { ...DEFAULT_WEIGHTS, ...weights } : DEFAULT_WEIGHTS;
   switch (name) {

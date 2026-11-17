@@ -6,6 +6,7 @@ import type { Instr } from "../effects/compile";
 import type { Engine } from "../engine/engine";
 import type { Action, CardId, Decision, GameState, PlayerId } from "../engine/types";
 import { HIDDEN } from "../engine/view";
+import { DEFAULT_MULLIGAN, keepHand } from "./mulligan";
 import type { Policy } from "./types";
 
 /** Score of "do nothing more" in the main phase; options below it are never chosen. */
@@ -131,12 +132,7 @@ class Ctx {
   }
 
   mulligan(options: Action[]): Action {
-    const hand = this.s.players[this.me].hand.filter((id) => this.known(id));
-    // Keep a hand that can do something in the first turns: a Unit up to Lv.3 or two cards up to Lv.4.
-    const level = (id: CardId) => this.card(id).level;
-    const keep =
-      hand.some((id) => this.card(id).type === "UNIT" && level(id) <= 3) ||
-      hand.filter((id) => level(id) <= 4).length >= 2;
+    const keep = keepHand(this.engine, this.s, this.me, DEFAULT_MULLIGAN); // src/ai/mulligan.ts
     return options.find((o) => o.type === (keep ? "keepHand" : "redraw"))!;
   }
 

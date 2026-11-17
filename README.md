@@ -46,6 +46,7 @@ npm run images -- --download          # fehlende Bilder langsam von gundam-gcg.c
 | `npm run meta`     | Aktuelle Turnierdecks von Limitless laden (`-- --report`)   |
 | `npm run game`     | Eine KI-Partie als Log, z. B. `-- M01 M02 3`                |
 | `npm run tune`     | Gewichte der KI v1 per Selbstspiel abstimmen (`docs/AI.md`) |
+| `npm run mulligan` | Mulligan-Regeln der KI messen (`docs/AI.md`)                |
 
 Aufbau der Regel-Engine: [docs/ENGINE.md](docs/ENGINE.md), Karteneffekte: [docs/EFFECTS.md](docs/EFFECTS.md),
 KI und Stärkemessungen: [docs/AI.md](docs/AI.md), Meta-Decks: [docs/META.md](docs/META.md), offizielle

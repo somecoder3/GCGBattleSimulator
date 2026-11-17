@@ -128,7 +128,7 @@ Feste Regeln mit einer einfachen Bewertung, **ohne Vorausschau**. Jede Option be
 beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (kein eigener Zufall).
 
 - **Wert einer Unit:** AP + verbleibende HP + Lv./2, Zuschläge für Keywords und Pilot.
-- **Mulligan:** behalten bei mindestens zwei Units bis Lv. 3 (oder einer und einer Karte bis Lv. 2).
+- **Mulligan:** siehe Abschnitt „Mulligan“ (gilt für alle KIs).
 - **Main Phase** (Reihenfolge ergibt sich aus den Punkten): tödlicher Angriff › Units einsetzen (höheres
   Lv. zuerst) › Pilot setzen (Link bevorzugt; Commands mit 【Pilot】 nur bei Link) › Base (siehe unten) › Commands › Activate-Effekte › Angriff auf eine geruhte Unit, die zerstört wird und die eigene
   überlebt › Spieler angreifen (außer ein aktiver <Blocker> würde die Unit ohne Verlust zerstören) ›
@@ -156,6 +156,41 @@ die aufgedruckten Werte zurück.
 
 Schwächen von v0: keine Vorausschau, keine Planung des Ressourcen-Einsatzes, spielt Commands sofort,
 hält keine Blocker zurück, Support kaum genutzt.
+
+## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
+
+Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen
+sie einmal neu (Regel `units`, seit 17. Nov. 2026). Vorher (`basic`, M5): behalten bei einer Unit bis Lv.3
+oder zwei beliebigen Karten bis Lv.4.
+
+**Herleitung:** v1 spielte die Top-8-Meta-Decks gegen sich selbst und behielt jede Hand (9216 Spiele,
+18 432 Starthände). Ein Mulligan bringt im Mittel eine zufällige Hand, also die mittlere Siegquote des Decks
+auf derselben Position; neu ziehen lohnt sich genau bei Händen darunter. Stärkstes Merkmal ist die Zahl der
+Units bis Lv.4 (0: −5,8 Punkte, 1: −1,6, 2: +0,7, 3: +2,5, 4: +5,0); Piloten, Commands und Karten ab Lv.6
+erklären wenig zusätzlich. Geschätzter Gewinn pro Spiel gegenüber „immer behalten“:
+
+| Regel                            | Mulligans  | Gewinn (Hälften der Daten) |
+| -------------------------------- | ---------- | -------------------------- |
+| `basic` (alt)                    | 1,6 %      | +0,11 Pkt. (0,09 / 0,14)   |
+| ≥ 1 Unit bis Lv.4                | 11,4 %     | +0,66                      |
+| ≥ 1 Unit bis Lv.4 und ≥ 2 Units  | 16,6 %     | +0,83                      |
+| **≥ 2 Units bis Lv.4 (`units`)** | **42,5 %** | **+1,14 (1,14 / 1,14)**    |
+| ≥ 2 Units bis Lv.4 und ≥ 3 Units | 51,2 %     | +1,09                      |
+| ≥ 3 Units bis Lv.4               | 73,5 %     | +0,92 (1,21 / 0,63)        |
+| Punktwert (Units gewichtet)      | 35–45 %    | +1,02 bis +1,03            |
+
+**Bestätigung im direkten Vergleich** (v1 gegen v1, Meta Top 8, neuer Seed, Sitze und Startspieler
+ausgeglichen): `units` gegen `basic` **51,4 %** (50,9–51,9 %, 36 864 Spiele); Mulligans 43,2 % gegen 2,0 %.
+
+Folge: Simulationsergebnisse vor und nach dem 17. Nov. sind nicht direkt vergleichbar. Grenzen: gemessen
+mit v1 und den Meta-Decks; Decks mit vielen teuren Units ziehen öfter neu, als ein Mensch es täte, ein
+Mulligan nach Deckliste (z. B. Schlüsselkarten) gibt es nicht.
+
+```bash
+npm run mulligan -- --games 9216               # Studie: alle Hände behalten, Merkmale auswerten
+npm run mulligan -- --load                     # dieselbe Auswertung aus build/mulligan-hands.json
+npm run mulligan -- --compare units,basic      # direkter Vergleich zweier Regeln
+```
 
 ## Stärke (Starter-Decks ST01–ST04, alle Paarungen, beide Sitze und Startspieler ausgeglichen)
 
