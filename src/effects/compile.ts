@@ -66,6 +66,13 @@ export function compileSegments(segments: Step[][]): Program {
           mark(end); // the pick's option labels are resolved below
           break;
         }
+        case "segments":
+          for (const part of step.list) {
+            const end = newLabel();
+            steps(part, end);
+            mark(end);
+          }
+          break;
         default:
           emit({ ...step, fail } as Instr, "fail");
       }

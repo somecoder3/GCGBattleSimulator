@@ -79,7 +79,8 @@ export function checkInvariants(engine: Engine, s: GameState, expectedCards?: [n
   if (s.result && s.pending) errors.push("game over but a decision is pending");
   if (!s.result && !s.pending) errors.push("game is stuck without a decision");
   if (s.pending && s.frames.length > 0 !== (s.pending.kind === "effect")) {
-    if (s.pending.kind === "effect") errors.push("effect decision without a running effect");
+    if (s.pending.kind === "effect" && s.pending.prompt !== "order")
+      errors.push("effect decision without a running effect");
   }
   if (s.pending && s.pending.options.length === 0) errors.push("decision without options");
   return errors;

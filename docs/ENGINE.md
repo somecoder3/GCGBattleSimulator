@@ -96,7 +96,8 @@ Angriffszwang, Pilot als Unit (`CardInstance.asUnit`, `CardLib.unitForm`), Zug-M
 
 ## Offen
 
-- Reihenfolge gleichzeitiger eigener Trigger wählbar machen (10-1-6-5); zurzeit in Auftrittsreihenfolge.
+- (erledigt in M9) Reihenfolge gleichzeitiger eigener Trigger wählbar (10-1-6-5, FAQ Q107); in Szenario-Tests
+  per `GameState.orderChoice = false` aus.
 - Rund die Hälfte der Karten hat noch nicht verstandene Zeilen (`npm run coverage`).
 
 ## Prüfung

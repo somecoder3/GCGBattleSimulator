@@ -305,6 +305,7 @@ class Ctx {
       case "may":
         return options.find((o) => o.type === "yes") ?? options[0]!;
       case "option":
+      case "order":
         return options[0]!;
       case "overflow":
         return best(options, (o) => (o.type === "target" ? 1000 - this.unitValue(o.card) : 0)) ?? options[0]!;

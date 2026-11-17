@@ -152,6 +152,8 @@ export function scenario(spec: ScenarioSpec = {}): GameState {
     queue: [],
     pending: null,
     result: null,
+    // Simultaneous effects resolve in order without a question (tested on its own in tests/cards/qa.test.ts).
+    orderChoice: false,
   };
   const add = (owner: PlayerId, no: string, zone: ZoneName | "pilot", list?: CardId[]) => {
     const card: CardInstance = {

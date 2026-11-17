@@ -119,7 +119,7 @@ export type Cond =
   /** The opponent discarded because of one of the controller's effects this turn. */
   | { opponentDiscarded: true }
   /** How the effect's card was destroyed ("with battle damage", "by one of your (Neo Zeon) card's effects"). */
-  | { destroyedBy: { kind?: "battle" | "effect"; traits?: string[] } }
+  | { destroyedBy: { kind?: "battle" | "effect" | "effectDamage"; traits?: string[] } }
   /** The current attack targets a Unit (not a player). */
   | { battleVsUnit: true }
   /** The effect's card is attacking and was blocked by a Unit matching the filter. */
@@ -373,7 +373,12 @@ export type Step =
   /** "You may …" — asks the controller (or the opponent); the steps run only on yes ("If you do"). */
   | { op: "may"; do: Step[]; by?: "opponent" }
   /** The controller picks one of several alternatives (e.g. which token to deploy). */
-  | { op: "choice"; options: { label: string; do: Step[] }[] };
+  | { op: "choice"; options: { label: string; do: Step[] }[] }
+  /**
+   * Parts after "Then," inside a condition ("If …, draw 1. Then, discard 1."): each part is its own
+   * segment (a failed choice skips only its part), all under the condition.
+   */
+  | { op: "segments"; list: Step[][] };
 
 export type TriggerKind =
   | "deploy"

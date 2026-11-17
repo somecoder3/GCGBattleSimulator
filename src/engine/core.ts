@@ -312,9 +312,10 @@ export function matches(
   }
   if (
     f.hasDestroyed &&
-    !effectsOf(c, id).some(
-      (e) => e.compiled.effect.kind === "trigger" && e.compiled.effect.on === "destroyed",
-    )
+    !effectsOf(c, id).some(({ compiled: { effect: e } }) => {
+      // "【During Pair】【Destroyed】" of an unpaired Unit doesn't count (FAQ Q222).
+      return e.kind === "trigger" && e.on === "destroyed" && (!e.cond || evalCond(c, e.cond, id, card.owner));
+    })
   )
     return false;
   if (f.pairedWith) {
@@ -335,7 +336,8 @@ export function matches(
   const inPlay = card.zone === "battle" || card.zone === "base";
   if (f.hpMin !== undefined || f.hpMax !== undefined) {
     // HP is the card's value; damage counters don't lower it (5-5-2).
-    const hp = inPlay ? hpOf(c, id) : d.hp;
+    // The current HP: a damaged card counts with its HP minus the damage (FAQ Q96).
+    const hp = inPlay ? hpOf(c, id) - card.damage : d.hp;
     if (f.hpMin !== undefined && hp < f.hpMin) return false;
     if (f.hpMax !== undefined && hp > f.hpMax) return false;
   }
@@ -392,8 +394,9 @@ export function candidates(c: Ctx, f: Filter, controller: PlayerId, source: Card
     return out.filter((id) => def(c, id).level === min);
   }
   if (filter.lowestHp && out.length) {
-    const min = Math.min(...out.map((id) => hpOf(c, id)));
-    return out.filter((id) => hpOf(c, id) === min);
+    const left = (id: CardId) => hpOf(c, id) - inst(c, id).damage; // current HP (FAQ Q224)
+    const min = Math.min(...out.map(left));
+    return out.filter((id) => left(id) === min);
   }
   if (filter.highestLv && out.length) {
     const max = Math.max(...out.map((id) => def(c, id).level));
@@ -748,7 +751,7 @@ export function pay(c: Ctx, p: PlayerId, cost: number): boolean {
   c.ev.push({ t: "pay", player: p, cards: used });
   const ex = used.filter((id) => inst(c, id).token);
   for (const id of ex) moveTo(c, id, "removal");
-  for (const id of ex) raiseForPlayer(c, "exResourceExiled", p, id);
+  if (ex.length) raiseForPlayer(c, "exResourceExiled", p, ex[0]!); // once per payment (FAQ Q485)
   return ex.length > 0;
 }
 
@@ -929,6 +932,14 @@ export function breakShields(c: Ctx, p: PlayerId, n: number): void {
 }
 
 /** Damage to the first card of a shield area: the Base if there is one, else the top Shield (13-1-2-2). */
+/** An enemy Unit's effect damage (e.g. <Breach>) destroyed a shield area card of `p` (FAQ Q361, Q497). */
+function shieldAreaKilledByEffect(c: Ctx, by: CardId, p: PlayerId): void {
+  const unit = inst(c, by);
+  if (unit.zone !== "battle" || unit.owner === p) return;
+  raise(c, "destroysShieldAreaCard", by, null, undefined, true);
+  raiseForPlayer(c, "allyDestroys", unit.owner, by, { victim: "shieldArea", damageKind: "effect" });
+}
+
 export function damageShieldArea(
   c: Ctx,
   p: PlayerId,
@@ -936,6 +947,14 @@ export function damageShieldArea(
   kind: "battle" | "effect",
   source: CardId | null = null,
 ): void {
+  // "Your shield area cards can't receive damage from enemy Units …" also against their effects (FAQ Q151).
+  if (
+    kind === "effect" &&
+    source !== null &&
+    def(c, source).type.startsWith("UNIT") &&
+    shieldAreaProtected(c, p, source)
+  )
+    return;
   if (kind === "effect" && source !== null && inst(c, source).owner !== p) {
     for (const f of c.s.modifiers) {
       if (f.target === -1 && f.player === p && f.flag === "reduceShieldAreaEffectDamage")
@@ -945,7 +964,10 @@ export function damageShieldArea(
   if (amount <= 0) return;
   const player = c.s.players[p];
   if (player.base.length) dealDamage(c, player.base[0]!, amount, kind, source);
-  else if (player.shields.length) breakShields(c, p, 1);
+  else if (player.shields.length) {
+    breakShields(c, p, 1);
+    if (kind === "effect" && source !== null) shieldAreaKilledByEffect(c, source, p);
+  }
 }
 
 export function endGame(c: Ctx, losers: PlayerId[], reason: GameEndReason): void {
@@ -976,11 +998,6 @@ export function rulesManagement(c: Ctx): void {
     }
     if (!doomed.length) return;
     for (const id of doomed) raise(c, "destroyed", id);
-    for (const id of doomed) {
-      const card = inst(c, id);
-      if (card.lastDamage === "effect" && card.zone === "battle")
-        raiseForPlayer(c, "allyDestroyedByEffect", card.owner, id);
-    }
     // "When this Unit destroys an enemy Unit with damage" also counts this Unit's effect damage (ST12-001).
     for (const id of doomed) {
       const card = inst(c, id);
@@ -990,6 +1007,13 @@ export function rulesManagement(c: Ctx): void {
         raise(c, "destroysUnit", by, id, undefined, true);
         raiseForPlayer(c, "allyDestroys", inst(c, by).owner, by, { victim: "unit", damageKind: "effect" });
       }
+    }
+    for (const p of [0, 1] as const) {
+      const base = c.s.players[p].base[0];
+      if (base === undefined || !doomed.includes(base)) continue;
+      const card = inst(c, base);
+      if (card.lastDamage === "effect" && card.lastSource !== undefined)
+        shieldAreaKilledByEffect(c, card.lastSource, p);
     }
     // "When an enemy Unit is destroyed with effect damage while this Unit is attacking" (ST13-012).
     const attacker = c.s.battle?.attacker;
@@ -1007,7 +1031,10 @@ export function rulesManagement(c: Ctx): void {
     }
     for (const id of doomed) {
       const card = inst(c, id);
-      const how = { kind: card.lastDamage ?? "effect", by: card.lastSource } as const;
+      const how = {
+        kind: card.lastDamage === "battle" ? "battle" : "effectDamage",
+        by: card.lastSource,
+      } as const;
       c.ev.push({ t: "destroyed", card: id });
       toTrash(c, id, "destroyed");
       if (card.zone === "trash") {

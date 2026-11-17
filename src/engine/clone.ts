@@ -51,5 +51,6 @@ export function cloneState(s: GameState): GameState {
     queue: s.queue.map((t) => ({ ...t, ref: { ...t.ref } })),
     pending: s.pending ? { ...s.pending, options: s.pending.options.slice() } : null,
     result: s.result ? { ...s.result } : null,
+    ...(s.orderChoice !== undefined ? { orderChoice: s.orderChoice } : {}),
   };
 }

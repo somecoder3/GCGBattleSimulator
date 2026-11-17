@@ -50,7 +50,8 @@ export interface CardInstance {
   /** An EX Resource was used to pay for this card ("if you use an EX Resource to play this card"). */
   paidEx?: boolean;
   /** How it was last destroyed (kept in the trash for 【Destroyed】 conditions). */
-  destroyedBy?: { kind: "battle" | "effect"; by?: string };
+  /** "effect": a "destroy" effect; "effectDamage": damage from an effect (FAQ Q368). */
+  destroyedBy?: { kind: "battle" | "effect" | "effectDamage"; by?: string };
   /** Where it was deployed from ("if you deploy this Unit from your trash"). */
   from?: "hand" | "trash" | "other";
 }
@@ -101,6 +102,8 @@ export type EffectOrigin = "trigger" | "command" | "burst" | "activated";
 
 /** A triggered effect waiting to be resolved (10-1-6). */
 export interface PendingTrigger {
+  /** Chosen by its controller to resolve next (FAQ Q107); no new question. */
+  ordered?: boolean;
   ref: EffectRef;
   /** The card whose effect it is (for granted effects: the Unit). */
   source: CardId;
@@ -193,7 +196,7 @@ export interface Decision {
   options: Action[];
   /** For effect decisions: the card whose effect asks, and what is asked. */
   source?: CardId;
-  prompt?: "target" | "may" | "option" | "discard" | "lookPick" | "lookTop" | "burst" | "overflow";
+  prompt?: "target" | "may" | "option" | "discard" | "lookPick" | "lookTop" | "burst" | "overflow" | "order";
 }
 
 export interface GameOptions {
@@ -243,6 +246,8 @@ export interface GameState {
   queue: PendingTrigger[];
   pending: Decision | null;
   result: GameResult | null;
+  /** false: simultaneous own effects resolve in the order they occurred, without asking (scenario tests). */
+  orderChoice?: boolean;
 }
 
 export type GameEvent =

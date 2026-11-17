@@ -31,7 +31,8 @@ Kartentext (GCGDB)  ──parse.ts──▶  Effekt-DSL (dsl.ts)  ──compile.
 
 - Ereignisse lösen Trigger aus (`raise`); neue Trigger kommen nach dem laufenden Effekt **vor** die
   wartenden (10-1-6-7), Bursts zuerst (10-1-6-8), dann die des aktiven Spielers (10-1-6-6). Innerhalb eines
-  Spielers in Reihenfolge des Auftretens (eine Wahl der Reihenfolge, 10-1-6-5, gibt es noch nicht).
+  Spielers in Reihenfolge des Auftretens; stehen mehrere eigene Trigger vorn, wählt ihr Spieler, welcher
+  zuerst läuft (10-1-6-5, FAQ Q107, Entscheidung `prompt: "order"`).
 - 【Destroyed】-Bedingungen (z. B. „During Pair“) werden am letzten Ort geprüft (13-2-8-2-1).
 - Ein Schild mit 【Burst】 wartet in `limbo`, bis sein Besitzer entscheidet; danach in den Trash.
   Commands liegen beim Auflösen ebenfalls in `limbo` (3-4-3).
@@ -189,8 +190,8 @@ Die neuen Satzmuster gelten für alle Sets; dadurch sind 91 weitere Karten volls
 
 ## Auslegungen
 
-- „with N or less HP“ meint den HP-Wert der Karte (inkl. Pilot und Effekte), nicht die verbleibenden HP;
-  Schaden senkt HP nicht (5-5-2).
+- „with N or less HP“ und „lowest HP“ meinen die aktuellen HP (HP minus Schaden, FAQ Q96, Q224).
+- Weitere Regelfälle aus dem offiziellen Q&A und der Karten-FAQ: `docs/QA.md`.
 - Effekt-Einsatz ohne Kosten (Full Frontal: „deploy … from your hand“) zahlt keine Kosten; nur „Pay its
   cost“ würde zahlen.
 - ST04-009 Miguel's Ginn: 【During Pair】【Destroyed】 zählt nur, wenn beim Zerstören ein Pilot dabei war.
@@ -205,8 +206,8 @@ Die neuen Satzmuster gelten für alle Sets; dadurch sind 91 weitere Karten volls
 - „Discard N. If you do, …“ und „You may discard N. If you do, …“ nur mit mindestens N Handkarten.
 - „Choose 1 of your Units and 1 enemy Unit“: Fehlt eine der beiden, entfällt der Effekt.
 - Geht eine Unit unter das Deck, geht ihr Pilot mit (wie bei Trash und Hand, 3-3-6).
-- „Begin a battle … and only perform the damage step“: gleichzeitiger Kampfschaden, keine Angriffs- oder
-  Block-Effekte, kein First Strike.
+- „Begin a battle … and only perform the damage step“: ein Kampf ohne Angriffs-, Block- und Action Step; die
+  erste Unit gilt als Angreifer (First Strike, „battling“-Effekte), Kills zählen als Kampf-Kills (FAQ Q345–Q347).
 - Mehrere Freedom Gundam lösen beim Pairen jeweils aus (je Karte einmal pro Zug).
 - „Choose N of your (rested) Resources. Set it/them as active.“ wird ohne Auswahl zu `readyResource`:
   Ressourcen sind gleichwertig, die Wahl einer aktiven Ressource würde den Effekt nur verschenken
@@ -223,8 +224,8 @@ Die neuen Satzmuster gelten für alle Sets; dadurch sind 91 weitere Karten volls
   „If there are 2 or more enemy players“ sind nie erfüllt. Bei „All players each look at the top card …“
   (EB01-023, EB01-078) nimmt der Gegner eine passende Karte immer und lässt sonst alles oben.
 - „While this Unit has 1 HP“ (GD03-061) meint die verbleibenden HP (HP minus Schaden).
-- „destroys an enemy shield area card with damage“ zählt wie „with battle damage“ (nur der Angriff, nicht
-  <Breach>).
+- „destroys an enemy shield area card with damage“ zählt auch <Breach> und anderen Effektschaden dieser Unit
+  (FAQ Q361).
 - Ersatzwahlen „you may rest this Unit/Base instead“ (GD03-079, GD05-124) werden automatisch genutzt, wenn
   die Ersatzkarte aktiv ist.
 - „At the end of a turn where you have paid ① or more for one of your other (Militia)/(Dianna Counter) Units'

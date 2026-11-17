@@ -164,7 +164,15 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 - Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: Rest von **M9**: Q&A-Regelfälle, Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
+- **M9 Q&A (17. Nov.):** Rules Q&A (112) und Karten-FAQ aller Sets (437 Einträge, per `curl` von
+  `…/rules/faqs/list.php?series=<Set>` geladen, Texte nicht im Repo) gegen die Engine gelesen; 19 Abweichungen
+  behoben, Liste in **`docs/QA.md`**, Tests `tests/cards/qa.test.ts`. Wichtigste: aktuelle HP bei „with N or
+  less HP“ (Q96, vorher bewusst anders ausgelegt), Reihenfolge eigener Trigger wählbar (Q107, neue Entscheidung
+  `prompt: "order"`, in Szenario-Tests `orderChoice: false`), Spielbarkeit nur mit allen Zielen/Optionen
+  (`canStart`), „Then“ bleibt in der Bedingung (Q175/Q233). 239 Tests; Fuzz ohne Fehler; v1 Meta 310 ms/Spiel.
+  - Falle: `git worktree remove --force` nach Junctions löschte `node_modules`/`gcgdb` (siehe oben); PDFs
+    ohne Bibliothek: Streams mit `zlib` entpacken (Skript im Scratchpad, Text als `( … )Tj`).
+- Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
   vom Nutzer gepusht, 16. Nov.; der Push aus der Sitzung war vom Sicherheitsfilter abgelehnt worden).
@@ -244,8 +252,8 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 - **Effekte (M2):** Daten-DSL statt Code pro Karte, damit laufende Effekte serialisierbar bleiben. Der
   Übersetzer erkennt nur sichere Muster; nicht verstandene Zeilen wirken nicht und machen die Karte
   `partial` (für die Meta-Auswahl später sichtbar). Pilot-Zeilen außer 【Burst】 gehen an die Unit.
-  Triggerreihenfolge: Burst, dann aktiver Spieler, dann Standby, je in Auftrittsreihenfolge (eigene Wahl der
-  Reihenfolge, 10-1-6-5, noch nicht). Weitere Auslegungen in `docs/EFFECTS.md`.
+  Triggerreihenfolge: Burst, dann aktiver Spieler, dann Standby; gleichzeitige eigene Trigger in gewählter
+  Reihenfolge (10-1-6-5, seit M9). Weitere Auslegungen in `docs/EFFECTS.md`, Regelfälle in `docs/QA.md`.
 
 - **Engine (M1):** Zustand ist reines JSON und wird von `apply` direkt geändert (schnell); Entscheidungen
   enthalten alle legalen Optionen, `apply` prüft dagegen. Rollback = Replay von Seed + Decks + Aktionen.

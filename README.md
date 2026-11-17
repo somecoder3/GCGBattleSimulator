@@ -48,7 +48,8 @@ npm run images -- --download          # fehlende Bilder langsam von gundam-gcg.c
 | `npm run tune`     | Gewichte der KI v1 per Selbstspiel abstimmen (`docs/AI.md`) |
 
 Aufbau der Regel-Engine: [docs/ENGINE.md](docs/ENGINE.md), Karteneffekte: [docs/EFFECTS.md](docs/EFFECTS.md),
-KI und Stärkemessungen: [docs/AI.md](docs/AI.md), Meta-Decks: [docs/META.md](docs/META.md).
+KI und Stärkemessungen: [docs/AI.md](docs/AI.md), Meta-Decks: [docs/META.md](docs/META.md), offizielle
+Regelfälle: [docs/QA.md](docs/QA.md).
 
 ## Simulieren
 

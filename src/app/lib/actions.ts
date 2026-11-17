@@ -120,6 +120,8 @@ export function decisionText(decision: Decision, name: (id: CardId) => string): 
           return `${src}: Karte oben aufs Deck legen (der Rest kommt unter das Deck).`;
         case "overflow":
           return "Kein Platz: eine Unit in den Trash legen.";
+        case "order":
+          return "Mehrere eigene Effekte lösen gleichzeitig aus: welcher zuerst?";
         default:
           return `${src}: Ziel wählen.`;
       }

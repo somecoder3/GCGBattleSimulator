@@ -51,7 +51,8 @@ import {
   toTrash,
   type Ctx,
 } from "./core";
-import { answer, effectDraw, startEffect, stepFrame } from "./interpret";
+import { answer, canStart, chooseOrder, effectDraw, startEffect, stepFrame } from "./interpret";
+import type { Program } from "../effects/compile";
 import { seedRng, shuffle } from "./rng";
 import type { Effect } from "../effects/dsl";
 import type {
@@ -127,7 +128,13 @@ export class Engine {
     }
     const c = newCtx(this.lib, state);
     state.pending = null;
-    if (decision.kind === "effect") answer(c, action);
+    if (decision.kind === "effect" && decision.prompt === "order") {
+      // The chosen effect goes first (10-1-6-5, FAQ Q107).
+      if (action.type !== "option") throw new Error("order needs an option");
+      const [t] = state.queue.splice(action.index, 1);
+      t!.ordered = true;
+      state.queue.unshift(t!);
+    } else if (decision.kind === "effect") answer(c, action);
     else perform(c, decision, action);
     run(c);
     return c.ev;
@@ -187,8 +194,9 @@ function run(c: Ctx): void {
     if (++guard > 100_000) throw new Error(`engine loop in step ${c.s.step}`);
     flushTriggers(c);
     if (c.s.frames.length) stepFrame(c);
-    else if (c.s.queue.length) startEffect(c, c.s.queue.shift()!);
-    else STEPS[c.s.step](c);
+    else if (c.s.queue.length) {
+      if (!chooseOrder(c)) startEffect(c, c.s.queue.shift()!);
+    } else STEPS[c.s.step](c);
     rulesManagement(c);
   }
   flushTriggers(c);
@@ -445,18 +453,8 @@ function commandIndex(card: EngineCard, timing: "main" | "action"): number {
 }
 
 /** 10-1-8-1-1: a Command (or activated effect) that must choose a target can't be used without one. */
-function firstTargetAvailable(
-  c: Ctx,
-  program: { op: string; filter?: unknown; may?: boolean }[],
-  p: PlayerId,
-  source: CardId,
-): boolean {
-  const first = program.find((i) => i.op !== "jumpUnless") as
-    { op: string; filter?: unknown; may?: boolean; exact?: boolean; count?: number } | undefined;
-  if (!first || first.op !== "choose" || first.may) return true;
-  // A cost that chooses several cards ("Exile 4 cards in your trash") needs all of them.
-  const needed = first.exact ? (first.count ?? 1) : 1;
-  return candidates(c, first.filter as never, p, source).length >= needed;
+function firstTargetAvailable(c: Ctx, program: Program, p: PlayerId, source: CardId): boolean {
+  return canStart(c, program, 0, p, source);
 }
 
 function commandOptions(c: Ctx, p: PlayerId, timing: "main" | "action"): Action[] {
@@ -561,27 +559,36 @@ function onlyUnitsOnDeploy(c: Ctx, id: CardId): boolean {
 }
 
 function attackTargets(c: Ctx, unit: CardId, p: PlayerId): Action[] {
-  // "Enemy Units other than Link Units choose this rested Unit as their attack target if possible" (GD05-086).
-  // "Enemy Units choose this rested Unit as their attack target if possible" (tauntAll: also Link Units).
-  const taunting = c.s.players[other(p)].battle.filter(
-    (id) =>
-      inst(c, id).rested &&
-      !hasFlag(c, id, "cantBeAttacked") &&
-      (hasFlag(c, id, "tauntAll") || (!isLinked(c, unit) && hasFlag(c, id, "taunt"))),
+  // A Unit that may attack only thanks to "on the turn it is deployed, it may attack a rested enemy Unit"
+  // can't use "may choose an active enemy Unit" (FAQ Q355).
+  const deployOnly = onlyUnitsOnDeploy(c, unit);
+  const active = deployOnly ? [] : (flagFilters(c, unit, "attackActive") ?? []);
+  const attackable = c.s.players[other(p)].battle.filter(
+    (target) =>
+      !hasFlag(c, target, "cantBeAttacked") &&
+      // 8-2-1: rested enemy Units; some effects allow active ones (e.g. ST02-001).
+      (inst(c, target).rested || active.some((f) => matches(c, target, f, p, unit))),
   );
-  if (taunting.length) return taunting.map((target): Action => ({ type: "attack", unit, target }));
+  // "Enemy Units (other than Link Units) choose this rested Unit as their attack target if possible"
+  // (taunt, tauntAll). One chosen by an effect ("during this turn …", GD04-107) comes first (FAQ Q289).
+  const taunts = (id: CardId) =>
+    hasFlag(c, id, "tauntAll") || (!isLinked(c, unit) && hasFlag(c, id, "taunt"));
+  const taunting = attackable.filter(taunts);
+  if (taunting.length) {
+    const byEffect = taunting.filter((id) =>
+      c.s.modifiers.some((m) => m.target === id && m.flag === "tauntAll"),
+    );
+    return (byEffect.length ? byEffect : taunting).map((target): Action => ({
+      type: "attack",
+      unit,
+      target,
+    }));
+  }
   const options: Action[] = [];
-  if (!hasFlag(c, unit, "cantAttackPlayer") && !onlyUnitsOnDeploy(c, unit)) {
+  if (!hasFlag(c, unit, "cantAttackPlayer") && !deployOnly) {
     options.push({ type: "attack", unit, target: "player" });
   }
-  const active = flagFilters(c, unit, "attackActive") ?? [];
-  for (const target of c.s.players[other(p)].battle) {
-    const t = inst(c, target);
-    if (hasFlag(c, target, "cantBeAttacked")) continue;
-    // 8-2-1: rested enemy Units; some effects allow active ones (e.g. ST02-001).
-    if (t.rested || active.some((f) => matches(c, target, f, p, unit)))
-      options.push({ type: "attack", unit, target });
-  }
+  for (const target of attackable) options.push({ type: "attack", unit, target });
   return options;
 }
 
@@ -871,11 +878,17 @@ function raiseIfDestroyed(c: Ctx, attacker: CardId, target: CardId): void {
  */
 function battleHit(c: Ctx, from: CardId, target: CardId, ap: number): void {
   // "Battle damage this Unit would receive is dealt to that Unit instead" (GD04-087, GD06-018).
-  const redirect = c.s.modifiers.find((m) => m.target === target && m.flag === "redirectBattleDamage");
-  const to =
-    redirect?.link !== undefined && ["battle", "base"].includes(inst(c, redirect.link).zone)
-      ? redirect.link
-      : target;
+  // Each redirection applies once, so two Units pointing at each other end where it started (FAQ Q494).
+  let to = target;
+  const used = new Set<object>();
+  for (;;) {
+    const redirect = c.s.modifiers.find(
+      (m) => m.target === to && m.flag === "redirectBattleDamage" && !used.has(m),
+    );
+    if (redirect?.link === undefined || !["battle", "base"].includes(inst(c, redirect.link).zone)) break;
+    used.add(redirect);
+    to = redirect.link;
+  }
   const before = inst(c, to).damage;
   dealDamage(c, to, battleDamageTo(c, to, from, ap), "battle", from);
   if (inst(c, to).damage <= before || inst(c, to).zone !== "battle") return;

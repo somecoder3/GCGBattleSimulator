@@ -730,7 +730,8 @@ export const MANUAL: Record<string, ManualScript> = {
           [
             {
               op: "choose",
-              filter: { side: "friendly", zone: "trash", types: ["UNIT"], anyKeyword: true },
+              // Either player's trash (FAQ Q277).
+              filter: { zone: "trash", types: ["UNIT"], anyKeyword: true },
               count: 1,
               as: "t",
             },

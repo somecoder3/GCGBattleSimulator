@@ -480,6 +480,8 @@ function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
       op: "choose",
       filter: { ...np.filter, zone: "trash", side: "enemy" },
       count: np.count === "all" ? 1 : np.count,
+      // All of them or none (FAQ Q556).
+      exact: true,
       by: "opponent",
       as,
     });
@@ -1398,7 +1400,12 @@ export function parseBody(body: string, ctx: ParseContext, it: string | null = n
     }
     if (/^Then, /.test(s)) {
       const segment: Step[] = [];
-      segments.push(segment);
+      if (segments.includes(scope.steps)) segments.push(segment);
+      else {
+        // Inside "If …," or "You may …. If you do, …": the next part stays under it (FAQ Q175, Q233).
+        const before = scope.steps.splice(0);
+        scope.steps.push({ op: "segments", list: [before, segment] });
+      }
       scope.steps = segment;
       s = s.replace(/^Then, (.)/, (_, c: string) => c.toUpperCase());
       lastMay = null;
@@ -2570,7 +2577,8 @@ function eventTrigger(
     });
   }
   if ((m = rest.match(/^when this Unit destroys an enemy shield area card with damage, (.+)$/i))) {
-    return make("destroysShieldAreaCard", m[1]!);
+    // Also with <Breach> or other effect damage of this Unit (FAQ Q361).
+    return make("destroysShieldAreaCard", m[1]!, { anyDamage: true });
   }
   if (
     (m = rest.match(
@@ -2804,10 +2812,24 @@ export function parseCard(card: CardDef, ctx: ParseContext): ParsedCard {
   return result;
 }
 
+/**
+ * "Set this Unit as active" alone: when the Unit is already active, nothing happens and 【Once per Turn】 is
+ * not used up (FAQ Q197), so such triggers only start when it is rested.
+ */
+function onlyWhenRested(effect: Effect): void {
+  if (effect.kind !== "trigger") return;
+  const only =
+    effect.segments.length === 1 && effect.segments[0]!.length === 1 ? effect.segments[0]![0] : null;
+  if (only?.op !== "ready" || only.t !== "self") return;
+  const rested: Cond = { selfIs: { rested: true } };
+  effect.cond = effect.cond ? { and: [effect.cond, rested] } : rested;
+}
+
 function parseCardLines(card: CardDef, ctx: ParseContext, result: ParsedCard): void {
   for (const line of cleanLines(card.text)) {
     try {
       for (const effect of parseLine(line, card, ctx)) {
+        onlyWhenRested(effect);
         // Costs of playing the card itself stay with it.
         const own =
           effect.kind === "burst" ||

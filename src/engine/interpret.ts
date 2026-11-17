@@ -2,7 +2,7 @@
 // needs a player's choice (then c.s.pending is set and `answer` continues it) or until it ends.
 
 import type { Cond, Filter, KeywordName, Ref } from "../effects/dsl";
-import type { Instr } from "../effects/compile";
+import type { Instr, Program } from "../effects/compile";
 import {
   EX_BASE,
   LIMITS,
@@ -27,6 +27,7 @@ import {
   flagFilters,
   hasFlag,
   inst,
+  keywordsOf,
   mark,
   raiseForPlayer,
   matches,
@@ -89,9 +90,92 @@ function restReplacement(c: Ctx, frame: Frame, id: CardId): CardId {
   return id;
 }
 
+/** Paying ① or more inside a friendly Unit's effect ("Pay its cost to deploy it", FAQ Q286). */
+function paidForEffect(c: Ctx, frame: Frame, amount: number): void {
+  const me = frame.controller;
+  if (amount <= 0 || !def(c, frame.source).type.startsWith("UNIT") || inst(c, frame.source).owner !== me)
+    return;
+  const key = `paidFx:${me}:${c.s.turn}`;
+  c.s.marks[key] = (c.s.marks[key] ?? 0) + amount;
+  c.s.marks[`lastPaid:${me}`] = amount;
+  mark(c, "paidFxNo", me, def(c, frame.source).no);
+  raiseForPlayer(c, "effectPaid", me, frame.source);
+}
+
 function enemyBlocksReady(c: Ctx, p: PlayerId): boolean {
   const enemy = c.s.players[other(p)];
   return [...enemy.battle, ...enemy.base].some((id) => hasFlag(c, id, "noEnemyReady"));
+}
+
+/**
+ * Can an effect program start here (10-1-8-1-1, FAQ Q104)? Its first choices need targets — all of them when
+ * several are chosen together ("Choose 1 of your Units and 1 enemy Unit", FAQ Q153); a condition at the
+ * start that fails means it does nothing (FAQ Q245); of "choose 1 of the following effects" at least one
+ * must be possible (FAQ Q401).
+ */
+export function canStart(c: Ctx, program: Program, start: number, p: PlayerId, source: CardId): boolean {
+  let pc = start;
+  let skipped = false;
+  for (let guard = 0; guard < 64; guard++) {
+    const instr = program[pc];
+    if (!instr) return !skipped;
+    if (instr.op === "jumpUnless") {
+      // Conditions about the effect's own variables can't be known before it starts.
+      if (
+        !("varGone" in instr.cond || "varMatches" in instr.cond || "varCount" in instr.cond) &&
+        !evalCond(c, instr.cond, source, p)
+      ) {
+        pc = instr.to;
+        skipped = true;
+        continue;
+      }
+      pc++;
+      continue;
+    }
+    if (instr.op === "jump") {
+      pc = instr.to;
+      continue;
+    }
+    if (instr.op === "pick") return instr.options.some((o) => canStart(c, program, o.to, p, source));
+    if (instr.op !== "choose") return true;
+    if (instr.may) return true;
+    // A cost that chooses several cards ("Exile 4 cards in your trash") needs all of them.
+    const needed = instr.exact ? (instr.count ?? 1) : 1;
+    const pool = candidates(c, instr.filter, p, source);
+    if (pool.length < needed) return false;
+    const following = program[pc + 1];
+    if (following?.op !== "choose" || following.may) return true;
+    pc++;
+  }
+  return true;
+}
+
+/**
+ * When the next waiting effects belong to the same player, that player chooses which one resolves first
+ * (10-1-6-5, FAQ Q107). Returns true when a decision is pending.
+ */
+export function chooseOrder(c: Ctx): boolean {
+  const queue = c.s.queue;
+  const first = queue[0]!;
+  if (c.s.orderChoice === false || first.ordered || first.origin !== "trigger") return false;
+  let n = 1;
+  while (n < queue.length && queue[n]!.controller === first.controller && queue[n]!.origin === "trigger") n++;
+  if (n < 2) return false;
+  const group = queue.slice(0, n);
+  const key = (t: PendingTrigger) => `${t.source}:${t.ref.no}:${t.ref.idx}:${t.ref.granted}`;
+  if (group.every((t) => key(t) === key(first))) return false;
+  const names = group.map((t) => def(c, t.source).name);
+  c.s.pending = {
+    player: first.controller,
+    kind: "effect",
+    prompt: "order",
+    source: first.source,
+    options: group.map((t, index): Action => {
+      const same = names.filter((x, i) => x === names[index] && i < index).length;
+      return { type: "option", index, label: same ? `${names[index]} (${same + 1})` : names[index]! };
+    }),
+  };
+  return true;
 }
 
 export function startEffect(c: Ctx, t: PendingTrigger): void {
@@ -274,12 +358,19 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     case "ask":
       ask(c, frame, { prompt: "may", options: YES_NO }, instr.by === "opponent" ? other(me) : me);
       return;
-    case "pick":
-      ask(c, frame, {
-        prompt: "option",
-        options: instr.options.map((o, index): Action => ({ type: "option", index, label: o.label })),
-      });
+    case "pick": {
+      // Only alternatives whose targets can be chosen (FAQ Q401).
+      const program = effectByRef(c, frame.ref).program;
+      const possible = instr.options
+        .map((o, index): Action => ({ type: "option", index, label: o.label }))
+        .filter((_, i) => canStart(c, program, instr.options[i]!.to, me, frame.source));
+      if (!possible.length) {
+        frame.pc = program.length;
+        return;
+      }
+      ask(c, frame, { prompt: "option", options: possible });
       return;
+    }
 
     case "choose": {
       const as = instr.as ?? "it";
@@ -471,6 +562,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         return;
       }
       pay(c, me, instr.n);
+      paidForEffect(c, frame, instr.n);
       return next();
     case "damageByCount": {
       const amount = candidates(c, instr.count, me, frame.source).length;
@@ -772,6 +864,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         const cost = costOf(c, me, id);
         if (activeResources(c, me).length < cost) return next();
         pay(c, me, cost);
+        paidForEffect(c, frame, cost);
         frame.vars.__paid = [id];
       }
       if (def(c, id).type === "BASE") deployBase(c, id);
@@ -840,16 +933,35 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       runCommand(c, frame.source, me, "action");
       return;
     case "fight": {
-      // Both deal battle damage at the same time; nothing but the damage step happens.
+      // A battle with only the damage step (FAQ Q345): the first Unit counts as the attacker, so <First
+      // Strike> and "battling" effects work (Q346); kills count as battle kills for both (Q347); then the
+      // battle ends (Q446).
       const a = targets(c, frame, instr.a)[0];
       const b = targets(c, frame, instr.b)[0];
       if (a === undefined || b === undefined) return next();
-      const apA = apOf(c, a);
-      const apB = apOf(c, b);
-      dealDamage(c, b, apA, "battle", a);
-      dealDamage(c, a, apB, "battle", b);
-      const victim = inst(c, b);
-      if (victim.damage > 0 && victim.damage >= hpOf(c, b)) raise(c, "destroysUnit", a, b);
+      const outer = c.s.battle;
+      c.s.battle = { attacker: a, attackerOwner: inst(c, a).owner, target: b, blocked: false };
+      const hit = (from: CardId, to: CardId) => dealDamage(c, to, apOf(c, from), "battle", from);
+      const dead = (id: CardId) => inst(c, id).damage > 0 && inst(c, id).damage >= hpOf(c, id);
+      if (keywordsOf(c, a).firstStrike) {
+        hit(a, b);
+        if (dead(b)) raise(c, "destroysUnit", a, b);
+        rulesManagement(c);
+        if (inst(c, b).zone === "battle" && inst(c, a).zone === "battle") {
+          hit(b, a);
+          if (dead(a)) raise(c, "destroysUnit", b, a);
+        }
+      } else {
+        const apA = apOf(c, a);
+        const apB = apOf(c, b);
+        dealDamage(c, b, apA, "battle", a);
+        dealDamage(c, a, apB, "battle", b);
+        if (dead(b)) raise(c, "destroysUnit", a, b);
+        if (dead(a)) raise(c, "destroysUnit", b, a);
+      }
+      rulesManagement(c);
+      c.s.battle = outer;
+      if (!outer) c.s.modifiers = c.s.modifiers.filter((m) => m.until !== "battle");
       return next();
     }
     case "deploySelfAsUnit": {
