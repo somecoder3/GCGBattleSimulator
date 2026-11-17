@@ -60,10 +60,13 @@ export interface ScriptEntry {
 export function effectsOf(c: Ctx, id: CardId): ScriptEntry[] {
   const card = inst(c, id);
   const d = def(c, id);
-  const out: ScriptEntry[] = d.script.compiled.map((compiled, idx) => ({
-    ref: { no: d.no, idx, granted: false },
-    compiled,
-  }));
+  const out: ScriptEntry[] = [];
+  d.script.compiled.forEach((compiled, idx) => {
+    // Dormant effects only work when gained by another card ("It gains the following effect …").
+    const e = compiled.effect;
+    if ((e.kind === "trigger" || e.kind === "static") && e.dormant) return;
+    out.push({ ref: { no: d.no, idx, granted: false }, compiled });
+  });
   if (card.pilot !== null && card.zone === "battle") {
     const p = def(c, card.pilot);
     p.script.compiledGranted.forEach((compiled, idx) =>
@@ -269,6 +272,11 @@ export function matches(
   }
   if (f.anyOf && !f.anyOf.some((g) => matches(c, id, g, controller, source, true))) return false;
   if (f.notKeyword && keywordsOf(c, id)[f.notKeyword]) return false;
+  if (f.paidEx !== undefined && !!card.paidEx !== f.paidEx) return false;
+  if (f.linkPilot && !d.link.some((l) => "pilotName" in l && l.pilotName.includes(f.linkPilot!)))
+    return false;
+  if (f.lvMaxPlus && d.level > candidates(c, f.lvMaxPlus.count, controller, source).length + f.lvMaxPlus.plus)
+    return false;
   if (f.side === "friendly" && card.owner !== controller) return false;
   if (f.side === "enemy" && card.owner === controller) return false;
   if (f.types && !f.types.includes(d.type)) return false;
@@ -393,7 +401,7 @@ function defMatches(d: EngineCard, f: Filter): boolean {
 }
 
 /** Was a mark "<kind>:<player>:<card no>" set this turn for a card matching the filter? */
-function markedThisTurn(c: Ctx, kind: string, p: PlayerId, f: Filter): boolean {
+export function markedThisTurn(c: Ctx, kind: string, p: PlayerId, f: Filter): boolean {
   const prefix = `${kind}:${p}:`;
   for (const [key, turn] of Object.entries(c.s.marks)) {
     if (turn !== c.s.turn || !key.startsWith(prefix)) continue;
@@ -403,7 +411,7 @@ function markedThisTurn(c: Ctx, kind: string, p: PlayerId, f: Filter): boolean {
   return false;
 }
 
-export function mark(c: Ctx, kind: "cmd" | "ownDestroyed", p: PlayerId, no: string): void {
+export function mark(c: Ctx, kind: "cmd" | "ownDestroyed" | "paidFxNo", p: PlayerId, no: string): void {
   c.s.marks[`${kind}:${p}:${no}`] = c.s.turn;
 }
 
@@ -487,6 +495,26 @@ export function evalCond(c: Ctx, cond: Cond, source: CardId, controller: PlayerI
     return paid >= cond.paidForEffects;
   }
   if ("opponentDiscarded" in cond) return c.s.marks[`oppDiscarded:${controller}`] === c.s.turn;
+  if ("battleVsUnit" in cond) return c.s.battle !== null && c.s.battle.target !== "player";
+  if ("blockedBy" in cond) {
+    const b = c.s.battle;
+    return (
+      b !== null &&
+      b.attacker === source &&
+      b.blocked &&
+      b.target !== "player" &&
+      matches(c, b.target, cond.blockedBy, controller, source)
+    );
+  }
+  if ("hpLeft" in cond) {
+    const left = hpOf(c, source) - inst(c, source).damage;
+    return (
+      (cond.hpLeft.min === undefined || left >= cond.hpLeft.min) &&
+      (cond.hpLeft.max === undefined || left <= cond.hpLeft.max)
+    );
+  }
+  if ("deployedThisTurn" in cond) return markedThisTurn(c, "deployed", controller, cond.deployedThisTurn);
+  if ("paidForEffectOf" in cond) return markedThisTurn(c, "paidFxNo", controller, cond.paidForEffectOf);
   if ("destroyedBy" in cond) {
     const how = inst(c, source).destroyedBy;
     if (!how) return false;
@@ -503,7 +531,7 @@ export function evalCond(c: Ctx, cond: Cond, source: CardId, controller: PlayerI
   if ("pairedKill" in cond) return c.s.marks[`pairedKill:${controller}`] === c.s.turn;
   if ("ownDestroyedBy" in cond) return markedThisTurn(c, "ownDestroyed", controller, cond.ownDestroyedBy);
   // Conditions about the running effect's variables are evaluated by the interpreter.
-  if ("varGone" in cond || "varMatches" in cond) return false;
+  if ("varGone" in cond || "varMatches" in cond || "varCount" in cond || "topCard" in cond) return false;
   if ("selfPaired" in cond) return (inst(c, source).pilot !== null) === cond.selfPaired;
   if ("nameInTrash" in cond) {
     return c.s.players[controller].trash.some((id) => def(c, id).name.includes(cond.nameInTrash));
@@ -631,6 +659,7 @@ export function toHand(c: Ctx, id: CardId): void {
 /** Destroys a Unit or Base by an effect or damage: 【Destroyed】 triggers see it in its last location (13-2-8). */
 export function destroy(c: Ctx, id: CardId, by: CardId | null = null): void {
   raise(c, "destroyed", id);
+  if (inst(c, id).zone === "battle") raiseForPlayer(c, "allyDestroyedByEffect", inst(c, id).owner, id);
   c.ev.push({ t: "destroyed", card: id });
   toTrash(c, id, "destroyed");
   const card = inst(c, id);
@@ -708,16 +737,19 @@ export function pay(c: Ctx, p: PlayerId, cost: number): boolean {
   c.ev.push({ t: "pay", player: p, cards: used });
   const ex = used.filter((id) => inst(c, id).token);
   for (const id of ex) moveTo(c, id, "removal");
+  for (const id of ex) raiseForPlayer(c, "exResourceExiled", p, id);
   return ex.length > 0;
 }
 
-export function placeExResource(c: Ctx, p: PlayerId): void {
+export function placeExResource(c: Ctx, p: PlayerId, rested = false): void {
   const res = c.s.players[p].resources;
   const ex = res.filter((id) => inst(c, id).token).length;
   if (res.length >= LIMITS.resources || ex >= LIMITS.exResources) return;
   const card = createCard(c, EX_RESOURCE, p, "resources");
+  card.rested = rested;
   res.push(card.id);
   c.ev.push({ t: "exResource", player: p, card: card.id });
+  raiseForPlayer(c, "exResourcePlaced", p, card.id);
 }
 
 /** Puts a card into the battle area (deploy, 5-8) and raises its 【Deploy】 effects. The area must have room. */
@@ -726,8 +758,11 @@ export function enterBattle(c: Ctx, id: CardId, rested = false, asUnit?: { ap: n
   moveTo(c, id, "battle");
   const card = inst(c, id);
   card.from = from === "hand" || from === "trash" ? from : "other";
-  card.rested = rested;
   if (asUnit) card.asUnit = asUnit;
+  // "All Units that are Lv.3 or lower other than Unit tokens are deployed rested" (GD04-022).
+  card.rested =
+    rested || activeStatics(c).some((st) => st.effect.flag === "deployRested" && staticApplies(c, st, id));
+  c.s.marks[`deployed:${card.owner}:${card.no}`] = c.s.turn;
   c.ev.push({ t: "deploy", player: card.owner, card: id });
   raise(c, "deploy", id);
   const me = c.s.players[card.owner];
@@ -807,6 +842,9 @@ export function dealDamage(
   target.lastDamage = kind;
   if (source !== null) target.lastSource = source;
   else delete target.lastSource;
+  if (target.zone === "battle" || target.zone === "base") {
+    raiseForPlayer(c, "allyDamaged", target.owner, id, { damageKind: kind, fromEnemy });
+  }
   c.ev.push({ t: "damage", card: id, amount, kind });
 }
 
@@ -927,13 +965,20 @@ export function rulesManagement(c: Ctx): void {
     }
     if (!doomed.length) return;
     for (const id of doomed) raise(c, "destroyed", id);
+    for (const id of doomed) {
+      const card = inst(c, id);
+      if (card.lastDamage === "effect" && card.zone === "battle")
+        raiseForPlayer(c, "allyDestroyedByEffect", card.owner, id);
+    }
     // "When this Unit destroys an enemy Unit with damage" also counts this Unit's effect damage (ST12-001).
     for (const id of doomed) {
       const card = inst(c, id);
       const by = card.lastSource;
       if (card.lastDamage !== "effect" || by === undefined || card.zone !== "battle") continue;
-      if (inst(c, by).zone === "battle" && inst(c, by).owner !== card.owner)
+      if (inst(c, by).zone === "battle" && inst(c, by).owner !== card.owner) {
         raise(c, "destroysUnit", by, id, undefined, true);
+        raiseForPlayer(c, "allyDestroys", inst(c, by).owner, by, { victim: "unit", damageKind: "effect" });
+      }
     }
     // "When an enemy Unit is destroyed with effect damage while this Unit is attacking" (ST13-012).
     const attacker = c.s.battle?.attacker;
@@ -968,6 +1013,65 @@ export const onceKey = (source: CardId, ref: EffectRef) =>
   `${source}:${ref.no}:${ref.idx}${ref.granted ? "g" : ""}`;
 
 /** Raises the triggered effects of `kind` on a card (10-1-6). `pilot`: the Pilot for 【When Paired】. */
+/** Details of an event for the trigger checks. */
+export interface EventInfo {
+  victim?: "unit" | "shieldArea";
+  damageKind?: "battle" | "effect";
+  fromEnemy?: boolean;
+}
+
+/** Events about one of a player's cards ("when one of your Units …"): `filter` and `self` select it. */
+const ALLY_EVENTS: ReadonlySet<TriggerKind> = new Set([
+  "allyDeployed",
+  "allyPaired",
+  "allyLinked",
+  "allyDestroys",
+  "allyDamaged",
+  "allyRestedByEffect",
+  "allyDestroyedByEffect",
+  "unitAttacks",
+  "effectPaid",
+  "allyDealsBattleDamage",
+]);
+
+type TriggerEffect = Extract<Effect, { kind: "trigger" }>;
+
+/** Does a trigger of `kind` on card `id` (controlled by `controller`) fire for this event? */
+function triggerFits(
+  c: Ctx,
+  effect: TriggerEffect,
+  kind: TriggerKind,
+  id: CardId | null,
+  controller: PlayerId,
+  event: CardId | null,
+  pilot: CardId | undefined,
+  anyDamage: boolean,
+  info: EventInfo,
+): boolean {
+  if (anyDamage && !effect.anyDamage) return false;
+  if (effect.pilot && (pilot === undefined || !matches(c, pilot, effect.pilot, controller, id, true)))
+    return false;
+  if (ALLY_EVENTS.has(kind)) {
+    const isSelf = event === id;
+    const fits =
+      event !== null &&
+      !isSelf &&
+      effect.filter !== undefined &&
+      matches(c, event, effect.filter, controller, id, true);
+    if (!(isSelf && effect.self) && !fits) return false;
+  }
+  if (effect.eventFilter && (event === null || !matches(c, event, effect.eventFilter, controller, id, true)))
+    return false;
+  if (effect.victim && effect.victim !== "card" && effect.victim !== info.victim) return false;
+  if (effect.damageKind && effect.damageKind !== info.damageKind) return false;
+  if (effect.fromEnemy && !info.fromEnemy) return false;
+  if (effect.sourceFilter) {
+    const by = event === null ? undefined : inst(c, event).lastSource;
+    if (by === undefined || !matches(c, by, effect.sourceFilter, controller, id, true)) return false;
+  }
+  return true;
+}
+
 export function raise(
   c: Ctx,
   kind: TriggerKind,
@@ -976,26 +1080,44 @@ export function raise(
   pilot?: CardId,
   /** Only effects that also count effect damage ("destroys an enemy Unit with damage"). */
   anyDamage = false,
+  info: EventInfo = {},
 ): void {
   const controller = inst(c, id).owner;
   for (const { ref, compiled } of effectsOf(c, id)) {
     const effect = compiled.effect;
     if (effect.kind !== "trigger" || effect.on !== kind) continue;
-    if (anyDamage && !effect.anyDamage) continue;
-    if (effect.pilot && (pilot === undefined || !matches(c, pilot, effect.pilot, controller, id, true)))
-      continue;
-    if (kind === "allyDeployed" || kind === "allyPaired" || kind === "allyLinked") {
-      const isSelf = event === id;
-      const fits =
-        event !== null &&
-        !isSelf &&
-        effect.filter !== undefined &&
-        matches(c, event, effect.filter, controller, id, true);
-      if (!(isSelf && effect.self) && !fits) continue;
-    }
+    if (!triggerFits(c, effect, kind, id, controller, event, pilot, anyDamage, info)) continue;
     if (effect.cond && !evalCond(c, effect.cond, id, controller)) continue;
     if (effect.once && c.s.oncePerTurn[onceKey(id, ref)] === c.s.turn) continue;
     c.fresh.push({ ref, source: id, controller, event, origin: "trigger" });
+  }
+}
+
+/**
+ * Raises an event for all cards in play of player `p`, plus effects the player gained for a while ("During
+ * this turn, when one of your (Earth Federation) Units destroys …", GD04-002); those run with the event
+ * card as their source.
+ */
+export function raiseForPlayer(
+  c: Ctx,
+  kind: TriggerKind,
+  p: PlayerId,
+  event: CardId | null,
+  info: EventInfo = {},
+  pilot?: CardId,
+): void {
+  const me = c.s.players[p];
+  for (const id of [...me.battle, ...me.base]) raise(c, kind, id, event, pilot, false, info);
+  for (const m of c.s.modifiers) {
+    if (m.target !== -1 || m.player !== p || !m.effect) continue;
+    const effect = effectByRef(c, m.effect).effect;
+    if (effect.kind !== "trigger" || effect.on !== kind || event === null) continue;
+    if (!triggerFits(c, effect, kind, null, p, event, pilot, false, info)) continue;
+    if (effect.cond && !evalCond(c, effect.cond, event, p)) continue;
+    const key = `p${p}:${m.effect.no}:${m.effect.idx}`;
+    if (effect.once && c.s.oncePerTurn[key] === c.s.turn) continue;
+    if (effect.once) c.s.oncePerTurn[key] = c.s.turn;
+    c.fresh.push({ ref: m.effect, source: event, controller: p, event, origin: "trigger" });
   }
 }
 

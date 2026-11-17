@@ -8,7 +8,7 @@ export type Instr =
   | { op: "jumpUnless"; cond: Cond; to: number }
   | { op: "jump"; to: number }
   /** Yes/no question to the controller; "no" jumps to `to`. */
-  | { op: "ask"; to: number }
+  | { op: "ask"; to: number; by?: "opponent" }
   /** The controller picks one alternative and continues at its start. */
   | { op: "pick"; options: { label: string; to: number }[] };
 
@@ -45,7 +45,7 @@ export function compileSegments(segments: Step[][]): Program {
         }
         case "may": {
           const end = newLabel();
-          emit({ op: "ask", to: end }, "to");
+          emit({ op: "ask", to: end, ...(step.by ? { by: step.by } : {}) }, "to");
           steps(step.do, fail);
           mark(end);
           break;

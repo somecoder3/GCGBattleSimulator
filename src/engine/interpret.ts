@@ -1,13 +1,14 @@
 // Runs compiled card effects (effects/compile.ts). An effect is a Frame on c.s.frames; it runs until it
 // needs a player's choice (then c.s.pending is set and `answer` continues it) or until it ends.
 
-import type { Cond, Filter, Ref } from "../effects/dsl";
+import type { Cond, Filter, KeywordName, Ref } from "../effects/dsl";
 import type { Instr } from "../effects/compile";
 import {
   EX_BASE,
   LIMITS,
   activeResources,
   apOf,
+  battlingWith,
   breakShields,
   costOf,
   pay,
@@ -23,9 +24,11 @@ import {
   enterBattle,
   evalCond,
   hpOf,
+  flagFilters,
   hasFlag,
   inst,
   mark,
+  raiseForPlayer,
   matches,
   moveTo,
   onceKey,
@@ -59,6 +62,31 @@ export function effectDraw(c: Ctx, p: PlayerId, n: number): void {
   c.s.marks[`effectDraw:${p}`] = c.s.turn;
   const me = c.s.players[p];
   for (const id of [...me.battle, ...me.base]) raise(c, "effectDraw", id);
+}
+
+/**
+ * "When you rest your Base with one of your Units' effects, you may rest this Unit instead" (GD03-079) and
+ * "when you would rest a Unit with a friendly (League Militaire) Unit's effect, you may rest this Base
+ * instead" (GD05-124): used automatically when the replacement is active.
+ */
+function restReplacement(c: Ctx, frame: Frame, id: CardId): CardId {
+  const me = frame.controller;
+  const card = inst(c, id);
+  if (card.owner !== me || def(c, frame.source).type.startsWith("UNIT") === false) return id;
+  const mine = [...c.s.players[me].battle, ...c.s.players[me].base].filter(
+    (x) => x !== id && !inst(c, x).rested,
+  );
+  if (card.zone === "base") {
+    const unit = mine.find((x) => hasFlag(c, x, "restInsteadOfBase"));
+    if (unit !== undefined) return unit;
+  }
+  if (card.zone === "battle" && c.s.active === me) {
+    for (const x of mine) {
+      const filters = flagFilters(c, x, "baseRestsInstead");
+      if (filters?.some((f) => matches(c, frame.source, f, me, x, true))) return x;
+    }
+  }
+  return id;
 }
 
 function enemyBlocksReady(c: Ctx, p: PlayerId): boolean {
@@ -114,7 +142,15 @@ function targets(c: Ctx, frame: Frame, ref: Ref, zones: string[] = IN_PLAY): Car
         ? frame.event === null
           ? []
           : [frame.event]
-        : (frame.vars[ref] ?? []);
+        : ref === "eventOpponent"
+          ? frame.event === null || battlingWith(c, frame.event) === null
+            ? []
+            : [battlingWith(c, frame.event)!]
+          : ref === "eventSource"
+            ? frame.event !== null && inst(c, frame.event).lastSource !== undefined
+              ? [inst(c, frame.event).lastSource!]
+              : []
+            : (frame.vars[ref] ?? []);
   return ids.filter((id) => zones.includes(inst(c, id).zone));
 }
 
@@ -150,7 +186,17 @@ function offerChoice(c: Ctx, frame: Frame, prompt: Decision["prompt"], player?: 
 /** Conditions that look at the running effect's variables, then the general ones (core.evalCond). */
 function frameCond(c: Ctx, frame: Frame, cond: Cond): boolean {
   if ("and" in cond) return cond.and.every((x) => frameCond(c, frame, x));
+  if ("or" in cond) return cond.or.some((x) => frameCond(c, frame, x));
+  if ("not" in cond) return !frameCond(c, frame, cond.not);
   if ("varGone" in cond) return (frame.vars[cond.varGone] ?? []).some((id) => inst(c, id).zone !== "battle");
+  if ("varCount" in cond) return (frame.vars[cond.varCount.var] ?? []).length >= cond.varCount.min;
+  if ("topCard" in cond) {
+    const top = c.s.players[frame.controller].deck[0];
+    return (
+      top !== undefined &&
+      matches(c, top, { ...cond.topCard, zone: undefined }, frame.controller, frame.source, true)
+    );
+  }
   if ("varMatches" in cond) {
     return (frame.vars[cond.varMatches] ?? []).some((id) =>
       matches(c, id, cond.filter, frame.controller, frame.source, true),
@@ -164,7 +210,8 @@ function resolveFilter(c: Ctx, frame: Frame, f: Filter): Filter {
   if ((!f.lvMaxOf || f.lvMaxOf === "self") && (!f.apMaxOf || f.apMaxOf === "self")) return f;
   const out: Filter = { ...f };
   if (f.lvMaxOf && f.lvMaxOf !== "self") {
-    const ids = frame.vars[f.lvMaxOf] ?? [];
+    const ids =
+      f.lvMaxOf === "event" ? (frame.event === null ? [] : [frame.event]) : (frame.vars[f.lvMaxOf] ?? []);
     out.lvMax = ids.length ? Math.min(...ids.map((id) => def(c, id).level)) : -1;
     delete out.lvMaxOf;
   }
@@ -184,6 +231,7 @@ function runCommand(c: Ctx, card: CardId, controller: PlayerId, timing: "main" |
   );
   if (idx < 0) return;
   mark(c, "cmd", controller, d.no);
+  raiseForPlayer(c, "commandUsed", controller, card);
   startEffect(c, {
     ref: { no: inst(c, card).no, idx, granted: false },
     source: card,
@@ -224,7 +272,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       frame.pc = frameCond(c, frame, instr.cond) ? frame.pc + 1 : instr.to;
       return;
     case "ask":
-      ask(c, frame, { prompt: "may", options: YES_NO });
+      ask(c, frame, { prompt: "may", options: YES_NO }, instr.by === "opponent" ? other(me) : me);
       return;
     case "pick":
       ask(c, frame, {
@@ -237,10 +285,17 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       const as = instr.as ?? "it";
       const chosen = frame.vars[as] ?? [];
       const among = instr.among !== undefined ? (frame.vars[instr.among] ?? []) : null;
+      const names = instr.unique ? new Set(chosen.map((id) => def(c, id).name)) : null;
       const pool = candidates(c, resolveFilter(c, frame, instr.filter), me, frame.source).filter(
-        (id) => !chosen.includes(id) && (among === null || among.includes(id)),
+        (id) =>
+          !chosen.includes(id) &&
+          (among === null || among.includes(id)) &&
+          (names === null || !names.has(def(c, id).name)),
       );
-      const left = (instr.count ?? 1) - chosen.length;
+      const count = instr.countOf
+        ? candidates(c, instr.countOf, me, frame.source).length
+        : (instr.count ?? 1);
+      const left = count - chosen.length;
       // "You may choose 2 … from your trash. Exile them. If you do, …": the full number or nothing.
       // Once the first card is chosen, the rest must follow.
       const exact = !!instr.exact || (!!instr.may && !instr.upTo && (instr.count ?? 1) > 1);
@@ -270,14 +325,27 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       return;
 
     case "rest":
-      for (const id of targets(c, frame, instr.t)) rest(c, id);
+      for (const id of targets(c, frame, instr.t)) {
+        const card = inst(c, id);
+        if (card.rested) continue;
+        const instead = restReplacement(c, frame, id);
+        rest(c, instead);
+        if (inst(c, instead).zone === "battle") {
+          raiseForPlayer(c, "allyRestedByEffect", inst(c, instead).owner, instead, {
+            fromEnemy: inst(c, instead).owner !== me,
+          });
+        }
+      }
       return next();
     case "ready":
       for (const id of targets(c, frame, instr.t)) {
         // "Enemy Units can't be set as active by enemy effects" (GD06-037, on the other player's card).
         if (inst(c, id).owner === me && enemyBlocksReady(c, me)) continue;
         if (inst(c, id).zone === "resources" && inst(c, id).rested) c.s.marks[`readyRes:${me}`] = c.s.turn;
+        const wasRested = inst(c, id).rested;
         ready(c, id);
+        if (wasRested && !inst(c, id).rested && inst(c, id).zone === "battle")
+          raise(c, "readiedByEffect", id);
       }
       return next();
     case "damage":
@@ -327,6 +395,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         if (amount > 0) {
           card.damage -= amount;
           c.ev.push({ t: "recover", card: id, amount });
+          raise(c, "recovered", id);
         }
       }
       return next();
@@ -341,6 +410,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
           source: frame.source,
         });
         c.ev.push({ t: "modifier", card: id, ap: shielded ? 0 : (instr.ap ?? 0), hp: instr.hp ?? 0 });
+        if (!shielded && (instr.ap ?? 0) < 0 && inst(c, id).owner !== me) raise(c, "apReducedByEnemy", id);
       }
       return next();
     case "grant": {
@@ -381,7 +451,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     }
 
     case "draw":
-      effectDraw(c, me, instr.n);
+      effectDraw(c, instr.who === "opponent" ? other(me) : me, instr.n);
       if (instr.both) effectDraw(c, other(me), instr.n);
       return next();
     case "pilotTo": {
@@ -426,22 +496,24 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       return next();
     }
     case "discard": {
+      const who = instr.who === "opponent" ? other(me) : me;
       const left = frame.repeat ?? instr.n;
-      const hand = c.s.players[me].hand;
+      const hand = c.s.players[who].hand;
       if (left <= 0 || !hand.length) {
         delete frame.repeat;
         return next();
       }
+      if (who !== me) c.s.marks[`oppDiscarded:${me}`] = c.s.turn;
       frame.repeat = left;
       frame.choosing = { as: DISCARD, left: 1, optional: false, candidates: [...hand] };
-      offerChoice(c, frame, "discard");
+      offerChoice(c, frame, "discard", who);
       return;
     }
     case "shieldToHand":
       for (const id of c.s.players[me].shields.slice(0, instr.n)) toHand(c, id);
       return next();
     case "exResource":
-      for (let i = 0; i < instr.n; i++) placeExResource(c, me);
+      for (let i = 0; i < instr.n; i++) placeExResource(c, me, !!instr.rested);
       if (instr.both) for (let i = 0; i < instr.n; i++) placeExResource(c, other(me));
       return next();
     case "mill": {
@@ -460,18 +532,94 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       }
       return next();
     }
-    case "grantEffect":
-      for (const id of targets(c, frame, instr.t)) {
+    case "grantEffect": {
+      // The gained effect is stored in the script of the card whose effect this is (not the Unit of a Pilot).
+      const effect = { no: frame.ref.no, idx: instr.idx, granted: false };
+      if (instr.t === "you") {
         c.s.modifiers.push({
-          target: id,
+          target: -1,
+          player: me,
           ap: 0,
           hp: 0,
-          effect: { no: inst(c, frame.source).no, idx: instr.idx, granted: false },
+          effect,
           until: instr.until,
           source: frame.source,
         });
+        return next();
+      }
+      for (const id of targets(c, frame, instr.t)) {
+        c.s.modifiers.push({ target: id, ap: 0, hp: 0, effect, until: instr.until, source: frame.source });
       }
       return next();
+    }
+    case "damageByAp":
+      for (const id of targets(c, frame, instr.t)) {
+        const amount = Math.floor(apOf(c, frame.source) / instr.per);
+        if (amount > 0) dealDamage(c, id, amount, "effect", frame.source);
+      }
+      return next();
+    case "modByPaid": {
+      const amount = c.s.marks[`lastPaid:${me}`] ?? 0;
+      for (const id of targets(c, frame, instr.t)) {
+        c.s.modifiers.push({ target: id, ap: amount, hp: 0, until: instr.until, source: frame.source });
+        c.ev.push({ t: "modifier", card: id, ap: amount, hp: 0 });
+      }
+      return next();
+    }
+    case "takeTop": {
+      const top = c.s.players[me].deck[0];
+      if (top !== undefined) {
+        c.ev.push({ t: "reveal", player: me, cards: [top] });
+        toHand(c, top);
+        if (instr.as) frame.vars[instr.as] = [top];
+      }
+      return next();
+    }
+    case "damageByVar": {
+      const counted = (frame.vars[instr.var] ?? []).filter(
+        (id) => !instr.filter || matches(c, id, instr.filter, me, frame.source, true),
+      ).length;
+      if (counted > 0)
+        for (const id of targets(c, frame, instr.t)) dealDamage(c, id, counted, "effect", frame.source);
+      return next();
+    }
+    case "copyKeywords": {
+      const from = targets(c, frame, instr.from, ["trash", ...IN_PLAY])[0];
+      if (from === undefined) return next();
+      const k = def(c, from).keywords;
+      const list: [KeywordName, number][] = [];
+      if (k.blocker) list.push(["blocker", 0]);
+      if (k.firstStrike) list.push(["firstStrike", 0]);
+      if (k.highManeuver) list.push(["highManeuver", 0]);
+      if (k.suppression) list.push(["suppression", 0]);
+      if (k.breach) list.push(["breach", k.breach]);
+      if (k.repair) list.push(["repair", k.repair]);
+      if (k.support) list.push(["support", k.support]);
+      for (const id of targets(c, frame, instr.into)) {
+        for (const [keyword, amount] of list) {
+          c.s.modifiers.push({
+            target: id,
+            ap: 0,
+            hp: 0,
+            keyword,
+            ...(amount ? { amount } : {}),
+            until: instr.until,
+            source: frame.source,
+          });
+        }
+      }
+      return next();
+    }
+    case "opponentLookTop": {
+      // The opponent takes the card if it matches (always good for them), else it stays on top.
+      const enemy = other(me);
+      const top = c.s.players[enemy].deck[0];
+      if (top !== undefined && matches(c, top, { ...instr.pick, zone: undefined }, enemy, null, true)) {
+        c.ev.push({ t: "reveal", player: enemy, cards: [top] });
+        toHand(c, top);
+      }
+      return next();
+    }
     case "placeResource": {
       const player = c.s.players[me];
       if (player.resourceDeck.length && player.resources.length < LIMITS.resources) {
@@ -750,6 +898,13 @@ export function answer(c: Ctx, action: Action): void {
         return;
       case LOOK:
         if (card === null) {
+          frame.repeat = 0;
+        } else if (instr.op === "lookTop" && instr.pairToSelf) {
+          const unit = frame.source;
+          if (inst(c, unit).zone === "battle" && inst(c, unit).pilot === null) {
+            frame.looking = frame.looking!.filter((id) => id !== card);
+            pairPilot(c, card, unit);
+          }
           frame.repeat = 0;
         } else if (instr.op === "lookTop" && instr.toTop) {
           // Stays where it is: the cards above it go to the bottom, so it ends up on top.

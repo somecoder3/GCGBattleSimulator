@@ -165,7 +165,8 @@ export interface GameResult {
 export type Action =
   | { type: "keepHand" }
   | { type: "redraw" }
-  | { type: "deployUnit"; card: CardId; replace?: CardId }
+  /** `alt`/`sacrifice`: for the alternative cost, destroying that own Unit (GD01-002, EB01-039). */
+  | { type: "deployUnit"; card: CardId; replace?: CardId; alt?: boolean; sacrifice?: CardId }
   | { type: "pair"; card: CardId; unit: CardId }
   | { type: "deployBase"; card: CardId }
   | { type: "attack"; unit: CardId; target: AttackTarget }
@@ -175,8 +176,8 @@ export type Action =
   | { type: "noBlock" }
   | { type: "pass" }
   | { type: "discard"; card: CardId }
-  /** `discard`: played for its alternative cost by discarding that card (ST10-014). */
-  | { type: "playCommand"; card: CardId; discard?: CardId }
+  /** `discard`: played for its alternative cost by discarding that card (ST10-014); `alt` without one. */
+  | { type: "playCommand"; card: CardId; discard?: CardId; alt?: boolean }
   | { type: "activate"; card: CardId; effect: number }
   | { type: "target"; card: CardId }
   | { type: "done" }

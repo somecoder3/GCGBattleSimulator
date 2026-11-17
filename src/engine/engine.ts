@@ -15,8 +15,11 @@ import {
   costOf,
   destroy,
   mark,
+  activeResources,
+  levelOf,
   playerFlagFilters,
   playerHasFlag,
+  raiseForPlayer,
   pairPilot,
   createCard,
   damageShieldArea,
@@ -315,7 +318,12 @@ const STEPS: Record<Step, (c: Ctx) => void> = {
 
   attack(c) {
     // 【Attack】 effects resolve before the block step (8-2-2); they are queued here.
-    if (battleValid(c)) raise(c, "attack", c.s.battle!.attacker);
+    if (battleValid(c)) {
+      const b = c.s.battle!;
+      raise(c, "attack", b.attacker);
+      if (b.target !== "player") raise(c, "attacked", b.target, b.attacker);
+      for (const p of [0, 1] as const) raiseForPlayer(c, "unitAttacks", p, b.attacker);
+    }
     setStep(c, "block");
   },
 
@@ -372,9 +380,13 @@ const STEPS: Record<Step, (c: Ctx) => void> = {
         const amount = Math.min(repair, card.damage); // 5-6-2
         card.damage -= amount;
         c.ev.push({ t: "recover", card: id, amount });
+        raise(c, "recovered", id);
       }
     }
     raiseTurnTriggers(c, "turnEnd");
+    for (const p of [0, 1] as const) {
+      for (const id of [...c.s.players[p].battle, ...c.s.players[p].base]) raise(c, "anyTurnEnd", id);
+    }
     setStep(c, "handStep");
   },
 
@@ -456,20 +468,53 @@ function commandOptions(c: Ctx, p: PlayerId, timing: "main" | "action"): Action[
     if (idx < 0) continue;
     if (!firstTargetAvailable(c, card.script.compiled[idx]!.program, p, id)) continue;
     if (canPlay(c, p, id)) options.push({ type: "playCommand", card: id });
-    for (const discard of altCostDiscards(c, p, id)) options.push({ type: "playCommand", card: id, discard });
+    for (const alt of altCostChoices(c, p, id)) {
+      if (alt === "plain") {
+        if (!canPlay(c, p, id)) options.push({ type: "playCommand", card: id, alt: true });
+      } else options.push({ type: "playCommand", card: id, discard: alt });
+    }
   }
   return options;
 }
 
-/** "Play this card as if it has 2 Lv. and cost" by discarding a matching card (ST10-014): the cards to discard. */
-function altCostDiscards(c: Ctx, p: PlayerId, id: CardId): CardId[] {
+type AltCostEffect = Extract<Effect, { kind: "altCost" }>;
+
+function altCostOf(c: Ctx, id: CardId): AltCostEffect | null {
   const alt = def(c, id).script.effects.find((e) => e.kind === "altCost");
-  if (!alt || alt.kind !== "altCost") return [];
+  return alt?.kind === "altCost" ? alt : null;
+}
+
+/**
+ * "Play this card as if it has 2 Lv. and cost": the cards to discard (ST10-014) or destroy (GD01-002) for
+ * it, or "plain" when it only needs a condition (EB01-039).
+ */
+function altCostChoices(c: Ctx, p: PlayerId, id: CardId): (CardId | "plain")[] {
+  const alt = altCostOf(c, id);
+  if (!alt) return [];
   const me = c.s.players[p];
   if (me.resources.length < alt.level || me.resources.filter((r) => !inst(c, r).rested).length < alt.cost)
     return [];
-  const hand = me.hand.filter((h) => h !== id && matches(c, h, alt.discard, p, id, true));
-  return uniqueByNo(c, hand);
+  if (alt.when && !evalCond(c, alt.when, id, p)) return [];
+  if (alt.discard) {
+    const discard = alt.discard;
+    return uniqueByNo(
+      c,
+      me.hand.filter((h) => h !== id && matches(c, h, discard, p, id, true)),
+    );
+  }
+  if (alt.destroy) return candidates(c, { ...alt.destroy, side: "friendly" }, p, id);
+  return ["plain"];
+}
+
+/** Cost to pair a Pilot (or Command with 【Pilot】) with a Unit, after "when pairing it with …" reductions. */
+function pairCostOf(c: Ctx, p: PlayerId, card: CardId, unit: CardId): number {
+  let cost = costOf(c, p, card);
+  for (const e of def(c, card).script.effects) {
+    if (e.kind !== "pairCost" || !matches(c, unit, e.unit, p, card)) continue;
+    if (e.set !== undefined) cost = Math.min(cost, e.set);
+    if (e.minus) cost = Math.max(0, cost - e.minus);
+  }
+  return cost;
 }
 
 function activateOptions(c: Ctx, p: PlayerId, timing: "main" | "action"): Action[] {
@@ -554,10 +599,25 @@ function mainOptions(c: Ctx): Action[] {
     } else if (card.type === "BASE") {
       options.push({ type: "deployBase", card: id });
     }
-    if (card.pairable) {
-      for (const unit of me.battle) {
-        if (inst(c, unit).pilot === null && !hasFlag(c, unit, "cantBePaired"))
-          options.push({ type: "pair", card: id, unit });
+  }
+  // Pairing: checked per Unit, because some cards cost less with certain Units (GD03-085).
+  for (const id of uniqueByNo(c, me.hand)) {
+    const card = def(c, id);
+    if (!card.pairable || me.resources.length < levelOf(c, p, id)) continue;
+    for (const unit of me.battle) {
+      if (inst(c, unit).pilot !== null || hasFlag(c, unit, "cantBePaired")) continue;
+      if (activeResources(c, p).length < pairCostOf(c, p, id, unit)) continue;
+      options.push({ type: "pair", card: id, unit });
+    }
+  }
+  // Units for their alternative cost (GD01-002, EB01-039).
+  if (me.battle.length < LIMITS.battle) {
+    for (const id of uniqueByNo(c, me.hand)) {
+      if (def(c, id).type !== "UNIT") continue;
+      for (const alt of altCostChoices(c, p, id)) {
+        if (alt === "plain") {
+          if (!canPlay(c, p, id)) options.push({ type: "deployUnit", card: id, alt: true });
+        } else options.push({ type: "deployUnit", card: id, sacrifice: alt });
       }
     }
   }
@@ -600,14 +660,16 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       return;
     }
     case "deployUnit": {
-      const ex = pay(c, p, costOf(c, p, action.card));
+      const alt = action.alt || action.sacrifice !== undefined ? altCostOf(c, action.card) : null;
+      const ex = pay(c, p, alt ? alt.cost : costOf(c, p, action.card));
+      if (action.sacrifice !== undefined) destroy(c, action.sacrifice, action.card);
       if (action.replace !== undefined) toTrash(c, action.replace, "overflow"); // not destroyed (11-4-2-1)
       enterBattle(c, action.card);
       if (ex) inst(c, action.card).paidEx = true;
       return;
     }
     case "pair": {
-      const ex = pay(c, p, costOf(c, p, action.card));
+      const ex = pay(c, p, pairCostOf(c, p, action.card, action.unit));
       pairPilot(c, action.card, action.unit);
       if (ex) inst(c, action.card).paidEx = true;
       return;
@@ -621,16 +683,19 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
     case "playCommand": {
       const card = def(c, action.card);
       let ex: boolean;
-      if (action.discard !== undefined) {
-        const alt = card.script.effects.find((e) => e.kind === "altCost");
-        ex = pay(c, p, alt?.kind === "altCost" ? alt.cost : costOf(c, p, action.card));
-        moveTo(c, action.discard, "trash");
-        c.ev.push({ t: "toTrash", card: action.discard, reason: "discard" });
+      if (action.discard !== undefined || action.alt) {
+        const alt = altCostOf(c, action.card);
+        ex = pay(c, p, alt ? alt.cost : costOf(c, p, action.card));
+        if (action.discard !== undefined) {
+          moveTo(c, action.discard, "trash");
+          c.ev.push({ t: "toTrash", card: action.discard, reason: "discard" });
+        }
       } else ex = pay(c, p, costOf(c, p, action.card));
       moveTo(c, action.card, "limbo"); // 3-4-3
       if (ex) inst(c, action.card).paidEx = true;
       c.ev.push({ t: "play", player: p, card: action.card });
       mark(c, "cmd", p, card.no);
+      raiseForPlayer(c, "commandUsed", p, action.card);
       const timing = decision.kind === "main" ? "main" : "action";
       startEffect(c, {
         ref: { no: card.no, idx: commandIndex(card, timing), granted: false },
@@ -648,7 +713,12 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       if (e.cost.resources) {
         pay(c, p, e.cost.resources);
         const key = `paidFx:${p}:${s.turn}`;
-        if (def(c, action.card).type !== "BASE") s.marks[key] = (s.marks[key] ?? 0) + e.cost.resources;
+        if (def(c, action.card).type !== "BASE") {
+          s.marks[key] = (s.marks[key] ?? 0) + e.cost.resources;
+          s.marks[`lastPaid:${p}`] = e.cost.resources;
+          mark(c, "paidFxNo", p, def(c, action.card).no);
+          raiseForPlayer(c, "effectPaid", p, action.card);
+        }
       }
       if (e.cost.restSelf) rest(c, action.card);
       startEffect(c, { ref, source: action.card, controller: p, event: null, origin: "activated" });
@@ -677,6 +747,7 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       const amount = keywordsOf(c, action.unit).support;
       s.modifiers.push({ target: action.target, ap: amount, hp: 0, until: "turn", source: action.unit });
       c.ev.push({ t: "modifier", card: action.target, ap: amount, hp: 0 });
+      raise(c, "supports", action.unit, action.target);
       return;
     }
     case "endMain":
@@ -686,6 +757,7 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       rest(c, action.unit);
       s.battle!.target = action.unit;
       s.battle!.blocked = true;
+      raise(c, "blocks", action.unit);
       c.ev.push({ t: "block", blocker: action.unit });
       enterActionStep(c, "battleAction");
       return;
@@ -807,6 +879,7 @@ function battleHit(c: Ctx, from: CardId, target: CardId, ap: number): void {
   const before = inst(c, to).damage;
   dealDamage(c, to, battleDamageTo(c, to, from, ap), "battle", from);
   if (inst(c, to).damage <= before || inst(c, to).zone !== "battle") return;
+  raiseForPlayer(c, "allyDealsBattleDamage", inst(c, from).owner, from);
   const filters = flagFilters(c, from, "destroyOnBattleDamage");
   const owner = inst(c, from).owner;
   if (
@@ -826,6 +899,10 @@ export function destroyedByAttacker(
 ): void {
   raise(c, kind, attacker, victim);
   raise(c, "destroysCard", attacker, victim);
+  raiseForPlayer(c, "allyDestroys", inst(c, attacker).owner, attacker, {
+    victim: kind === "destroysUnit" ? "unit" : "shieldArea",
+    damageKind: "battle",
+  });
   if (kind === "destroysUnit" && inst(c, attacker).pilot !== null) {
     c.s.marks[`pairedKill:${inst(c, attacker).owner}`] = c.s.turn;
   }

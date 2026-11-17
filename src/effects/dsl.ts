@@ -65,6 +65,12 @@ export interface Filter {
   anyOf?: Filter[];
   /** Does not have this keyword ("without <Breach>"). */
   notKeyword?: KeywordName;
+  /** Was played using an EX Resource. */
+  paidEx?: boolean;
+  /** Has a link condition naming this Pilot ("a Unit with the [Mashymre Cello] link condition"). */
+  linkPilot?: string;
+  /** Lv. at most (number of matching cards + plus) (GD05-026). */
+  lvMaxPlus?: { count: Filter; plus: number };
   /** Card name contains none of these ("without "X" in its card name"). */
   notNames?: string[];
 }
@@ -114,6 +120,16 @@ export type Cond =
   | { opponentDiscarded: true }
   /** How the effect's card was destroyed ("with battle damage", "by one of your (Neo Zeon) card's effects"). */
   | { destroyedBy: { kind?: "battle" | "effect"; traits?: string[] } }
+  /** The current attack targets a Unit (not a player). */
+  | { battleVsUnit: true }
+  /** The effect's card is attacking and was blocked by a Unit matching the filter. */
+  | { blockedBy: Filter }
+  /** HP left (HP minus damage) of the effect's card. */
+  | { hpLeft: { min?: number; max?: number } }
+  /** The controller deployed a Unit matching the filter this turn. */
+  | { deployedThisTurn: Filter }
+  /** The controller paid ① or more for the effect of a Unit matching the filter this turn. */
+  | { paidForEffectOf: Filter }
   /** The controller activated the 【Main】/【Action】 of a matching Command card this turn. */
   | { played: Filter }
   /** One of the controller's Units was destroyed this turn by the effect of a matching own card. */
@@ -126,6 +142,10 @@ export type Cond =
   | { varGone: string }
   /** A card stored in a variable of this effect matches (e.g. the discarded card). */
   | { varMatches: string; filter: Filter }
+  /** At least `min` cards are stored in a variable of this effect ("If this effect rested 3 or more Units"). */
+  | { varCount: { var: string; min: number } }
+  /** The top card of the controller's deck matches. */
+  | { topCard: Filter }
   | { and: Cond[] }
   | { or: Cond[] }
   | { not: Cond };
@@ -149,6 +169,12 @@ export type FlagName =
   | "noEffectDamageFrom"
   /** Can't activate <Blocker> (on a Unit, or on a player with a filter for all matching Units). */
   | "cantBlock"
+  /** (Constant, with a target filter) Matching Units are deployed rested. */
+  | "deployRested"
+  /** When a friendly Unit's effect would rest your Base, this Unit is rested instead (GD03-079). */
+  | "restInsteadOfBase"
+  /** When a friendly (filter) Unit's effect would rest a friendly Unit, this Base is rested instead (GD05-124). */
+  | "baseRestsInstead"
   /** Battle damage it would receive is dealt to the linked card instead. */
   | "redirectBattleDamage"
   /** While rested: all enemy Units (also Link Units) must attack it if they can. */
@@ -212,6 +238,10 @@ export type Prim =
       by?: "opponent";
       /** Only cards stored in this variable ("1 … card you placed from your deck with this effect"). */
       among?: string;
+      /** The count is the number of cards matching this filter ("up to the number of …"). */
+      countOf?: Filter;
+      /** No two chosen cards with the same name ("with unique card names"). */
+      unique?: boolean;
       /** All `count` cards or none (costs like "Exile 4 cards in your trash"). */
       exact?: boolean;
     }
@@ -243,7 +273,19 @@ export type Prim =
     }
   /** AP change by the number of matching cards (e.g. "reduce its AP by the number of friendly … Units"). */
   | { op: "modByCount"; t: Ref; count: Filter; sign: 1 | -1; until: Duration }
-  | { op: "draw"; n: number; both?: boolean }
+  | { op: "draw"; n: number; both?: boolean; who?: "opponent" }
+  /** Damage of 1 for each `per` AP of this Unit ("Deal 1 damage to it for each 4 AP this Unit has"). */
+  | { op: "damageByAp"; t: Ref; per: number }
+  /** AP+ the amount paid for the effect that triggered this one (GD04-100). */
+  | { op: "modByPaid"; t: Ref; until: Duration }
+  /** The opponent looks at their top card and takes it if it matches, else leaves it (EB01-023). */
+  | { op: "opponentLookTop"; pick: Filter }
+  /** The top card of the deck to the hand (revealed); `as` keeps it. */
+  | { op: "takeTop"; as?: string }
+  /** Damage equal to the number of cards in a variable (matching the filter). */
+  | { op: "damageByVar"; t: Ref; var: string; filter?: Filter }
+  /** The keywords printed on the chosen card go to `into` (GD04-067; not `to`, which is a jump label). */
+  | { op: "copyKeywords"; from: Ref; into: Ref; until: Duration }
   /** The Pilot paired with this Unit goes to its owner's hand or the top of the deck. */
   | { op: "pilotTo"; dest: "hand" | "deckTop"; filter?: Filter }
   /** "Pay ①": rest that many active Resources; fails without them. */
@@ -255,9 +297,9 @@ export type Prim =
   /** "Destroy the first 2 cards in that player's shield area" (Base first, then Shields). */
   | { op: "shieldAreaDestroy"; n: number }
   /** Discard n; `as` keeps the discarded cards (for "if you discard a … with this effect"). */
-  | { op: "discard"; n: number; as?: string }
+  | { op: "discard"; n: number; as?: string; who?: "opponent" }
   | { op: "shieldToHand"; n: number }
-  | { op: "exResource"; n: number; both?: boolean }
+  | { op: "exResource"; n: number; both?: boolean; rested?: boolean }
   /** `forOwnerOf`: the token goes to the owner of the card(s) in that variable ("the destroyed Unit's owner"). */
   | { op: "token"; no: string; count?: number; rested?: boolean; forOwnerOf?: Ref }
   /** `as` keeps the milled cards ("If you place a (CB) card with this effect"). */
@@ -265,7 +307,7 @@ export type Prim =
   /** The battling enemy Unit attacks the chosen card instead (ST07-013). */
   | { op: "redirect"; t: Ref }
   /** The chosen card gains effect `idx` of this card's script until the end of the turn/battle (ST12-014). */
-  | { op: "grantEffect"; t: Ref; idx: number; until: Duration }
+  | { op: "grantEffect"; t: Ref | "you"; idx: number; until: Duration }
   /** Place the top card of the resource deck (ST14-015). */
   | { op: "placeResource"; rested?: boolean }
   /** Look at the top n cards, optionally take matching ones to the hand, the rest to the bottom in random order. */
@@ -280,6 +322,8 @@ export type Prim =
       toTop?: boolean;
       /** The remaining cards go into the trash instead of the bottom of the deck. */
       rest?: "trash";
+      /** The picked card is paired with this Unit (GD06-042). */
+      pairToSelf?: boolean;
     }
   /**
    * Look at the top n cards, put one on top (or into the hand) and the rest at the bottom (or into the
@@ -326,8 +370,8 @@ export type Prim =
 export type Step =
   | Prim
   | { op: "if"; cond: Cond; then: Step[]; else?: Step[] }
-  /** "You may …" — asks the controller; the steps run only on yes ("If you do"). */
-  | { op: "may"; do: Step[] }
+  /** "You may …" — asks the controller (or the opponent); the steps run only on yes ("If you do"). */
+  | { op: "may"; do: Step[]; by?: "opponent" }
   /** The controller picks one of several alternatives (e.g. which token to deploy). */
   | { op: "choice"; options: { label: string; do: Step[] }[] };
 
@@ -351,6 +395,40 @@ export type TriggerKind =
   | "allyLinked"
   /** The controller drew cards with an effect. */
   | "effectDraw"
+  /** A friendly Unit matching the filter destroyed an enemy card (`victim`) with damage (event: the Unit). */
+  | "allyDestroys"
+  /** This Unit was chosen as an attack target. */
+  | "attacked"
+  /** A Unit matching the filter attacks (event: the attacker; any player). */
+  | "unitAttacks"
+  /** A friendly card matching the filter received damage (`damageKind`, `fromEnemy`; event: the card). */
+  | "allyDamaged"
+  /** This Unit recovered HP. */
+  | "recovered"
+  /** A friendly Unit matching the filter was rested by an effect (`fromEnemy`: by the opponent's). */
+  | "allyRestedByEffect"
+  /** This rested Unit was set as active by an effect. */
+  | "readiedByEffect"
+  /** The controller placed an EX Resource. */
+  | "exResourcePlaced"
+  /** One of the controller's EX Resources left the game. */
+  | "exResourceExiled"
+  /** The controller activated the 【Main】/【Action】 of a Command matching the filter (event: the Command). */
+  | "commandUsed"
+  /** A friendly Unit matching the filter was destroyed by an effect. */
+  | "allyDestroyedByEffect"
+  /** This Unit's AP was reduced by an enemy effect. */
+  | "apReducedByEnemy"
+  /** At the end of every turn (both players'). */
+  | "anyTurnEnd"
+  /** This Unit activated <Blocker>. */
+  | "blocks"
+  /** This Unit's <Support> increased the AP of a Unit matching the filter. */
+  | "supports"
+  /** A friendly Unit matching the filter dealt battle damage to an enemy Unit (event: the friendly Unit). */
+  | "allyDealsBattleDamage"
+  /** The controller paid ① or more for the effect of a friendly Unit matching the filter. */
+  | "effectPaid"
   /** "When this Unit destroys an enemy Unit with battle damage" */
   | "destroysUnit"
   /** "When this Unit destroys an enemy shield area card with battle damage" */
@@ -381,6 +459,18 @@ export type Effect =
       self?: boolean;
       /** destroysUnit: also when this Unit's effect damage destroys the enemy Unit ("with damage"). */
       anyDamage?: boolean;
+      /** The card the event is about must match (e.g. the destroyed enemy Unit). */
+      eventFilter?: Filter;
+      /** allyDestroys: what was destroyed. */
+      victim?: "unit" | "shieldArea" | "card";
+      /** allyDamaged: battle or effect damage only. */
+      damageKind?: "battle" | "effect";
+      /** allyDamaged/allyRestedByEffect: only by the opponent. */
+      fromEnemy?: boolean;
+      /** allyDamaged: the card that dealt the damage must match. */
+      sourceFilter?: Filter;
+      /** Only used when gained from another effect (grantEffect), never on its own card. */
+      dormant?: boolean;
       cond?: Cond;
       once?: boolean;
       segments: Step[][];
@@ -410,6 +500,8 @@ export type Effect =
       traits?: string[];
       /** 【Once per Turn】 (damage reductions). */
       once?: boolean;
+      /** Only used when gained from another effect (grantEffect), never on its own card. */
+      dormant?: boolean;
       /** "gets AP+2 for each of your rested (CB) Units" */
       apPer?: { count: Filter; per: number; unique?: boolean };
       /** AP + the damage this Unit has received (GD05-051). */
@@ -434,7 +526,8 @@ export type Effect =
       /** Only the cost is reduced, not the Lv. */
       costOnly?: boolean;
     }
-  | AltCost;
+  | AltCost
+  | PairCost;
 
 /**
  * "When playing this card from your hand, you may discard 1 (G Generation) Unit card. If you do, play this
@@ -444,7 +537,21 @@ export interface AltCost {
   kind: "altCost";
   level: number;
   cost: number;
-  discard: Filter;
+  /** Discard a matching card from the hand (ST10-014). */
+  discard?: Filter;
+  /** Destroy a matching own Unit (GD01-002). */
+  destroy?: Filter;
+  /** Only while this holds (EB01-039). */
+  when?: Cond;
+}
+
+/** "When playing this card from your hand and pairing it with …, it gets cost -1 / as if it has 0 cost." */
+export interface PairCost {
+  kind: "pairCost";
+  unit: Filter;
+  /** Cost reduction, or a fixed cost (`set`). */
+  minus?: number;
+  set?: number;
 }
 
 export type CardStatus = "vanilla" | "auto" | "manual" | "partial";
