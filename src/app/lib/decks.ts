@@ -4,7 +4,7 @@
 import type { CardPool } from "../../data/cards";
 import { STARTER_DECKS, type NamedDeck } from "../../data/decks";
 import { CardLib } from "../../engine/cardlib";
-import { metaDecks, newestSnapshot, type MetaDeck } from "../../meta/decks";
+import { metaDecks, newestSnapshot, type MetaDeck, type MetaList } from "../../meta/decks";
 import type { MetaSnapshot } from "../../meta/types";
 import type { UserDeck } from "./db";
 
@@ -23,6 +23,16 @@ let USER_DECKS: UserDeck[] = [];
 
 export function setUserDecks(decks: UserDeck[]): void {
   USER_DECKS = decks;
+}
+
+/**
+ * Tournament lists picked in the Meta tab for a game or a simulation (id "M03T5" = 5th list of M03).
+ * Only kept in memory; they show up among the meta decks until the page is reloaded.
+ */
+let PICKED: DeckChoice[] = [];
+
+export function pickDeck(deck: DeckChoice): void {
+  PICKED = [...PICKED.filter((d) => d.id !== deck.id), deck];
 }
 
 /** Deck to preselect when switching to the game or the simulator (from the Meta or Decks tab). */
@@ -44,10 +54,11 @@ export interface DeckChoice extends NamedDeck {
   supported: boolean;
 }
 
-export function deckChoices(pool: CardPool): DeckChoice[] {
+/** Meta decks as consensus lists (M01 …), best placed real lists (M01B …) or both. */
+export function deckChoices(pool: CardPool, list: MetaList = "consensus"): DeckChoice[] {
   const lib = cardLib(pool);
   const meta: DeckChoice[] = SNAPSHOT
-    ? metaDecks(SNAPSHOT, lib).map((d: MetaDeck) => ({ ...d, group: "meta" as const }))
+    ? metaDecks(SNAPSHOT, lib, Infinity, list).map((d: MetaDeck) => ({ ...d, group: "meta" as const }))
     : [];
   const starters: DeckChoice[] = STARTER_DECKS.map((d) => ({ ...d, group: "starter", supported: true }));
   const own: DeckChoice[] = USER_DECKS.map((d) => ({
@@ -58,7 +69,7 @@ export function deckChoices(pool: CardPool): DeckChoice[] {
     group: "user",
     supported: d.deck.main.every((no) => lib.has(no) && lib.get(no).script.status !== "partial"),
   }));
-  return [...meta, ...starters, ...own];
+  return [...meta, ...PICKED, ...starters, ...own];
 }
 
 export function deckColors(lib: CardLib, nos: readonly string[]): string {

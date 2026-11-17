@@ -14,40 +14,44 @@ export const RESTRICTED: Record<string, number> = { "ST02-016": 2 };
 /** Cards of `a` and `b` can't be in the same deck. */
 export const BANNED_PAIRS: { a: string[]; b: string[] }[] = [
   { a: ["ST01-010"], b: ["ST05-010"] },
-  {
-    a: ["GD01-008"],
-    b: [
-      "GD05-015",
-      "GD01-035",
-      "GD01-060",
-      "GD01-085",
-      "GD02-013",
-      "GD02-080",
-      "GD03-032",
-      "GD03-063",
-      "GD04-078",
-      "GD05-014",
-      "GD05-027",
-      "GD05-042",
-      "GD05-062",
-      "GD05-077",
-      "ST01-005",
-      "ST04-008",
-      "ST05-004",
-      "ST05-009",
-      "ST06-004",
-      "ST09-005",
-      "ST10-005",
-      "ST11-008",
-      "ST12-010",
-    ],
-  },
+  // Guntank and M1 Astray Shrike have the same effect (Lv.2, cost 1, 1 damage to a rested enemy Unit).
+  { a: ["GD01-008"], b: ["GD05-015"] },
 ];
 
 /**
- * "A Unit card that is Lv.2 with cost 1, 2 AP, and 2 HP, and without effects": such cards are part of the
- * Guntank pair, and at most four of them in total may be in a deck.
+ * The cards the official list names for "a Unit card that is Lv.2 with cost 1, 2 AP, and 2 HP, and without
+ * effects". Every two different such cards are a banned pair, so a deck may play one of them (up to 4
+ * copies). The rule covers every card that fits the description (isVanillaTwoTwo), not only these.
+ *
+ * Until 17 Nov 2026 this list was wrongly paired with Guntank; 13 real lists (among them the winner of
+ * a 208-player official regional) play Guntank with one of these, none plays two of them.
  */
+export const VANILLA_TWO_TWO = [
+  "GD01-035",
+  "GD01-060",
+  "GD01-085",
+  "GD02-013",
+  "GD02-080",
+  "GD03-032",
+  "GD03-063",
+  "GD04-078",
+  "GD05-014",
+  "GD05-027",
+  "GD05-042",
+  "GD05-062",
+  "GD05-077",
+  "ST01-005",
+  "ST04-008",
+  "ST05-004",
+  "ST05-009",
+  "ST06-004",
+  "ST09-005",
+  "ST10-005",
+  "ST11-008",
+  "ST12-010",
+];
+
+/** "A Unit card that is Lv.2 with cost 1, 2 AP, and 2 HP, and without effects" (see VANILLA_TWO_TWO). */
 export function isVanillaTwoTwo(card: EngineCard): boolean {
   return (
     card.type === "UNIT" &&
@@ -69,18 +73,17 @@ export function banlistProblems(
   for (const [no, max] of Object.entries(RESTRICTED)) {
     if ((counts[no] ?? 0) > max) problems.push(`${no} höchstens ${max}×`);
   }
-  const vanilla = Object.keys(counts).filter((no) => {
-    const card = get(no);
-    return card !== undefined && isVanillaTwoTwo(card);
-  });
   for (const pair of BANNED_PAIRS) {
     const a = pair.a.filter((no) => counts[no]);
-    const bList = pair.a.includes("GD01-008") ? [...new Set([...pair.b, ...vanilla])] : pair.b;
-    const b = bList.filter((no) => counts[no]);
+    const b = pair.b.filter((no) => counts[no]);
     if (a.length && b.length) problems.push(`${a.join(", ")} nicht zusammen mit ${b.join(", ")}`);
   }
-  const vanillaTotal = vanilla.reduce((n, no) => n + counts[no]!, 0);
-  if (vanillaTotal > 4)
-    problems.push(`${vanillaTotal} Units Lv.2/Kosten 1/2 AP/2 HP ohne Effekt, höchstens 4`);
+  const vanilla = Object.keys(counts).filter((no) => {
+    const card = get(no);
+    return counts[no]! > 0 && card !== undefined && isVanillaTwoTwo(card);
+  });
+  if (vanilla.length > 1) {
+    problems.push(`${vanilla.join(", ")}: nur eine Sorte Unit Lv.2/Kosten 1/2 AP/2 HP ohne Effekt erlaubt`);
+  }
   return problems;
 }

@@ -13,7 +13,7 @@ import { DEFAULT_WEIGHTS, type Weights } from "../src/ai/evaluate";
 import { STARTER_DECKS } from "../src/data/decks";
 import { metaDecks } from "../src/meta/decks";
 import { runPool } from "../src/sim/pool";
-import type { DeckEntry, GameSummary, SimJob } from "../src/sim/runner";
+import { fullRounds, type DeckEntry, type GameSummary, type SimJob } from "../src/sim/runner";
 import { wilson } from "../src/sim/stats";
 import { loadLib, loadSnapshot } from "./lib";
 import { threadWorker } from "./node-pool";
@@ -28,12 +28,13 @@ const { values: args } = parseArgs({
   },
 });
 
-const games = Number(args.games);
 const accept = Number(args.accept);
 const decks: DeckEntry[] =
   args.decks === "starters"
     ? STARTER_DECKS.map((d) => ({ id: d.id, name: d.name, deck: d.deck }))
     : metaDecks(loadSnapshot(), loadLib(), 8).map((d) => ({ id: d.id, name: d.name, deck: d.deck }));
+// Full rounds, so every pairing is played equally often (src/sim/runner.ts fullRounds).
+const games = fullRounds({ decks }, Number(args.games));
 const workers = Array.from(
   { length: args.workers ? Number(args.workers) : Math.max(1, availableParallelism() - 1) },
   threadWorker,

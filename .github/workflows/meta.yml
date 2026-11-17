@@ -1,7 +1,7 @@
 name: Meta snapshot
 
-# Loads the current tournament decks from Limitless once a week and commits a new snapshot to
-# data/meta/ if the tests still pass with it.
+# Loads the current tournament decks from Limitless and Egman (one request) once a week and commits a
+# new snapshot to data/meta/ if the tests still pass with it.
 
 on:
   schedule:

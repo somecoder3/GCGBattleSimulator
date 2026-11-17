@@ -12,7 +12,9 @@
     validateDeck,
   } from "../../../engine/deck";
   import type { DeckList } from "../../../engine/types";
+  import { entryLabel } from "../../../meta/archetypes";
   import { banlistProblems } from "../../../meta/banlist";
+  import type { MetaDeck } from "../../../meta/decks";
   import { db, download, type UserDeck } from "../../lib/db";
   import { cardLib, deckChoices, deckColors, preset, setUserDecks } from "../../lib/decks";
   import CardImage from "../CardImage.svelte";
@@ -34,11 +36,18 @@
   let importText = $state("");
   let importInfo = $state<string>();
   let copyFrom = $state("");
+  /** For a meta archetype: its consensus list or one of its real lists (index, best first). */
+  let copyList = $state("consensus");
   let detail = $state<CardDef>();
   let message = $state<string>();
 
   // svelte-ignore state_referenced_locally
   const templates = deckChoices(pool).filter((d) => d.group !== "user");
+  const metaTemplates = templates.filter((d) => d.group === "meta");
+  const otherTemplates = templates.filter((d) => d.group !== "meta");
+  const archetype = $derived(
+    (metaTemplates.find((d) => d.id === copyFrom) as (MetaDeck & { group: "meta" }) | undefined)?.archetype,
+  );
 
   onMount(load);
 
@@ -72,7 +81,10 @@
 
   function copyTemplate() {
     const t = templates.find((d) => d.id === copyFrom);
-    if (t) newDeck(`${t.name} (Kopie)`, countsOf(t.deck.main));
+    if (!t) return;
+    const entry = archetype && copyList !== "consensus" ? archetype.entries[Number(copyList)] : undefined;
+    if (entry) newDeck(`${t.name} – Platz ${entry.placing} ${entry.tournament.name}`, { ...entry.cards });
+    else newDeck(`${t.name} (Kopie)`, countsOf(t.deck.main));
   }
 
   function importList() {
@@ -248,11 +260,31 @@
 
     <details>
       <summary>Aus Meta- oder Starter-Deck kopieren</summary>
-      <div class="row">
-        <select bind:value={copyFrom}>
-          <option value="">Deck wählen …</option>
-          {#each templates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
+      <div class="copy">
+        <select
+          bind:value={copyFrom}
+          onchange={() => (copyList = "consensus")}
+          aria-label="Archetyp oder Deck"
+        >
+          <option value="">Archetyp oder Deck wählen …</option>
+          {#if metaTemplates.length}
+            <optgroup label="Meta-Archetypen">
+              {#each metaTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
+            </optgroup>
+          {/if}
+          <optgroup label="Starter-Decks">
+            {#each otherTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
+          </optgroup>
         </select>
+        {#if archetype}
+          <select bind:value={copyList} aria-label="Liste des Archetyps">
+            <option value="consensus">Konsensliste (aus {archetype.entries.length} Listen)</option>
+            {#each archetype.entries as e, i (i)}<option value={String(i)}>{entryLabel(e)}</option>{/each}
+          </select>
+          <p class="hint">
+            Turnierlisten nach Ergebnis sortiert: Platz und Turniergröße (log2 Spieler / √Platz).
+          </p>
+        {/if}
         <button class="btn" onclick={copyTemplate} disabled={!copyFrom}>Kopieren</button>
       </div>
     </details>
@@ -459,10 +491,14 @@
     cursor: pointer;
     font-size: 14px;
   }
-  .row {
+  .copy {
     display: flex;
+    flex-direction: column;
     gap: 6px;
     margin-top: 8px;
+  }
+  .copy .btn {
+    align-self: flex-start;
   }
   select,
   input,

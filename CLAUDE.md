@@ -2,7 +2,8 @@
 
 Privates Projekt des Nutzers: Kampfsimulator für das **Gundam Card Game** auf Basis von **GCGDB**
 (Repo `somecoder3/GCGDB`, hier als Submodul `gcgdb/`, siehe dessen `CLAUDE.md`). Vorbild für Aufbau und
-Abläufe ist **GCGScanner** (auf dem aktuellen Rechner `D:\programming\GCGScanner`, früher `E:\programming\…`). Kommunikation auf Deutsch. Der Nutzer kommt aus der
+Abläufe ist **GCGScanner** (neben diesem Repo: `D:\programming\GCGScanner` zu Hause, `E:\programming\GCGScanner`
+auf dem Arbeitsrechner). Kommunikation auf Deutsch. Der Nutzer kommt aus der
 Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 
 ## Ziele (aus der ursprünglichen Anfrage)
@@ -132,9 +133,17 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 - **Alle Starter-Decks (16. Nov., Nutzerwunsch):** ST05–ST14 in `src/data/decks.ts`, ST09 als `ST09W`
   (Lila-Weiß) und `ST09R` (Rot-Lila) nach den offiziellen Rezepten deck-026/027; Quellen und Auslegungen in
   `docs/EFFECTS.md`. Alle ST-Sets zu 100 % unterstützt (~25 neue Satzmuster, neue Schritte/Trigger/Flags,
-  3 Handskripte), dadurch **Abdeckung gesamt 73,2 %** (vorher 65,1 %). ST05 enthält 7 Vanilla-2/2-Units
-  (Bannliste: höchstens 4), ST02 3× ST02-016: wie verkauft, nicht turnierlegal. Tests, die Stärken messen,
-  nutzen weiter nur ST01–ST04 (`STARTER_DECKS.slice(0, 4)`); 199 Tests.
+  3 Handskripte), dadurch **Abdeckung gesamt 73,2 %** (vorher 65,1 %). Nicht turnierlegal wie verkauft:
+  ST05 (zwei Vanilla-2/2-Sorten ST05-004 + ST05-009, nach der korrigierten Bannliste), ST02 (3× ST02-016).
+  Tests, die Stärken messen, nutzen weiter nur ST01–ST04 (`STARTER_DECKS.slice(0, 4)`).
+  - **Zusammengeführt am 17. Nov.** mit den Korrekturen vom Arbeitsrechner (unten): Konflikte nur in
+    `parse.ts` (beide Seiten hatten Nomen „Pilot card“ und die Trash-Bedingung erweitert; die allgemeinere
+    `nounPhrase`-Fassung behalten) und `docs/META.md`. Geprüft: jedes Kartenskript gleicht danach exakt dem
+    einer Seite; Abdeckung **73,3 %** (823 von 1123), 214 Tests. Neue Meta-Archetypen ab M11 haben wieder
+    einzelne unvollständige Karten (`npm run coverage -- --meta`).
+  - Vorsicht beim Aufräumen: `git worktree remove --force` folgt unter Windows Verzeichnis-Junctions und
+    löscht deren Ziel (so gingen `node_modules` und `gcgdb/` verloren; wiederhergestellt mit
+    `git submodule update --init --force gcgdb` und `npm ci`). Junctions vorher mit `rmdir` lösen.
   - Oberfläche: Zufalls-Seed (⟳) im Simulator, Matchup-Matrix mit eigenem Tooltip (Deck-Namen, Zeile/Spalte
     hervorgehoben), Deckliste mit Bildchen (Bildausschnitt) und großer Kartenvorschau beim Überfahren
     (nur Maus), gemeinsame Komponente `src/app/components/HoverTip.svelte`. Decks-Reiter am Handy lief über
@@ -147,6 +156,53 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
   vom Nutzer gepusht, 16. Nov.; der Push aus der Sitzung war vom Sicherheitsfilter abgelehnt worden).
+- **Korrekturen 17. Nov. (Arbeitsrechner):**
+  - Spielfeld bei niedrigen Fenstern: Bei 1024×640 ragte die eigene Seite (unten ausgerichtet) 37 px in die
+    mittlere Leiste, „Main Phase beenden“ war per Maus nicht klickbar. Kartenbreite jetzt auch aus der Höhe
+    (`--fit` in `Board.svelte`: `(100dvh − 360px) / 5,8`, Handkarten × 1,06), mittlere Leiste mit `z-index`,
+    eigene Seite `safe flex-end`. Gemessen: 1024×640 48 px Karten, nichts überlappt; 1280×720 (62 px) und
+    1440×900 (89 px) wie vorher; Handy unverändert.
+  - Simulator: Spiel i spielt Paarung ⌊i/8⌋ mod Paarungen; bei 64 Spielen und 8 Decks liefen nur die
+    Paarungen mit M01. Spielzahl wird jetzt auf volle Runden (8 × Paarungen) aufgerundet (`fullRounds`/
+    `roundSize` in `src/sim/runner.ts`, im Formular angezeigt, ebenso `npm run sim` und `npm run tune`).
+  - KI v0 legt eine Base nur, wenn es sich lohnt (HP-Gewinn gegen Schildverlust, wie die v1-Bewertung,
+    `baseSwapGain` in `src/ai/heuristic.ts`); vorher ersetzte sie jede Base, auch gesunde, und als
+    Fortsetzung von v1/Suche nahm sie das für beide Spieler an. Spielstärke gleich (v1 neu gegen alt 50,4 %,
+    6912 Spiele). Dabei gefunden: Handlimit-Abwurf von v0 gab nie eine Wahl zurück (Punkte negativ), selten
+    (≈ 1/7000 Spiele), behoben. Messungen und Regel in `docs/AI.md`.
+  - Such-KI „letzte Chance“ (`src/ai/search.ts`): verliert in der Main Phase selbst die beste Option im
+    Schnitt, dann alle Optionen, bis 64 Stichproben, Simulation über zwei Runden (Abbruch nach 24 ohne
+    Ausweg). Prüfstellung „Base für den letzten Schild, vielleicht der Pilot zum Sieg“: Schwer 16/30 → 30/30,
+    Sehr schwer 25/30 → 29/30; Test in `tests/ai/search.test.ts`. Kosten +33 % Rechenzeit bei Suche-Läufen,
+    Stärke gleich. Leicht/Normal finden solche Auswege nicht. Details `docs/AI.md`.
+  - Such-KI mit **Successive Halving** (`SearchOptions.halving`, Standard an): Optionen bekommen erst wenige
+    Stichproben, die schlechtere Hälfte fällt je Runde heraus; gleiche Stichproben für alle Optionen. Gleich
+    stark (neu gegen alt 50,9 % Schwer, 49,8 % Sehr schwer), 1,3× bzw. 1,5× schneller pro Entscheidung.
+    GPU-Frage des Nutzers: Engine auf GPU lohnt nicht (verzweigter Code); ein gelerntes Bewertungsnetz
+    (Inferenz per WebGPU/ONNX) wäre ein eigenes Forschungsprojekt; „kleine Hebel“ (kürzere Simulationen,
+    gemeinsame Ergebnisse) vom Nutzer zurückgestellt.
+  - CI-Lauf #10/#11 rot: Fuzz-Test (1000 Spiele) brauchte auf dem GitHub-Runner 5,8 s (lokal 2,4 s) und
+    lief ins Vitest-Standardlimit von 5 s. Jetzt `testTimeout: 30_000` in `vite.config.ts`. Simulationslastige
+    Tests sind auf dem Runner 2–3× langsamer als am Desktop; neue Tests nicht knapp an Grenzen bauen.
+  - **Zweite Meta-Quelle Egman Deck Builder** (`src/meta/egman.ts`, Nutzerwunsch nach Vergleich mit Bandai,
+    Victory Road, MetaSheep): eine JSON-Datei mit großen offiziellen Regionals und kompletten Decklisten,
+    nur im wöchentlichen Snapshot abgerufen, ohne Spielernamen, Quelle im Meta-Reiter genannt, Doppelte
+    zu Limitless per Link oder Datum+Name aussortiert, Archetyp pro Egman-Gruppe (gleicher Name, sonst
+    ähnlichster, sonst eigener). Snapshot `data/meta/2026-11-17.json`: 152 Listen aus 13 Turnieren (vorher 72
+    aus 6). MetaSheep: Nutzungsbedingungen verbieten Abgreifen → nicht genutzt; Bandai selbst veröffentlicht
+    keine Turnierlisten (nur TCG+-Deckcodes über interne Schnittstelle → nicht genutzt). **Vor einer
+    öffentlichen Version Egman um Erlaubnis bitten.** Details `docs/META.md`.
+  - **Bannliste korrigiert:** Guntank (GD01-008) ist nur mit M1 Astray Shrike (GD05-015) gepaart; die
+    Vanilla-2/2-Units sind untereinander gepaart (nur eine Sorte). Vorher war Guntank mit allen Vanilla-Units
+    gepaart (Fehler aus M5, verfälschte Konsenslisten). Belege in `docs/META.md`.
+  - Neu unterstützt: GD01-023 (Kosten „Discard 1 … card“, `pairTo`), GD01-076 („While …, this Unit gets“,
+    Trash-Zählung nach Kartentyp). Abdeckung 65,8 %. 189 Tests.
+  - **Meta-Listen wählbar** (Nutzerwunsch): Konsens (`M01`, Standard), beste Liste (`M01B`) oder beide;
+    Simulator-Formular „Meta-Listen“, CLI `--list`, `metaDecks(…, list)`. Spiel nutzt weiter Konsens.
+  - **Alle Turnierlisten eines Archetyps** (`Archetype.entries`, Nutzerwunsch): Meta-Reiter „Turnierlisten“,
+    Decks-Reiter kopiert Archetyp → Konsens oder eine echte Liste. Sortiert nach Ergebnis
+    `resultScore` = log₂(Spieler)/√Platz; die erste ist die beste Liste (`M01B`, vorher bestplatzierte).
+    Spielen/Simulieren aus dem Meta-Reiter nimmt die angezeigte Liste (Turnierliste als `M03T5`, nur im Speicher).
 - Beobachtung: Shining Gundam (M01, meistgespielt) gewinnt bei v1 nur ~40 %; die Karten sind korrekt (Partie
   per `npm run game` geprüft), die KI spielt das Special-Move-Timing schlecht (v0 wirft z. B. Master Asia ab).
 
@@ -219,7 +275,8 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   sendet `Cross-Origin-Resource-Policy: same-site` (kein Einbinden von fremden Seiten). Bilder nicht ins Repo
   und nicht frei auf Pages (Pages ist öffentlich).
 - `gh` ist nicht installiert; GitHub-Oberfläche über Claude in Chrome (Nutzer angemeldet als `somecoder3`).
-  Auf dem aktuellen Rechner (Projekte unter `D:\programming`, 16. Nov.) Node v24.21, früher v26; Python vorhanden.
+  Zwei Rechner: zu Hause Projekte unter `D:\programming` (Node v24.21), Arbeitsrechner unter `E:\programming`
+  (Node v26.13); auf beiden Python 3.11. Nach dem Wechsel: `git pull`, `npm ci`, ggf. `npm run images`.
 
 ## Konventionen
 
@@ -227,4 +284,4 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Entscheidungen im selben Commit nachtragen, Veraltetes korrigieren.
 - Abhängigkeiten exakt pinnen und gegen die Registry prüfen; keine Version unter 2 Wochen Alter
   (auch GitHub Actions, per Commit-SHA).
-- Unter Windows mit Python-Pfaden `D:/...` statt `/d/...`.
+- Unter Windows mit Python-Pfaden `D:/...` bzw. `E:/...` statt `/d/...` (je nach Rechner).

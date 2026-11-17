@@ -407,3 +407,33 @@ describe("archetypes M09–M15", () => {
     expect(nos(s, 0, "battle")).toContain("GD06-050");
   });
 });
+
+describe("cards of the 17 Nov 2026 snapshot (Limitless + Egman)", () => {
+  it("GD01-023 Char's Gelgoog: discards a (Zeon)/(Neo Zeon) Unit card to pair a (Newtype) Pilot Lv.3 or lower from the trash", () => {
+    // Needs a matching Unit card in the hand to be offered at all.
+    const none = scenario({ p0: { battle: ["GD01-023"], hand: [GM], trash: ["GD01-087"] } });
+    expect(none.pending!.options.some((o) => o.type === "activate")).toBe(false);
+
+    const s = scenario({ p0: { battle: ["GD01-023"], hand: ["GD01-026"], trash: ["GD01-087"] } });
+    const gelgoog = id(s, 0, "battle", "GD01-023");
+    apply(
+      s,
+      s.pending!.options.find((o) => o.type === "activate" && o.card === gelgoog)!,
+    );
+    settle(s);
+    expect(nos(s, 0, "hand")).toEqual([]);
+    expect(nos(s, 0, "trash")).toEqual(["GD01-026"]); // the discarded Zaku; Sayla Mass left the trash
+    expect(s.cards[gelgoog]!.pilot).not.toBeNull();
+    expect(engine.card(s, s.cards[gelgoog]!.pilot!).no).toBe("GD01-087");
+  });
+
+  it("GD01-076 Michaelis: AP+1 and HP+1 while there are 4 or more Command cards in your trash", () => {
+    const cmds = ["EB01-073", "EB01-074", "EB01-075"];
+    const three = scenario({ p0: { battle: ["GD01-076"], trash: cmds } });
+    const m3 = id(three, 0, "battle", "GD01-076");
+    expect([ap(three, m3), engine.hp(three, m3)]).toEqual([3, 3]);
+    const four = scenario({ p0: { battle: ["GD01-076"], trash: [...cmds, "EB01-073", GM] } });
+    const m4 = id(four, 0, "battle", "GD01-076");
+    expect([ap(four, m4), engine.hp(four, m4)]).toEqual([4, 4]);
+  });
+});

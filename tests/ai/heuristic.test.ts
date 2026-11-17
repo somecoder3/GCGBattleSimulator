@@ -95,6 +95,43 @@ describe("heuristic AI v0", () => {
     const action = new HeuristicPolicy(engine).choose(s, s.pending!);
     expect(action).toEqual({ type: "attack", unit: s.players[0].battle[0], target: s.players[1].battle[0] });
   });
+
+  it("discards down to the hand limit, keeping the cards worth most", () => {
+    // 11 cards at the end of the turn: one must go. A Lv.7 Unit far above Lv.0 is worth least.
+    const hand = [...Array<string>(10).fill(GM), "ST02-001"];
+    const s = scenario({ engine, filler: GM, p0: { hand, resources: 0 } });
+    engine.apply(s, { type: "endMain" });
+    expect(s.pending?.kind).toBe("discard");
+    const action = new HeuristicPolicy(engine).choose(s, s.pending!);
+    expect(action).toEqual({
+      type: "discard",
+      card: s.players[0].hand.find((id) => s.cards[id]!.no === "ST02-001"),
+    });
+  });
+
+  // GD01-126: Base with 6 HP whose 【Deploy】 adds 1 Shield to the hand (and nothing else); GD01-128 the same.
+  const deploysBase = (base: string, baseDamage: number, shields: number) => {
+    const s = scenario({
+      engine,
+      filler: GM,
+      p0: { hand: ["GD01-126"], base, baseDamage, shields },
+    });
+    return new HeuristicPolicy(engine).choose(s, s.pending!).type === "deployBase";
+  };
+
+  it("replaces a damaged Base, but not a healthy one just to trade a Shield for a card", () => {
+    expect(deploysBase("GD01-128", 5, 6)).toBe(true); // 1 of 6 HP left
+    expect(deploysBase("GD01-128", 0, 6)).toBe(false); // full HP: only a Shield for a card
+    expect(deploysBase("GD01-128", 5, 2)).toBe(true);
+    expect(deploysBase("GD01-128", 0, 2)).toBe(false);
+  });
+
+  it("replaces the EX Base unless the last Shields are worth more than the extra HP", () => {
+    expect(deploysBase("EXB-001", 0, 6)).toBe(true); // 3 → 6 HP for the 6th Shield
+    expect(deploysBase("EXB-001", 2, 2)).toBe(true); // 1 → 6 HP
+    expect(deploysBase("EXB-001", 0, 2)).toBe(false); // 3 → 6 HP isn't worth one of the last 2 Shields
+    expect(deploysBase("EXB-001", 0, 0)).toBe(true); // no Shield to lose
+  });
 });
 
 describe("heuristic AI v1 (evaluation and lookahead)", () => {

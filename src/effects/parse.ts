@@ -144,7 +144,7 @@ function traitsOf(s: string): string[] {
 const NP = new RegExp(
   "^(?<count>\\d+ to \\d+|\\d+|all|an?)\\s+(?:(?<ofYour>of your|of the enemy's|of your opponent's)\\s+)?" +
     "(?<adjs>(?:(?:rested|active|damaged|enemy|friendly|other|non-battling|blue|green|red|white|purple|token|Link|\\([^()]+\\)(?:/\\([^()]+\\))*)\\s+)*)" +
-    "(?<noun>Unit tokens?|Unit card\\/Pilot card|Unit cards?|Units?|Bases?|Resources?|Pilots?|Command cards?|cards?|Shields?)" +
+    "(?<noun>Unit tokens?|Unit card/Pilot card|Unit cards?|Units?|Bases?|Resources?|Pilot cards?|Pilots?|Command cards?|cards?|Shields?)" +
     "(?<rest>(?:\\s.*)?)$",
 );
 
@@ -638,6 +638,9 @@ function parseSentence(s: string, scope: Scope, ctx: ParseContext): void {
     const np = nounPhrase(`1 enemy Unit ${m[1]!}`);
     return push({ op: "flag", t: "you", flag: "protectShieldArea", filter: np.filter, until: "battle" });
   }
+  if ((m = sentence.match(/^[Pp]air (it) with this Unit$/))) {
+    return push({ op: "pairTo", t: ref(m[1]!, scope), unit: "self" });
+  }
   if (/^[Aa]dd this card to your hand$/.test(sentence)) return push({ op: "selfToHand" });
   if (/^[Dd]eploy this card$/.test(sentence)) return push({ op: "deploySelf" });
   if (/^[Aa]ctivate this card's 【Main】$/.test(sentence)) return push({ op: "runMain" });
@@ -701,6 +704,8 @@ const COND_PATTERNS: [RegExp, (m: RegExpMatchArray) => Cond][] = [
     (m) => ({ count: { ...nounPhrase(`1 friendly other ${m[1]!}`).filter }, min: 1 }),
   ],
   [/^it is your turn$/, () => ({ yourTurn: true })],
+  [/^a Pilot is not paired with this Unit$/, () => ({ selfPaired: false })],
+  [/^a Pilot is paired with this Unit$/, () => ({ selfPaired: true })],
   [/^it is your opponent's turn$/, () => ({ yourTurn: false })],
   [/^this Unit has (\d+) or more AP$/, (m) => ({ selfAp: { min: num(m[1]!) } })],
   [/^this Unit is a Link Unit$/, () => ({ selfLinked: true })],
@@ -1038,6 +1043,14 @@ function parseCost(text: string): { cost: Cost; steps: Step[] } {
       steps.push(
         { op: "choose", filter: { side: "friendly", zone: "trash" }, count: num(m[1]!), exact: true, as },
         { op: "exile", t: as },
+      );
+    } else if ((m = part.match(/^[Dd]iscard (1 .+ card)$/))) {
+      // "Discard 1 (Zeon)/(Neo Zeon) Unit card": chosen from the own hand; offered only if there is one.
+      const np = nounPhrase(m[1]!);
+      const as = `cost${steps.length}`;
+      steps.push(
+        { op: "choose", filter: { ...np.filter, zone: "hand", side: "friendly" }, count: 1, exact: true, as },
+        { op: "discardChosen", t: as },
       );
     } else if ((m = part.match(/^[Ee]xile (1 .+ from your trash)$/))) {
       const np = nounPhrase(m[1]!);
@@ -1482,6 +1495,17 @@ function parseLineEffect(
       ...(once ? { once } : {}),
       segments: parseBody(m[2]!.charAt(0).toUpperCase() + m[2]!.slice(1), ctx),
     };
+  }
+  // "While there are 4 or more Command cards in your trash, this Unit gets AP+1 and HP+1."
+  let w: RegExpMatchArray | null;
+  if ((w = rest.match(/^While (.+?), (this Unit .+)$/))) {
+    const whileCond = condition(w[1]!);
+    const all = cond ? { and: [cond, whileCond] } : whileCond;
+    const inner = [staticSentence(w[2]!.charAt(0).toUpperCase() + w[2]!.slice(1))].flat();
+    for (const effect of inner) {
+      if (effect.kind === "static") effect.cond = effect.cond ? { and: [all, effect.cond] } : all;
+    }
+    return inner;
   }
   const st = sentences(rest);
   if (st.length !== 1) throw new ParseError(`unknown text "${rest}"`);

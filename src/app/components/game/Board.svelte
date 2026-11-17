@@ -807,7 +807,11 @@
 
 <style>
   .game {
-    --cw: clamp(62px, 6.2vw, 92px);
+    /* Card width that still fits the window height: header, paddings and the center bar take about
+       360 px, each side needs about 2.9 card widths (battle area, info line, hand). Below 720 px of
+       height this is smaller than the width-based size, so nothing overlaps on low windows. */
+    --fit: calc((100dvh - 360px) / 5.8);
+    --cw: clamp(44px, min(6.2vw, var(--fit)), 92px);
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: 14px;
@@ -839,7 +843,8 @@
     justify-content: flex-start;
   }
   .me {
-    justify-content: flex-end;
+    /* "safe": if it still doesn't fit, overflow downwards instead of into the center bar. */
+    justify-content: safe flex-end;
   }
   .info {
     display: flex;
@@ -1071,6 +1076,9 @@
     border-radius: var(--radius-card);
   }
   .center {
+    /* Above both sides, so its buttons stay clickable even if a side overflows. */
+    position: relative;
+    z-index: 2;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1162,7 +1170,7 @@
     padding-top: 4px;
   }
   .hand-card {
-    --cw: clamp(66px, 6.6vw, 100px);
+    --cw: clamp(46px, min(6.6vw, calc(var(--fit) * 1.06)), 100px);
     flex: none;
     transition: transform 0.15s;
   }
