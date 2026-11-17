@@ -4,9 +4,15 @@ import { CardPool } from "../../src/data/cards";
 import type { RawCardsDoc } from "../../src/data/types";
 import { CardLib } from "../../src/engine/cardlib";
 import { validateDeck } from "../../src/engine/deck";
-import { archetypeProblems, buildArchetypes, consensus, similarity } from "../../src/meta/archetypes";
+import {
+  archetypeProblems,
+  buildArchetypes,
+  consensus,
+  entryLabel,
+  similarity,
+} from "../../src/meta/archetypes";
 import { banlistProblems } from "../../src/meta/banlist";
-import { metaDecks, newestSnapshot } from "../../src/meta/decks";
+import { metaBaseId, metaDecks, newestSnapshot } from "../../src/meta/decks";
 import { fetchSnapshot, toMetaDeck } from "../../src/meta/limitless";
 import type { MetaSnapshot } from "../../src/meta/types";
 
@@ -31,9 +37,12 @@ describe("banlist", () => {
     expect(banlistProblems({ "ST02-016": 3 }, get)).toHaveLength(1);
     expect(banlistProblems({ "ST02-016": 2 }, get)).toEqual([]);
     expect(banlistProblems({ "ST01-010": 1, "ST05-010": 1 }, get)).toHaveLength(1);
-    expect(banlistProblems({ "GD01-008": 4, "ST01-005": 1 }, get)).toHaveLength(1);
-    // Vanilla Lv.2/cost 1/2/2 Units: at most four in total.
-    expect(banlistProblems({ "ST01-005": 3, "ST04-008": 2 }, get)).toHaveLength(1);
+    expect(banlistProblems({ "GD01-008": 4, "GD05-015": 1 }, get)).toHaveLength(1);
+    // Guntank with one kind of vanilla 2/2 Unit is legal (e.g. the winner of a 208-player regional).
+    expect(banlistProblems({ "GD01-008": 4, "GD05-027": 4 }, get)).toEqual([]);
+    // Vanilla Lv.2/cost 1/2/2 Units: every two different ones are a banned pair.
+    expect(banlistProblems({ "ST01-005": 2, "ST04-008": 2 }, get)).toHaveLength(1);
+    expect(banlistProblems({ "ST01-005": 4 }, get)).toEqual([]);
   });
 });
 
@@ -120,5 +129,49 @@ describe("Limitless", () => {
     expect(snap.decks).toHaveLength(1);
     expect(JSON.stringify(snap)).not.toContain("omeone");
     expect(calls.filter((c) => c.includes("/standings"))).toHaveLength(1);
+  });
+});
+
+describe("meta deck lists: consensus, best or both", () => {
+  it("gives the best list the archetype's id with B, legal, and both lists side by side", () => {
+    const consensus = metaDecks(snapshot, lib, 8);
+    const best = metaDecks(snapshot, lib, 8, "best");
+    const both = metaDecks(snapshot, lib, 8, "both");
+    expect(consensus.every((d) => d.list === "consensus" && /^M\d{2}$/.test(d.id))).toBe(true);
+    expect(best.every((d) => d.list === "best" && /^M\d{2}B$/.test(d.id))).toBe(true);
+    for (const d of best) {
+      expect(validateDeck(lib, d.deck), d.id).toEqual([]);
+      expect(d.deck).toEqual(d.archetype.best);
+      expect(consensus.find((c) => c.id === metaBaseId(d.id))?.archetype.id).toBe(d.archetype.id);
+    }
+    expect(both.map((d) => d.id)).toEqual(
+      consensus.flatMap((c) => [c.id, ...best.filter((b) => metaBaseId(b.id) === c.id).map((b) => b.id)]),
+    );
+    expect(metaBaseId("M01B")).toBe("M01");
+    expect(metaBaseId("M12")).toBe("M12");
+    expect(metaBaseId("ST01")).toBe("ST01");
+  });
+});
+
+describe("all real lists of an archetype", () => {
+  it("keeps every list, best result first, the first one being the best list", () => {
+    const score = (e: { placing: number; tournament: { players: number } }) =>
+      Math.log2(Math.max(2, e.tournament.players)) / Math.sqrt(e.placing);
+    const archetypes = buildArchetypes(snapshot, lib);
+    expect(archetypes.reduce((s, a) => s + a.entries.length, 0)).toBeLessThanOrEqual(snapshot.decks.length);
+    for (const a of archetypes) {
+      expect(a.entries.length, a.id).toBe(a.lists);
+      const first = a.entries[0]!;
+      expect(first.placing).toBe(a.bestPlacing.placing);
+      expect(first.tournament.id).toBe(a.bestPlacing.tournament);
+      for (let i = 1; i < a.entries.length; i++) {
+        const [x, y] = [a.entries[i - 1]!, a.entries[i]!];
+        const [sx, sy] = [score(x), score(y)];
+        expect(sx > sy || (sx === sy && x.weight >= y.weight), a.id).toBe(true);
+      }
+    }
+    expect(entryLabel(archetypes[0]!.entries[0]!)).toMatch(
+      /^Platz \d+ · .+ \(\d+ Spieler, \d{4}-\d\d-\d\d\)/,
+    );
   });
 });

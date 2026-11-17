@@ -9,6 +9,8 @@
 //   npm run sim -- --json out.json                        write all game summaries
 //
 //   npm run sim -- --ai v1 --decks meta                    the 8 most played archetypes (meta12: 12, …)
+//   npm run sim -- --decks meta --list best                their best placed real lists (M01B …)
+//   npm run sim -- --decks meta --list both                consensus and best list of each (M01, M01B …)
 //
 // AIs: random, v0 (heuristic-v0), v1 (heuristic-v1, = heuristic). Decks: random, starters, meta[N] or a
 // list of ids (ST01, M01, …).
@@ -24,7 +26,7 @@ import { fullRounds, runRange, type DeckEntry, type GameSummary, type SimJob } f
 import { computeStats, formatStats } from "../src/sim/stats";
 import { loadLib, loadSnapshot } from "./lib";
 import { threadWorker } from "./node-pool";
-import { metaDecks } from "../src/meta/decks";
+import { metaDecks, type MetaList } from "../src/meta/decks";
 
 const { values: args } = parseArgs({
   options: {
@@ -34,6 +36,7 @@ const { values: args } = parseArgs({
     verbose: { type: "boolean", default: false },
     ai: { type: "string", default: "random,random" },
     decks: { type: "string", default: "random" },
+    list: { type: "string", default: "consensus" },
     workers: { type: "string" },
     "max-turns": { type: "string" },
     json: { type: "string" },
@@ -47,13 +50,20 @@ function decks(spec: string): DeckEntry[] {
   if (spec === "random") return [];
   const starters = STARTER_DECKS.map((d) => ({ id: d.id, name: `${d.id} ${d.name}`, deck: d.deck }));
   if (spec === "starters") return starters;
-  const meta = metaDecks(loadSnapshot(), loadLib()).map((d) => ({
+  const list = args.list as MetaList;
+  if (!["consensus", "best", "both"].includes(list))
+    throw new Error(`--list consensus|best|both, not ${list}`);
+  const metaOf = (n: number) => metaDecks(loadSnapshot(), loadLib(), n, list);
+  const meta = metaOf(Infinity).map((d) => ({
     id: d.id,
     name: `${d.id} ${d.name}${d.supported ? "" : " (unvollständig)"}`,
     deck: d.deck,
   }));
   const metaMatch = spec.match(/^meta(\d+)?$/);
-  if (metaMatch) return meta.slice(0, Number(metaMatch[1] ?? 8));
+  if (metaMatch) {
+    const ids = new Set(metaOf(Number(metaMatch[1] ?? 8)).map((d) => d.id));
+    return meta.filter((d) => ids.has(d.id));
+  }
   const all = [...starters, ...meta];
   return spec.split(",").map((id) => {
     const deck = all.find((d) => d.id === id.trim().toUpperCase());

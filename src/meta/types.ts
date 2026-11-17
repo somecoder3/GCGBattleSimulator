@@ -1,13 +1,19 @@
-// Meta data: tournament decks from Limitless (snapshot) and the archetypes built from them.
+// Meta data: tournament decks from Limitless and Egman (snapshot) and the archetypes built from them.
 // Player names are never stored.
 
 import type { DeckList } from "../engine/types";
+
+export type MetaSource = "limitless" | "egman";
 
 export interface MetaTournament {
   id: string;
   name: string;
   date: string;
   players: number;
+  /** Where the results come from; missing in older snapshots = Limitless. */
+  source?: MetaSource;
+  /** Egman's event type, e.g. "Large Official Event". */
+  kind?: string;
 }
 
 export interface MetaDeck {
@@ -17,6 +23,11 @@ export interface MetaDeck {
   /** Archetype as named on Limitless ("other" for unnamed decks). */
   archetypeId: string;
   archetype: string;
+  /**
+   * The archetype is only a suggestion (Egman names decks after their lead card): such a deck joins a
+   * Limitless archetype of the same name or the most similar one, and forms its own only otherwise.
+   */
+  soft?: boolean;
   /** Main deck by GCGDB card number (Limitless has no resource deck). */
   cards: Record<string, number>;
   /** Entries that are not in GCGDB ("SET-NUMBER name"). */
@@ -25,7 +36,8 @@ export interface MetaDeck {
 
 export interface MetaSnapshot {
   version: 1;
-  source: "limitless";
+  /** "limitless" in older snapshots; "limitless+egman" since 17 Nov 2026. */
+  source: "limitless" | "limitless+egman";
   createdAt: string;
   /** Date window of the tournaments (ISO dates, inclusive). */
   from: string;
@@ -46,9 +58,23 @@ export interface Archetype {
   colors: string[];
   /** Consensus list: the most common count of each card, 50 cards, legal. */
   consensus: DeckList;
-  /** Best placed real list (padded or trimmed to 50 if needed). */
+  /** Real list with the best result (padded or trimmed to 50 if needed). */
   best: DeckList;
   bestPlacing: { tournament: string; placing: number };
+  /** Every real list of the archetype, best result first (players and placing, see
+   * `resultScore`, then recency); the first one is `best`. */
+  entries: ArchetypeEntry[];
   /** Cards of the consensus list whose text the engine doesn't fully understand. */
   partial: string[];
+}
+
+/** One real tournament list of an archetype, as played (not adjusted to the banlist). */
+export interface ArchetypeEntry {
+  tournament: MetaTournament;
+  placing: number;
+  record: MetaDeck["record"];
+  /** Main deck by card number. */
+  cards: Record<string, number>;
+  /** Weight in the archetype (recency, tournament size, placing). */
+  weight: number;
 }

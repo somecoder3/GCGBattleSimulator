@@ -1,13 +1,15 @@
 <script lang="ts">
   import { cardImageUrl, type CardPool } from "../../../data/cards";
+  import { validateDeck } from "../../../engine/deck";
   import type { DeckList } from "../../../engine/types";
-  import { archetypeProblems } from "../../../meta/archetypes";
-  import { BANLIST_DATE, BANNED, BANNED_PAIRS, RESTRICTED } from "../../../meta/banlist";
+  import { archetypeProblems, entryProblems, toDeckList } from "../../../meta/archetypes";
+  import { BANLIST_DATE, BANNED, BANNED_PAIRS, RESTRICTED, VANILLA_TWO_TWO } from "../../../meta/banlist";
   import { metaDecks, type MetaDeck } from "../../../meta/decks";
+  import { egmanPart, sameEvent, withEgman } from "../../../meta/egman";
   import { fetchSnapshot } from "../../../meta/limitless";
   import type { MetaSnapshot } from "../../../meta/types";
   import { db } from "../../lib/db";
-  import { BUNDLED_SNAPSHOT, SNAPSHOT, cardLib, preset, setSnapshot } from "../../lib/decks";
+  import { BUNDLED_SNAPSHOT, SNAPSHOT, cardLib, pickDeck, preset, setSnapshot } from "../../lib/decks";
   import CardImage from "../CardImage.svelte";
   import CardDetail from "../CardDetail.svelte";
 
@@ -21,7 +23,8 @@
   let snapshot = $state.raw<MetaSnapshot | undefined>(SNAPSHOT);
   const decks = $derived(snapshot ? metaDecks(snapshot, lib) : []);
   let selectedId = $state<string>();
-  let showBest = $state(false);
+  /** Shown list: the consensus list or a real list (index into the archetype's entries, best first). */
+  let shown = $state<"consensus" | number>("consensus");
   let detail = $state<ReturnType<CardPool["get"]>>();
 
   let weeks = $state(8);
@@ -32,9 +35,15 @@
   let error = $state<string>();
 
   const selected = $derived(decks.find((d) => d.id === selectedId) ?? decks[0]);
+  const entry = $derived(typeof shown === "number" ? selected?.archetype.entries[shown] : undefined);
   const list = $derived(
-    selected ? (showBest ? selected.archetype.best : selected.archetype.consensus) : undefined,
+    selected ? (entry ? toDeckList(entry.cards) : selected.archetype.consensus) : undefined,
   );
+  const entryCount = $derived(entry ? Object.values(entry.cards).reduce((a, b) => a + b, 0) : 0);
+  function choose(id: string) {
+    selectedId = id;
+    shown = "consensus";
+  }
 
   const TYPE_ORDER = ["UNIT", "PILOT", "COMMAND", "BASE"] as const;
   const TYPE_NAMES: Record<string, string> = {
@@ -63,13 +72,26 @@
     try {
       const to = new Date().toISOString().slice(0, 10);
       const from = new Date(Date.now() - weeks * 7 * 86_400_000).toISOString().slice(0, 10);
-      const next = await fetchSnapshot(pool, {
+      const fresh = await fetchSnapshot(pool, {
         from,
         to,
         minPlayers,
         topN,
         onProgress: (text) => (log = [...log, text]),
       });
+      // Egman is only asked by the weekly snapshot; its tournaments come from the bundled one.
+      const known = new Set(fresh.tournaments.map((t) => sameEvent(t.date, t.name)));
+      const egman = egmanPart(BUNDLED_SNAPSHOT, from, to);
+      const keep = new Set(
+        egman.tournaments
+          .filter((t) => t.players >= minPlayers && !known.has(sameEvent(t.date, t.name)))
+          .map((t) => t.id),
+      );
+      const next = withEgman(fresh, {
+        tournaments: egman.tournaments.filter((t) => keep.has(t.id)),
+        decks: egman.decks.filter((d) => keep.has(d.tournament) && d.placing <= topN),
+      });
+      if (keep.size) log = [...log, `Egman (mitgeliefert): ${keep.size} Turniere übernommen`];
       if (!next.decks.length) throw new Error("Keine Turniere mit Decklisten in diesem Zeitraum.");
       snapshot = next;
       setSnapshot(next);
@@ -87,15 +109,40 @@
     await db.meta.clear().catch(() => undefined);
   }
 
+  /** The list on screen can be played: the consensus list always, a real list if it is legal. */
+  const shownIllegal = $derived(
+    entry && list ? validateDeck(lib, list).length > 0 || entryProblems(entry, lib).length > 0 : false,
+  );
+
+  /** Id of the list on screen for the game or the simulator: M03 (consensus) or M03T5 (5th real list). */
+  function shownId(d: MetaDeck): string {
+    if (!entry || typeof shown !== "number" || !list) return d.id;
+    const id = `${d.id}T${shown + 1}`;
+    pickDeck({
+      id,
+      name: `${d.name} – Platz ${entry.placing} ${entry.tournament.name}`,
+      colors: d.colors,
+      deck: list,
+      group: "meta",
+      supported: list.main.every((no) => lib.has(no) && lib.get(no).script.status !== "partial"),
+    });
+    return id;
+  }
   function play(d: MetaDeck) {
-    preset.play = d.id;
+    preset.play = shownId(d);
     location.hash = "#play";
   }
   function gauntlet(d: MetaDeck) {
-    preset.gauntlet = d.id;
+    preset.gauntlet = shownId(d);
     location.hash = "#sim";
   }
   const pct = (x: number) => `${(x * 100).toFixed(1)} %`;
+  /** Tournaments of a source that contributed deck lists (Limitless also lists ones without). */
+  const withLists = (source: "limitless" | "egman") => {
+    const used = new Set(snapshot?.decks.map((d) => d.tournament));
+    return (snapshot?.tournaments ?? []).filter((t) => (t.source ?? "limitless") === source && used.has(t.id))
+      .length;
+  };
 </script>
 
 <section class="meta">
@@ -103,15 +150,25 @@
     <h1>Meta</h1>
     {#if snapshot}
       <p class="lead">
-        Turniere {snapshot.from} bis {snapshot.to} (Limitless, ab {snapshot.minPlayers} Spielern, Top {snapshot.topN}):
+        Turniere {snapshot.from} bis {snapshot.to} (ab {snapshot.minPlayers} Spielern, Top {snapshot.topN}):
         {snapshot.decks.length} Listen aus {new Set(snapshot.decks.map((d) => d.tournament)).size} Turnieren.
         {snapshot === BUNDLED_SNAPSHOT ? "Mitgelieferter Stand." : "Im Browser geladen."}
+      </p>
+      <p class="hint sources">
+        Quellen: <a href="https://play.limitlesstcg.com" target="_blank" rel="noopener">Limitless</a>
+        ({withLists("limitless")} Turniere)
+        {#if snapshot.tournaments.some((t) => t.source === "egman")}
+          und <a href="https://deckbuilder.egmanevents.com/gundam/tournaments" target="_blank" rel="noopener"
+            >Egman Deck Builder</a
+          >
+          ({withLists("egman")} Turniere, vor allem große Regionals)
+        {/if}.
       </p>
     {/if}
     <ol class="archetypes">
       {#each decks as d (d.id)}
         <li>
-          <button class:active={selected?.id === d.id} onclick={() => (selectedId = d.id)}>
+          <button class:active={selected?.id === d.id} onclick={() => choose(d.id)}>
             <span class="bar" style="width: {Math.min(100, d.share * 300)}%"></span>
             <span class="row1"><span class="id">{d.id}</span> {d.name}</span>
             <span class="row2">
@@ -138,8 +195,8 @@
           >{/if}
       </div>
       <p class="hint">
-        Fragt play.limitlesstcg.com ab (ein Abruf pro Turnier, gedrosselt). Spielernamen werden nicht
-        gespeichert.
+        Fragt play.limitlesstcg.com ab (ein Abruf pro Turnier, gedrosselt). Die Turniere von Egman kommen aus
+        dem mitgelieferten Stand (wöchentlich aktualisiert). Spielernamen werden nicht gespeichert.
       </p>
       {#if error}<p class="error">{error}</p>{/if}
       {#if log.length}<pre class="log">{log.join("\n")}</pre>{/if}
@@ -156,11 +213,13 @@
         {#each BANNED_PAIRS as pair, i (i)}
           <li>
             Nicht zusammen: {pair.a.map((no) => pool.get(no)?.name ?? no).join(", ")} und
-            {pair.b.length > 3
-              ? `${pair.b.length} Vanilla-Units Lv.2/Kosten 1/2/2 (höchstens 4 davon im Deck)`
-              : pair.b.join(", ")}
+            {pair.b.map((no) => pool.get(no)?.name ?? no).join(", ")}
           </li>
         {/each}
+        <li>
+          Units Lv.2/Kosten 1/2 AP/2 HP ohne Effekt ({VANILLA_TWO_TWO.length} Karten, z. B. GM, Jegan): je zwei
+          verschiedene sind ein Bann-Paar, also nur eine Sorte (höchstens 4)
+        </li>
       </ul>
     </details>
   </div>
@@ -172,8 +231,8 @@
           <span class="id">{selected.id}</span>
           <h2>{selected.name}</h2>
           <p class="hint">
-            {pct(selected.share)} der Meta · {selected.archetype.lists} Listen · beste Platzierung {selected
-              .archetype.bestPlacing.placing}.
+            {pct(selected.share)} der Meta · {selected.archetype.lists} Listen · bestes Ergebnis Platz {selected
+              .archetype.bestPlacing.placing} von {selected.archetype.entries[0]?.tournament.players}.
             {#if selected.archetype.partial.length}
               Nicht vollständig verstanden: {selected.archetype.partial.join(", ")}.
             {/if}
@@ -183,27 +242,71 @@
           </p>
         </div>
         <div class="actions">
-          <button class="btn primary" onclick={() => play(selected!)}>Gegen die KI spielen</button>
-          <button class="btn" onclick={() => gauntlet(selected!)}>Gegen das Feld simulieren</button>
+          <button class="btn primary" onclick={() => play(selected!)} disabled={shownIllegal}
+            >Gegen die KI spielen</button
+          >
+          <button class="btn" onclick={() => gauntlet(selected!)} disabled={shownIllegal}
+            >Gegen das Feld simulieren</button
+          >
+          <p class="hint plays">
+            {#if shownIllegal}
+              Diese Liste ist nicht turnierlegal und kann nicht gespielt werden.
+            {:else if entry && typeof shown === "number"}
+              Mit dieser Turnierliste ({selected.id}T{shown + 1}, Platz {entry.placing})
+            {:else}
+              Mit der Konsensliste ({selected.id})
+            {/if}
+          </p>
         </div>
       </header>
       <div class="switch" role="tablist">
         <button
           role="tab"
-          aria-selected={!showBest}
-          class:active={!showBest}
-          onclick={() => (showBest = false)}>Konsensliste</button
+          aria-selected={shown === "consensus"}
+          class:active={shown === "consensus"}
+          onclick={() => (shown = "consensus")}>Konsensliste</button
         >
-        <button role="tab" aria-selected={showBest} class:active={showBest} onclick={() => (showBest = true)}
-          >Bestplatzierte Liste</button
+        <button
+          role="tab"
+          aria-selected={shown !== "consensus"}
+          class:active={shown !== "consensus"}
+          onclick={() => (shown = 0)}>Turnierlisten ({selected.archetype.entries.length})</button
         >
       </div>
-      <p class="hint">
-        {showBest
-          ? "Eine echte Turnierliste; wo nötig an Bannliste und 50 Karten angepasst."
-          : "Häufigste Anzahl jeder Karte über alle Listen (gewichtet nach Aktualität, Turniergröße, Platz), legal gemacht: zwei Hauptfarben, Bannliste."}
-        Ressourcen-Deck: 10 Resource-Karten (Limitless führt keines).
-      </p>
+      {#if entry}
+        <ol class="entries">
+          {#each selected.archetype.entries as e, i (i)}
+            <li>
+              <button class:active={shown === i} onclick={() => (shown = i)}>
+                <span class="place">{e.placing}.</span>
+                <span class="tname">{e.tournament.name}</span>
+                <span class="meta-info"
+                  >{e.tournament.players} Spieler · {e.tournament.date}{e.record.wins +
+                  e.record.losses +
+                  e.record.ties
+                    ? ` · ${e.record.wins}-${e.record.losses}${e.record.ties ? `-${e.record.ties}` : ""}`
+                    : ""}{e.tournament.source === "egman" ? " · Egman" : ""}</span
+                >
+              </button>
+            </li>
+          {/each}
+        </ol>
+        <p class="hint">
+          Echte Turnierliste, unverändert. Sortiert nach Ergebnis: Platz und Turniergröße (log2 Spieler /
+          √Platz), bei Gleichstand neuere zuerst.
+          {#if entryCount !== 50}{entryCount} Karten.{/if}
+          {#if entryProblems(entry, lib).length}
+            Bannliste: {entryProblems(entry, lib).join("; ")}.
+          {/if}
+          Ressourcen-Deck: 10 Resource-Karten.
+        </p>
+      {:else}
+        <p class="hint">
+          Häufigste Anzahl jeder Karte über alle Listen (gewichtet nach Aktualität, Turniergröße, Platz),
+          legal gemacht: zwei Hauptfarben, Bannliste. Ressourcen-Deck: 10 Resource-Karten (Limitless führt
+          keines).
+        </p>
+      {/if}
       {#each grouped(list) as g (g.type)}
         <h3>{TYPE_NAMES[g.type]} <small>{g.cards.reduce((s, c) => s + c.n, 0)}</small></h3>
         <div class="cards">
@@ -365,6 +468,15 @@
     color: #fff;
     font-weight: 600;
   }
+  .plays {
+    flex-basis: 100%;
+    margin: 0;
+    text-align: right;
+    font-size: 12px;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+  }
   .error {
     color: var(--danger);
     font-size: 13px;
@@ -404,6 +516,51 @@
     color: var(--text);
     border-color: var(--line);
     background: var(--bg-sunken);
+  }
+  .entries {
+    max-height: 260px;
+    overflow: auto;
+    margin: 0 0 8px;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .entries button {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 2.5em minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: baseline;
+    padding: 5px 10px;
+    border: 0;
+    background: none;
+    text-align: left;
+    font-size: 13px;
+  }
+  .entries li + li button {
+    border-top: 1px solid var(--line);
+  }
+  .entries button.active,
+  .entries button:hover {
+    background: var(--bg-sunken);
+  }
+  .entries button.active .tname {
+    color: var(--accent);
+  }
+  .place {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .tname {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .meta-info {
+    color: var(--text-dim);
+    font-size: 12px;
+    white-space: nowrap;
   }
   .cards {
     display: grid;

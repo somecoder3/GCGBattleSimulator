@@ -528,6 +528,19 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       for (const p of owners) shuffle(c.s.rng, c.s.players[p].deck);
       return next();
     }
+    case "pairTo": {
+      // The chosen card is in the trash or the hand, so it is looked up without the in-play filter.
+      const card = (frame.vars[instr.t] ?? []).find((id) => ["trash", "hand"].includes(inst(c, id).zone));
+      const unit = targets(c, frame, instr.unit)[0];
+      if (card !== undefined && unit !== undefined && inst(c, unit).pilot === null) pairPilot(c, card, unit);
+      return next();
+    }
+    case "discardChosen":
+      for (const id of (frame.vars[instr.t] ?? []).filter((x) => inst(c, x).zone === "hand")) {
+        moveTo(c, id, "trash");
+        c.ev.push({ t: "toTrash", card: id, reason: "discard" });
+      }
+      return next();
     case "pairSelf": {
       const card = inst(c, frame.source);
       const unit = targets(c, frame, instr.t)[0];

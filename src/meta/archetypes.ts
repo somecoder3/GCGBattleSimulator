@@ -5,7 +5,7 @@ import { DEFAULT_RESOURCE, DECK_SIZE, MAX_COPIES, RESOURCE_DECK_SIZE } from "../
 import type { CardLib } from "../engine/cardlib";
 import type { DeckList } from "../engine/types";
 import { BANNED, BANNED_PAIRS, RESTRICTED, banlistProblems, isVanillaTwoTwo } from "./banlist";
-import type { Archetype, MetaDeck, MetaSnapshot } from "./types";
+import type { Archetype, ArchetypeEntry, MetaDeck, MetaSnapshot } from "./types";
 
 export interface ArchetypeOptions {
   /** Days after which a deck counts half (recency weighting). */
@@ -42,6 +42,15 @@ export function deckWeight(deck: MetaDeck, snapshot: MetaSnapshot, options: Arch
   const size = Math.log2(Math.max(2, t.players));
   const placing = 1 / Math.sqrt(Math.max(1, deck.placing));
   return recency * size * placing;
+}
+
+/**
+ * How strong a single result is, without recency: log2(players) / √placing. Winning a 9-player local
+ * (3.2) ranks below 2nd of 200 players (5.4) and below winning 26 players (4.7).
+ */
+export function resultScore(deck: MetaDeck, snapshot: MetaSnapshot): number {
+  const t = snapshot.tournaments.find((x) => x.id === deck.tournament);
+  return t ? Math.log2(Math.max(2, t.players)) / Math.sqrt(Math.max(1, deck.placing)) : 0;
 }
 
 /** Legal limit for a card in a deck. */
@@ -117,13 +126,15 @@ function legalCards(cards: [string, number][], lib: CardLib): [string, number][]
     return !color || colors.has(color);
   });
   const mass = (nos: Set<string>) => out.reduce((s, [no, m]) => s + (nos.has(no) ? m : 0), 0);
+  // Of the vanilla Lv.2 2/2 Units only the most played kind stays (every two of them are a banned pair).
+  const vanilla = out.filter(([no]) => isVanillaTwoTwo(lib.get(no))).sort((x, y) => y[1] - x[1]);
+  if (vanilla.length > 1) {
+    const drop = new Set(vanilla.slice(1).map(([no]) => no));
+    out = out.filter(([no]) => !drop.has(no));
+  }
   for (const pair of BANNED_PAIRS) {
     const a = new Set(pair.a);
-    const b = new Set(
-      pair.a.includes("GD01-008")
-        ? [...pair.b, ...out.map(([no]) => no).filter((no) => isVanillaTwoTwo(lib.get(no)))]
-        : pair.b,
-    );
+    const b = new Set(pair.b);
     const ma = mass(a);
     const mb = mass(b);
     if (ma > 0 && mb > 0) {
@@ -161,33 +172,61 @@ export function buildArchetypes(
     id: deck.archetypeId,
   }));
   const named = new Map<string, { name: string; lists: typeof weighted }>();
+  const join = (id: string, name: string, w: (typeof weighted)[number]) => {
+    const entry = named.get(id) ?? { name, lists: [] };
+    entry.lists.push({ ...w, id });
+    named.set(id, entry);
+  };
   for (const w of weighted) {
-    if (w.id === "other") continue;
-    const entry = named.get(w.id) ?? { name: w.deck.archetype, lists: [] };
-    entry.lists.push(w);
-    named.set(w.id, entry);
+    if (w.id === "other" || w.deck.soft) continue;
+    join(w.id, w.deck.archetype, w);
   }
-  // Unnamed decks join the most similar named archetype if they are close enough.
   const minSimilarity = options.minSimilarity ?? 0.5;
-  const centers = new Map(
-    [...named].map(([id, e]) => [
-      id,
-      consensus(e.lists.map((l) => ({ cards: l.deck.cards, weight: l.weight }))),
-    ]),
-  );
-  const others: typeof weighted = [];
-  for (const w of weighted) {
-    if (w.id !== "other") continue;
+  const centersOf = () =>
+    new Map(
+      [...named].map(([id, e]) => [
+        id,
+        consensus(e.lists.map((l) => ({ cards: l.deck.cards, weight: l.weight }))),
+      ]),
+    );
+  const mostSimilar = (cards: Counts, centers: Map<string, Counts>): string | null => {
     let bestId: string | null = null;
     let best = 0;
     for (const [id, center] of centers) {
-      const sim = similarity(w.deck.cards, center);
+      const sim = similarity(cards, center);
       if (sim > best) [best, bestId] = [sim, id];
     }
-    if (bestId && best >= minSimilarity) named.get(bestId)!.lists.push({ ...w, id: bestId });
+    return bestId && best >= minSimilarity ? bestId : null;
+  };
+
+  // Suggested archetypes (Egman, named after the lead card), decided once per suggested group: a named
+  // archetype of the same name, else the one most similar to the group's consensus, else their own.
+  const normalize = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const byName = new Map([...named].map(([id, e]) => [normalize(e.name), id]));
+  const firmCenters = centersOf();
+  const suggested = new Map<string, typeof weighted>();
+  for (const w of weighted) {
+    if (!w.deck.soft || w.id === "other") continue;
+    suggested.set(w.id, [...(suggested.get(w.id) ?? []), w]);
+  }
+  for (const [groupId, group] of suggested) {
+    const center = consensus(group.map((l) => ({ cards: l.deck.cards, weight: l.weight })));
+    const name = group[0]!.deck.archetype;
+    const id = byName.get(normalize(name)) ?? mostSimilar(center, firmCenters) ?? groupId;
+    for (const w of group) join(id, name, w);
+  }
+
+  // Unnamed decks join the most similar archetype if they are close enough.
+  const centers = centersOf();
+  const others: typeof weighted = [];
+  for (const w of weighted) {
+    if (w.id !== "other") continue;
+    const id = mostSimilar(w.deck.cards, centers);
+    if (id) join(id, named.get(id)!.name, w);
     else others.push(w);
   }
 
+  const tournaments = new Map(snapshot.tournaments.map((t) => [t.id, t]));
   const totalWeight = weighted.reduce((s, w) => s + w.weight, 0) || 1;
   const archetypes: Archetype[] = [];
   for (const [id, e] of named) {
@@ -195,7 +234,10 @@ export function buildArchetypes(
       e.lists.map((l) => ({ cards: l.deck.cards, weight: l.weight })),
       lib,
     );
-    const bestList = [...e.lists].sort((a, b) => a.deck.placing - b.deck.placing || b.weight - a.weight)[0]!;
+    const ranked = [...e.lists].sort(
+      (a, b) => resultScore(b.deck, snapshot) - resultScore(a.deck, snapshot) || b.weight - a.weight,
+    );
+    const bestList = ranked[0]!;
     const bestCounts = legalize(bestList.deck.cards, counts);
     archetypes.push({
       id,
@@ -206,6 +248,20 @@ export function buildArchetypes(
       consensus: toDeckList(counts),
       best: toDeckList(bestCounts),
       bestPlacing: { tournament: bestList.deck.tournament, placing: bestList.deck.placing },
+      entries: ranked.flatMap((l) => {
+        const tournament = tournaments.get(l.deck.tournament);
+        return tournament
+          ? [
+              {
+                tournament,
+                placing: l.deck.placing,
+                record: l.deck.record,
+                cards: l.deck.cards,
+                weight: l.weight,
+              },
+            ]
+          : [];
+      }),
       partial: Object.keys(counts)
         .filter((no) => lib.has(no) && lib.get(no).script.status === "partial")
         .sort(),
@@ -248,4 +304,16 @@ export function archetypeProblems(a: Archetype, lib: CardLib): string[] {
   const count = (list: DeckList) => list.main.reduce<Counts>((m, no) => ((m[no] = (m[no] ?? 0) + 1), m), {});
   const get = (no: string) => (lib.has(no) ? lib.get(no) : undefined);
   return [...banlistProblems(count(a.consensus), get), ...banlistProblems(count(a.best), get)];
+}
+
+/** Banlist problems of one real list. */
+export function entryProblems(entry: ArchetypeEntry, lib: CardLib): string[] {
+  return banlistProblems(entry.cards, (no) => (lib.has(no) ? lib.get(no) : undefined));
+}
+
+/** Short label of a real list, e.g. "Platz 1 · Regional Tokyo (208 Spieler, 2026-11-08) · 6-1". */
+export function entryLabel(entry: ArchetypeEntry): string {
+  const { wins, losses, ties } = entry.record;
+  const record = wins + losses + ties ? ` · ${wins}-${losses}${ties ? `-${ties}` : ""}` : "";
+  return `Platz ${entry.placing} · ${entry.tournament.name} (${entry.tournament.players} Spieler, ${entry.tournament.date})${record}`;
 }

@@ -197,6 +197,10 @@ export type Prim =
   | { op: "shuffleIntoDeck"; t: Ref }
   /** This card (in limbo or the trash) becomes the Pilot of the chosen Unit. */
   | { op: "pairSelf"; t: Ref }
+  /** The chosen card (e.g. a Pilot card in the trash) becomes the Pilot of `unit` if it has none. */
+  | { op: "pairTo"; t: Ref; unit: Ref }
+  /** The chosen cards in the hand are discarded (a "Discard 1 … card" cost). */
+  | { op: "discardChosen"; t: Ref }
   /** Run the 【Main】 of the card paired with this Unit / of the chosen card / this card's 【Action】. */
   | { op: "runPilotMain" }
   | { op: "runMainOf"; t: Ref }

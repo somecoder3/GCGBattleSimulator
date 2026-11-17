@@ -163,6 +163,25 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   - CI-Lauf #10/#11 rot: Fuzz-Test (1000 Spiele) brauchte auf dem GitHub-Runner 5,8 s (lokal 2,4 s) und
     lief ins Vitest-Standardlimit von 5 s. Jetzt `testTimeout: 30_000` in `vite.config.ts`. Simulationslastige
     Tests sind auf dem Runner 2–3× langsamer als am Desktop; neue Tests nicht knapp an Grenzen bauen.
+  - **Zweite Meta-Quelle Egman Deck Builder** (`src/meta/egman.ts`, Nutzerwunsch nach Vergleich mit Bandai,
+    Victory Road, MetaSheep): eine JSON-Datei mit großen offiziellen Regionals und kompletten Decklisten,
+    nur im wöchentlichen Snapshot abgerufen, ohne Spielernamen, Quelle im Meta-Reiter genannt, Doppelte
+    zu Limitless per Link oder Datum+Name aussortiert, Archetyp pro Egman-Gruppe (gleicher Name, sonst
+    ähnlichster, sonst eigener). Snapshot `data/meta/2026-11-17.json`: 152 Listen aus 13 Turnieren (vorher 72
+    aus 6). MetaSheep: Nutzungsbedingungen verbieten Abgreifen → nicht genutzt; Bandai selbst veröffentlicht
+    keine Turnierlisten (nur TCG+-Deckcodes über interne Schnittstelle → nicht genutzt). **Vor einer
+    öffentlichen Version Egman um Erlaubnis bitten.** Details `docs/META.md`.
+  - **Bannliste korrigiert:** Guntank (GD01-008) ist nur mit M1 Astray Shrike (GD05-015) gepaart; die
+    Vanilla-2/2-Units sind untereinander gepaart (nur eine Sorte). Vorher war Guntank mit allen Vanilla-Units
+    gepaart (Fehler aus M5, verfälschte Konsenslisten). Belege in `docs/META.md`.
+  - Neu unterstützt: GD01-023 (Kosten „Discard 1 … card“, `pairTo`), GD01-076 („While …, this Unit gets“,
+    Trash-Zählung nach Kartentyp). Abdeckung 65,8 %. 189 Tests.
+  - **Meta-Listen wählbar** (Nutzerwunsch): Konsens (`M01`, Standard), beste Liste (`M01B`) oder beide;
+    Simulator-Formular „Meta-Listen“, CLI `--list`, `metaDecks(…, list)`. Spiel nutzt weiter Konsens.
+  - **Alle Turnierlisten eines Archetyps** (`Archetype.entries`, Nutzerwunsch): Meta-Reiter „Turnierlisten“,
+    Decks-Reiter kopiert Archetyp → Konsens oder eine echte Liste. Sortiert nach Ergebnis
+    `resultScore` = log₂(Spieler)/√Platz; die erste ist die beste Liste (`M01B`, vorher bestplatzierte).
+    Spielen/Simulieren aus dem Meta-Reiter nimmt die angezeigte Liste (Turnierliste als `M03T5`, nur im Speicher).
 - Beobachtung: Shining Gundam (M01, meistgespielt) gewinnt bei v1 nur ~40 %; die Karten sind korrekt (Partie
   per `npm run game` geprüft), die KI spielt das Special-Move-Timing schlecht (v0 wirft z. B. Master Asia ab).
 

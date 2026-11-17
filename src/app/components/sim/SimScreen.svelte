@@ -15,6 +15,7 @@
   } from "../../../sim/stats";
   import { db, download, type SavedRun } from "../../lib/db";
   import { SNAPSHOT, deckChoices, preset, type DeckChoice } from "../../lib/decks";
+  import { metaBaseId, type MetaList } from "../../../meta/decks";
   import { createWorkers, defaultWorkerCount, type BrowserWorker } from "../../lib/simworkers";
 
   // Simulator: many AI games in Web Workers, live statistics, saved runs, card performance, replays.
@@ -29,18 +30,37 @@
     onreplay: (job: SimJob, index: number, names: Record<string, string>) => void;
   } = $props();
 
-  // svelte-ignore state_referenced_locally
-  const CHOICES = [...deckChoices(pool), ...userDecks];
+  // Meta decks as consensus lists, best placed real lists or both (Mxx / MxxB).
+  let metaList = $state<MetaList>("consensus");
+  const CHOICES = $derived([...deckChoices(pool, metaList), ...userDecks]);
 
+  // svelte-ignore state_referenced_locally
   let selectedDecks = $state<string[]>(
-    CHOICES.filter((d) => d.group === "meta")
+    deckChoices(pool)
+      .filter((d) => d.group === "meta")
       .slice(0, 8)
       .map((d) => d.id),
   );
+
+  /** Switching the list keeps the chosen archetypes: M01 ↔ M01B, or both of them. */
+  function setMetaList(next: MetaList) {
+    const archetypes = new Set(selectedDecks.filter((id) => /^M\d{2,}B?$/.test(id)).map(metaBaseId));
+    const others = selectedDecks.filter((id) => !/^M\d{2,}B?$/.test(id));
+    metaList = next;
+    const meta = CHOICES.filter((d) => d.group === "meta" && archetypes.has(metaBaseId(d.id))).map(
+      (d) => d.id,
+    );
+    selectedDecks = [...meta, ...others];
+    if (/^M\d{2,}B?$/.test(focus)) {
+      const base = metaBaseId(focus);
+      focus = CHOICES.find((d) => d.group === "meta" && metaBaseId(d.id) === base)?.id ?? focus;
+    }
+  }
   let randomDecks = $state(false);
   // A deck chosen in the Meta or Decks tab ("simulate against the field").
   let mode = $state<"pairs" | "gauntlet">(preset.gauntlet ? "gauntlet" : "pairs");
-  let focus = $state(preset.gauntlet ?? CHOICES[0]?.id ?? "");
+  // svelte-ignore state_referenced_locally
+  let focus = $state(preset.gauntlet ?? deckChoices(pool)[0]?.id ?? "");
   preset.gauntlet = null;
   let aiA = $state<AiName>("heuristic-v1");
   let aiB = $state<AiName>("heuristic-v1");
@@ -275,6 +295,14 @@
               </select>
             </label>
           {/if}
+          <label class="metalist">
+            Meta-Listen
+            <select value={metaList} onchange={(e) => setMetaList(e.currentTarget.value as MetaList)}>
+              <option value="consensus">Konsensliste (Durchschnitt aller Listen)</option>
+              <option value="best">Beste Liste (echte Liste mit dem besten Ergebnis, MxxB)</option>
+              <option value="both">Beide (Mxx und MxxB)</option>
+            </select>
+          </label>
           {#each CHOICES as d, i (d.id)}
             {#if i === 0 || CHOICES[i - 1]!.group !== d.group}
               <span class="group">{groupLabel(d.group)}</span>
