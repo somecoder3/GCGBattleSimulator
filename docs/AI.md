@@ -129,6 +129,11 @@ beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (
 
 - **Wert einer Unit:** AP + verbleibende HP + Lv./2, Zuschläge für Keywords und Pilot.
 - **Mulligan:** siehe Abschnitt „Mulligan“ (gilt für alle KIs).
+- **Action-Commands** (seit 18. Nov. 2026, `commandMatters`, **nicht gemessen**): nur, wenn sie jetzt etwas
+  ändern: eine gegnerische Unit entfernen oder durch Schaden zerstören, den laufenden Kampf beeinflussen (AP,
+  Keywords, Schutz der eigenen kämpfenden Unit, neues Angriffsziel) oder eine beschädigte eigene Unit heilen;
+  sonstige Effekte (Ziehen …) am Ende des gegnerischen Zuges. Vorher spielte v0 jedes Action-Command sofort.
+  Wirkt auch auf v1 und die Suche, die mit v0 weiterspielen. In der Main Phase unverändert.
 - **Main Phase** (Reihenfolge ergibt sich aus den Punkten): tödlicher Angriff › Units einsetzen (höheres
   Lv. zuerst) › Pilot setzen (Link bevorzugt; Commands mit 【Pilot】 nur bei Link) › Base (siehe unten) › Commands › Activate-Effekte › Angriff auf eine geruhte Unit, die zerstört wird und die eigene
   überlebt › Spieler angreifen (außer ein aktiver <Blocker> würde die Unit ohne Verlust zerstören) ›

@@ -286,9 +286,50 @@ class Ctx {
 
   /** Uses Commands and activated effects whenever it can; passing is the fallback. */
   actionScore(o: Action): number {
-    if (o.type === "playCommand") return 50 + this.card(o.card).level;
+    if (o.type === "playCommand") return this.commandMatters(o.card) ? 50 + this.card(o.card).level : 0;
     if (o.type === "activate") return 40;
     return 0;
+  }
+
+  /**
+   * Is an Action Command worth playing now (rather than kept for later)? It must change something: remove
+   * or kill an enemy Unit, change the current battle (AP, keywords, protection, a new attack target), or
+   * heal a damaged friendly Unit. Other effects (draw …) wait for the opponent's end of turn.
+   */
+  commandMatters(id: CardId): boolean {
+    const script = this.card(id).script;
+    const program = script.compiled.find(
+      (e) => e.effect.kind === "command" && e.effect.timing.includes("action"),
+    )?.program;
+    if (!program) return false;
+    const b = this.s.battle;
+    const battling = b && b.target !== "player" ? [b.attacker, b.target] : b ? [b.attacker] : [];
+    const myBattler = battling.some((u) => this.s.cards[u]!.owner === this.me);
+    const enemyBattler = battling.some((u) => this.s.cards[u]!.owner === this.enemy);
+    const enemies = this.s.players[this.enemy].battle.filter((u) => this.known(u));
+    const damagedFriend = this.s.players[this.me].battle.some((u) => this.s.cards[u]!.damage > 0);
+    let neutral = false;
+    for (const instr of program) {
+      if (instr.op === "redirect") {
+        if (enemyBattler && b?.attackerOwner === this.enemy) return true;
+        continue;
+      }
+      if (!("t" in instr) || typeof instr.t !== "string") {
+        if (instr.op === "draw" || instr.op === "exResource" || instr.op === "token") neutral = true;
+        continue;
+      }
+      const effect = classify(instr);
+      if (effect.kind === "harm") {
+        if (["destroy", "bounce", "exile", "toDeck"].includes(instr.op) && enemies.length) return true;
+        if (effect.damage > 0 && enemies.some((u) => this.hpLeft(u) <= effect.damage)) return true;
+        if (instr.op === "mod" && enemyBattler) return true;
+      } else if (effect.kind === "help") {
+        if (instr.op === "recover" && damagedFriend) return true;
+        if ((instr.op === "mod" || instr.op === "grant" || instr.op === "flag") && myBattler) return true;
+      } else neutral = true;
+    }
+    // Effects without a fight to change: at the end of the opponent's turn, before they are wasted.
+    return neutral && this.s.active === this.enemy && this.s.step === "endAction";
   }
 
   // ------------------------------------------------------------------------------------------

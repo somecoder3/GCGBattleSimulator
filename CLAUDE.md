@@ -177,6 +177,8 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   18 432 behaltenen Händen abgeleitet, im direkten Vergleich v1 gegen v1 **51,4 %** (50,9–51,9 %, 36 864
   Spiele); Mulligans 2 % → 43 %. Regel pro KI-Platz wählbar (`SimJob.mulligans`, `makePolicy(…, mulligan)`),
   Werkzeug `npm run mulligan`. Details `docs/AI.md` „Mulligan“.
+- **v0 hält Action-Commands zurück (18. Nov., Nutzerwunsch „schnell, ohne Messung“):** `commandMatters` in
+  `src/ai/heuristic.ts`, Regeln in `docs/AI.md`. Wirkung auf die Spielstärke ungemessen (offen).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
