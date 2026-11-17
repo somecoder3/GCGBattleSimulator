@@ -13,7 +13,7 @@ export interface CompiledScript extends CardScript {
 
 export function parseContext(cards: Iterable<CardDef>): ParseContext {
   const tokens = [...cards]
-    .filter((c) => c.type === "UNIT TOKEN")
+    .filter((c) => c.type === "UNIT TOKEN" || (c.type === "BASE" && c.token))
     .map((c) => ({ no: c.no, name: c.name, ap: c.ap ?? 0, hp: c.hp ?? 0 }));
   return { tokens };
 }

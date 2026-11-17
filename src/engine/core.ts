@@ -241,13 +241,14 @@ export function isLinked(c: Ctx, id: CardId): boolean {
 // ---------------------------------------------------------------------------------------------
 // Filters and conditions
 
-const ZONE_OF: Record<NonNullable<Filter["zone"]>, ZoneName[]> = {
+const ZONE_OF: Record<Exclude<NonNullable<Filter["zone"]>, "pilots">, ZoneName[]> = {
   battle: ["battle"],
   hand: ["hand"],
   trash: ["trash"],
   resources: ["resources"],
   base: ["base"],
   shieldArea: ["shields", "base"],
+  field: ["battle", "base"],
 };
 
 /** Does a card match a filter? Sides are relative to `controller`; `other` excludes `source`. */
@@ -262,9 +263,12 @@ export function matches(
   const card = inst(c, id);
   const d = def(c, id);
   if (!ignoreZone) {
-    const zones = ZONE_OF[f.zone ?? "battle"];
-    if (!zones.includes(card.zone as ZoneName)) return false;
+    if (f.zone === "pilots") {
+      if (card.zone !== "pilot") return false;
+    } else if (!ZONE_OF[f.zone ?? "battle"].includes(card.zone as ZoneName)) return false;
   }
+  if (f.anyOf && !f.anyOf.some((g) => matches(c, id, g, controller, source, true))) return false;
+  if (f.notKeyword && keywordsOf(c, id)[f.notKeyword]) return false;
   if (f.side === "friendly" && card.owner !== controller) return false;
   if (f.side === "enemy" && card.owner === controller) return false;
   if (f.types && !f.types.includes(d.type)) return false;
@@ -344,6 +348,16 @@ export function matches(
 /** Matching cards in the filter's zone (default: battle areas), Units in play by default. */
 export function candidates(c: Ctx, f: Filter, controller: PlayerId, source: CardId | null): CardId[] {
   const filter: Filter = f.types || f.zone ? f : { ...f, types: ["UNIT", "UNIT TOKEN"] };
+  if (filter.zone === "pilots") {
+    const pilots: CardId[] = [];
+    for (const p of [0, 1] as const) {
+      for (const unit of c.s.players[p].battle) {
+        const pilot = inst(c, unit).pilot;
+        if (pilot !== null && matches(c, pilot, filter, controller, source)) pilots.push(pilot);
+      }
+    }
+    return pilots;
+  }
   const zones = ZONE_OF[filter.zone ?? "battle"];
   const out: CardId[] = [];
   for (const p of [0, 1] as const) {
@@ -473,6 +487,17 @@ export function evalCond(c: Ctx, cond: Cond, source: CardId, controller: PlayerI
     return paid >= cond.paidForEffects;
   }
   if ("opponentDiscarded" in cond) return c.s.marks[`oppDiscarded:${controller}`] === c.s.turn;
+  if ("destroyedBy" in cond) {
+    const how = inst(c, source).destroyedBy;
+    if (!how) return false;
+    if (cond.destroyedBy.kind && how.kind !== cond.destroyedBy.kind) return false;
+    if (cond.destroyedBy.traits) {
+      if (!how.by || !c.lib.has(how.by)) return false;
+      const t = c.lib.get(how.by).traits;
+      if (!cond.destroyedBy.traits.some((x) => t.includes(x))) return false;
+    }
+    return true;
+  }
   if ("played" in cond) return markedThisTurn(c, "cmd", controller, cond.played);
   if ("selfFrom" in cond) return inst(c, source).from === cond.selfFrom;
   if ("pairedKill" in cond) return c.s.marks[`pairedKill:${controller}`] === c.s.turn;
@@ -562,6 +587,7 @@ export function moveTo(
   delete card.lastSource;
   delete card.from;
   delete card.paidEx;
+  delete card.destroyedBy;
   if (card.token && !FIELD.has(zone) && zone !== "limbo") {
     card.zone = "gone"; // 5-17-2-5
     c.ev.push({ t: "removed", card: id });
@@ -603,10 +629,13 @@ export function toHand(c: Ctx, id: CardId): void {
 }
 
 /** Destroys a Unit or Base by an effect or damage: 【Destroyed】 triggers see it in its last location (13-2-8). */
-export function destroy(c: Ctx, id: CardId): void {
+export function destroy(c: Ctx, id: CardId, by: CardId | null = null): void {
   raise(c, "destroyed", id);
   c.ev.push({ t: "destroyed", card: id });
   toTrash(c, id, "destroyed");
+  const card = inst(c, id);
+  if (card.zone === "trash")
+    card.destroyedBy = { kind: "effect", ...(by !== null ? { by: inst(c, by).no } : {}) };
 }
 
 export function draw(c: Ctx, p: PlayerId, n: number): void {
@@ -761,13 +790,12 @@ export function dealDamage(
     if (hasFlag(c, id, "noEnemyEffectDamage")) amount = 0;
     if (flagFilters(c, id, "noEffectDamageFrom")?.some((f) => matches(c, source, f, target.owner, id, true)))
       amount = 0;
-    for (const n of flagAmounts(c, id, "reduceEnemyEffectDamage")) amount -= n;
+    amount -= reduction(c, id, "reduceEnemyEffectDamage", source);
     const ignore = flagAmounts(c, id, "ignoreEnemyEffectDamageUpTo");
     if (ignore.length && amount <= Math.max(...ignore)) amount = 0;
   }
-  if (fromEnemy) for (const n of flagAmounts(c, id, "reduceEnemyDamage")) amount -= n;
-  if (fromEnemy && kind === "battle")
-    for (const n of flagAmounts(c, id, "reduceEnemyBattleDamage")) amount -= n;
+  if (fromEnemy) amount -= reduction(c, id, "reduceEnemyDamage", source);
+  if (fromEnemy && kind === "battle") amount -= reduction(c, id, "reduceEnemyBattleDamage", source);
   // "Reduce the next damage it receives by 2": used up by the first damage.
   const next = c.s.modifiers.findIndex((m) => m.target === id && m.flag === "reduceNextDamage");
   if (next >= 0 && amount > 0) {
@@ -780,6 +808,33 @@ export function dealDamage(
   if (source !== null) target.lastSource = source;
   else delete target.lastSource;
   c.ev.push({ t: "damage", card: id, amount, kind });
+}
+
+/**
+ * Sum of damage reductions of a kind on a card, from effects and constant effects whose filter (if any)
+ * matches the damage source. 【Once per Turn】 constant reductions are used up when they apply.
+ */
+function reduction(c: Ctx, id: CardId, flag: FlagName, source: CardId): number {
+  const owner = inst(c, id).owner;
+  let sum = 0;
+  for (const m of c.s.modifiers) {
+    if (m.target !== id || m.flag !== flag) continue;
+    if (m.filter && !matches(c, source, m.filter, owner, id, true)) continue;
+    sum += m.amount ?? 0;
+  }
+  for (const st of activeStatics(c)) {
+    if (st.effect.flag !== flag || !staticApplies(c, st, id)) continue;
+    const f = st.effect.flagFilter;
+    if (f && !matches(c, source, st.source === id ? f : resolveSelf(c, f, st.source), owner, id, true))
+      continue;
+    if (st.effect.once) {
+      const key = `${st.source}:${flag}:once`;
+      if (c.s.oncePerTurn[key] === c.s.turn) continue;
+      c.s.oncePerTurn[key] = c.s.turn;
+    }
+    sum += st.effect.amount ?? 0;
+  }
+  return sum;
 }
 
 /** "When your (AEUG) cards deal damage to enemy Units, increase the damage dealt by 1" (GD06-033). */
@@ -895,8 +950,13 @@ export function rulesManagement(c: Ctx): void {
       }
     }
     for (const id of doomed) {
+      const card = inst(c, id);
+      const how = { kind: card.lastDamage ?? "effect", by: card.lastSource } as const;
       c.ev.push({ t: "destroyed", card: id });
       toTrash(c, id, "destroyed");
+      if (card.zone === "trash") {
+        card.destroyedBy = { kind: how.kind, ...(how.by !== undefined ? { by: inst(c, how.by).no } : {}) };
+      }
     }
   }
 }

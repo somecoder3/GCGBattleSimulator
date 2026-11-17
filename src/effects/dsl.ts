@@ -13,7 +13,8 @@ export type Duration = "turn" | "battle";
 /** Card selection. Sides are relative to the effect's controller. Default zone: battle area (Units). */
 export interface Filter {
   side?: "friendly" | "enemy";
-  zone?: "battle" | "hand" | "trash" | "resources" | "base" | "shieldArea";
+  /** "pilots": Pilots paired with Units in play. */
+  zone?: "battle" | "hand" | "trash" | "resources" | "base" | "shieldArea" | "pilots" | "field";
   types?: CardType[];
   lvMin?: number;
   lvMax?: number;
@@ -60,6 +61,10 @@ export interface Filter {
   pairedWith?: Filter;
   /** Paired with (the Pilot of) a Unit matching this filter: for Pilots in play. */
   pilotOf?: Filter;
+  /** Matches at least one of these ("that is Lv.1 or lower or has 1 or less AP"). */
+  anyOf?: Filter[];
+  /** Does not have this keyword ("without <Breach>"). */
+  notKeyword?: KeywordName;
   /** Card name contains none of these ("without "X" in its card name"). */
   notNames?: string[];
 }
@@ -107,6 +112,8 @@ export type Cond =
   | { paidForEffects: number }
   /** The opponent discarded because of one of the controller's effects this turn. */
   | { opponentDiscarded: true }
+  /** How the effect's card was destroyed ("with battle damage", "by one of your (Neo Zeon) card's effects"). */
+  | { destroyedBy: { kind?: "battle" | "effect"; traits?: string[] } }
   /** The controller activated the 【Main】/【Action】 of a matching Command card this turn. */
   | { played: Filter }
   /** One of the controller's Units was destroyed this turn by the effect of a matching own card. */
@@ -140,6 +147,10 @@ export type FlagName =
   | "noDamageFrom"
   /** Can't receive effect damage from enemy cards matching the filter. */
   | "noEffectDamageFrom"
+  /** Can't activate <Blocker> (on a Unit, or on a player with a filter for all matching Units). */
+  | "cantBlock"
+  /** Battle damage it would receive is dealt to the linked card instead. */
+  | "redirectBattleDamage"
   /** While rested: all enemy Units (also Link Units) must attack it if they can. */
   | "tauntAll"
   /** Can't be set as active (also not in the start phase). */
@@ -199,6 +210,8 @@ export type Prim =
       may?: boolean;
       as?: string;
       by?: "opponent";
+      /** Only cards stored in this variable ("1 … card you placed from your deck with this effect"). */
+      among?: string;
       /** All `count` cards or none (costs like "Exile 4 cards in your trash"). */
       exact?: boolean;
     }
@@ -216,7 +229,8 @@ export type Prim =
   | { op: "toDeck"; t: Ref; pos: "top" | "bottom" }
   | { op: "recover"; t: Ref; amount: number }
   | { op: "mod"; t: Ref; ap?: number; hp?: number; until: Duration }
-  | { op: "grant"; t: Ref; keyword: KeywordName; amount?: number; until: Duration }
+  /** `per`: the amount once for each matching card ("the same number of <Breach 1> as …"). */
+  | { op: "grant"; t: Ref; keyword: KeywordName; amount?: number; until: Duration; per?: Filter }
   | {
       op: "flag";
       t: Ref | "you" | "opponent";
@@ -224,14 +238,26 @@ export type Prim =
       filter?: Filter;
       amount?: number;
       until: Duration | "nextStart";
+      /** The card the flag points to (redirectBattleDamage). */
+      link?: Ref;
     }
   /** AP change by the number of matching cards (e.g. "reduce its AP by the number of friendly … Units"). */
   | { op: "modByCount"; t: Ref; count: Filter; sign: 1 | -1; until: Duration }
-  | { op: "draw"; n: number }
+  | { op: "draw"; n: number; both?: boolean }
+  /** The Pilot paired with this Unit goes to its owner's hand or the top of the deck. */
+  | { op: "pilotTo"; dest: "hand" | "deckTop"; filter?: Filter }
+  /** "Pay ①": rest that many active Resources; fails without them. */
+  | { op: "payCost"; n: number }
+  /** Damage equal to the number of matching cards. */
+  | { op: "damageByCount"; t: Ref; count: Filter }
+  /** Deploy a copy of the chosen Unit token. */
+  | { op: "tokenCopy"; t: Ref; rested?: boolean }
+  /** "Destroy the first 2 cards in that player's shield area" (Base first, then Shields). */
+  | { op: "shieldAreaDestroy"; n: number }
   /** Discard n; `as` keeps the discarded cards (for "if you discard a … with this effect"). */
   | { op: "discard"; n: number; as?: string }
   | { op: "shieldToHand"; n: number }
-  | { op: "exResource"; n: number }
+  | { op: "exResource"; n: number; both?: boolean }
   /** `forOwnerOf`: the token goes to the owner of the card(s) in that variable ("the destroyed Unit's owner"). */
   | { op: "token"; no: string; count?: number; rested?: boolean; forOwnerOf?: Ref }
   /** `as` keeps the milled cards ("If you place a (CB) card with this effect"). */
@@ -243,7 +269,18 @@ export type Prim =
   /** Place the top card of the resource deck (ST14-015). */
   | { op: "placeResource"; rested?: boolean }
   /** Look at the top n cards, optionally take matching ones to the hand, the rest to the bottom in random order. */
-  | { op: "lookTop"; n: number; pick?: Filter; pickCount?: number; may?: boolean; deploy?: boolean }
+  | {
+      op: "lookTop";
+      n: number;
+      pick?: Filter;
+      pickCount?: number;
+      may?: boolean;
+      deploy?: boolean;
+      /** The picked card goes back on top of the deck instead of into the hand. */
+      toTop?: boolean;
+      /** The remaining cards go into the trash instead of the bottom of the deck. */
+      rest?: "trash";
+    }
   /**
    * Look at the top n cards, put one on top (or into the hand) and the rest at the bottom (or into the
    * trash) (ST02-015, ST09-010).
@@ -271,7 +308,7 @@ export type Prim =
   /** The chosen cards in the hand are discarded (a "Discard 1 … card" cost). */
   | { op: "discardChosen"; t: Ref }
   /** Run the 【Main】 of the card paired with this Unit / of the chosen card / this card's 【Action】. */
-  | { op: "runPilotMain" }
+  | { op: "runPilotMain"; timing?: "main" | "action" }
   | { op: "runMainOf"; t: Ref }
   | { op: "runAction" }
   /** "Begin a battle between a and b and only perform the damage step." */
@@ -279,7 +316,7 @@ export type Prim =
   /** Burst: deploy this card as a Unit with the given AP/HP (Master Asia). */
   | { op: "deploySelfAsUnit"; ap: number; hp: number }
   /** Choose own Resources and set them active. */
-  | { op: "readyResource"; n: number }
+  | { op: "readyResource"; n: number; both?: boolean }
   /** Burst helpers: add this card to the hand / deploy this card / run this Command's 【Main】. */
   | { op: "selfToHand" }
   | { op: "deploySelf" }
@@ -371,6 +408,8 @@ export type Effect =
       flagFilter?: Filter;
       /** Traits the targets gain ("All your Units gain (Neo Zeon)"). */
       traits?: string[];
+      /** 【Once per Turn】 (damage reductions). */
+      once?: boolean;
       /** "gets AP+2 for each of your rested (CB) Units" */
       apPer?: { count: Filter; per: number; unique?: boolean };
       /** AP + the damage this Unit has received (GD05-051). */

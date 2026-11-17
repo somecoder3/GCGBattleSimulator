@@ -15,6 +15,7 @@ import {
   costOf,
   destroy,
   mark,
+  playerFlagFilters,
   playerHasFlag,
   pairPilot,
   createCard,
@@ -235,8 +236,14 @@ function blockers(c: Ctx): CardId[] {
   const b = c.s.battle!;
   if (keywordsOf(c, b.attacker).highManeuver) return []; // 13-1-6
   const defender = other(b.attackerOwner);
+  const banned = [...playerFlagFilters(c, 0, "cantBlock"), ...playerFlagFilters(c, 1, "cantBlock")];
   return c.s.players[defender].battle.filter(
-    (id) => id !== b.target && !inst(c, id).rested && keywordsOf(c, id).blocker, // 8-3-3, 13-1-4
+    (id) =>
+      id !== b.target &&
+      !inst(c, id).rested &&
+      keywordsOf(c, id).blocker && // 8-3-3, 13-1-4
+      !hasFlag(c, id, "cantBlock") &&
+      !banned.some((f) => matches(c, id, f, defender, null)),
   );
 }
 
@@ -790,7 +797,13 @@ function raiseIfDestroyed(c: Ctx, attacker: CardId, target: CardId): void {
  * Battle damage from one Unit to another. "When this Unit deals battle damage to an enemy Unit that is
  * Lv.4 or lower that has no paired Pilot, destroy that enemy Unit" (GD05-050) is applied right away.
  */
-function battleHit(c: Ctx, from: CardId, to: CardId, ap: number): void {
+function battleHit(c: Ctx, from: CardId, target: CardId, ap: number): void {
+  // "Battle damage this Unit would receive is dealt to that Unit instead" (GD04-087, GD06-018).
+  const redirect = c.s.modifiers.find((m) => m.target === target && m.flag === "redirectBattleDamage");
+  const to =
+    redirect?.link !== undefined && ["battle", "base"].includes(inst(c, redirect.link).zone)
+      ? redirect.link
+      : target;
   const before = inst(c, to).damage;
   dealDamage(c, to, battleDamageTo(c, to, from, ap), "battle", from);
   if (inst(c, to).damage <= before || inst(c, to).zone !== "battle") return;

@@ -8,6 +8,7 @@ import {
   LIMITS,
   activeResources,
   apOf,
+  breakShields,
   costOf,
   pay,
   playerHasFlag,
@@ -100,7 +101,8 @@ function ask(
 
 const YES_NO: Action[] = [{ type: "yes" }, { type: "no" }];
 
-const IN_PLAY = ["battle", "base", "resources"];
+// "pilot": Pilots chosen as targets ("Choose 1 Pilot paired with an enemy Unit", GD03-110).
+const IN_PLAY = ["battle", "base", "resources", "pilot"];
 
 /** Cards a reference stands for that are still where the effect can reach them (in play by default). */
 function targets(c: Ctx, frame: Frame, ref: Ref, zones: string[] = IN_PLAY): CardId[] {
@@ -234,8 +236,9 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     case "choose": {
       const as = instr.as ?? "it";
       const chosen = frame.vars[as] ?? [];
+      const among = instr.among !== undefined ? (frame.vars[instr.among] ?? []) : null;
       const pool = candidates(c, resolveFilter(c, frame, instr.filter), me, frame.source).filter(
-        (id) => !chosen.includes(id),
+        (id) => !chosen.includes(id) && (among === null || among.includes(id)),
       );
       const left = (instr.count ?? 1) - chosen.length;
       // "You may choose 2 … from your trash. Exile them. If you do, …": the full number or nothing.
@@ -285,7 +288,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         const owner = inst(c, id).owner;
         if (owner !== me && playerHasFlag(c, owner, "noEffectDestroy")) continue; // GD04-101
         if (owner === me) mark(c, "ownDestroyed", me, def(c, frame.source).no);
-        destroy(c, id);
+        destroy(c, id, frame.source);
       }
       return next();
     case "bounce":
@@ -337,22 +340,25 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
           until: instr.until,
           source: frame.source,
         });
-        c.ev.push({ t: "modifier", card: id, ap: instr.ap ?? 0, hp: instr.hp ?? 0 });
+        c.ev.push({ t: "modifier", card: id, ap: shielded ? 0 : (instr.ap ?? 0), hp: instr.hp ?? 0 });
       }
       return next();
-    case "grant":
+    case "grant": {
+      const times = instr.per ? candidates(c, instr.per, me, frame.source).length : 1;
+      if (times <= 0) return next();
       for (const id of targets(c, frame, instr.t)) {
         c.s.modifiers.push({
           target: id,
           ap: 0,
           hp: 0,
           keyword: instr.keyword,
-          ...(instr.amount ? { amount: instr.amount } : {}),
+          ...(instr.amount ? { amount: instr.amount * times } : {}),
           until: instr.until,
           source: frame.source,
         });
       }
       return next();
+    }
     case "flag": {
       const base = {
         ap: 0,
@@ -360,6 +366,9 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         flag: instr.flag,
         ...(instr.filter ? { filter: instr.filter } : {}),
         ...(instr.amount ? { amount: instr.amount } : {}),
+        ...(instr.link !== undefined && targets(c, frame, instr.link)[0] !== undefined
+          ? { link: targets(c, frame, instr.link)[0]! }
+          : {}),
         until: instr.until,
         source: frame.source,
       };
@@ -373,7 +382,49 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
 
     case "draw":
       effectDraw(c, me, instr.n);
+      if (instr.both) effectDraw(c, other(me), instr.n);
       return next();
+    case "pilotTo": {
+      const pilot = inst(c, frame.source).pilot;
+      if (pilot !== null && (!instr.filter || matches(c, pilot, instr.filter, me, frame.source, true))) {
+        if (instr.dest === "hand") toHand(c, pilot);
+        else {
+          moveTo(c, pilot, "deck", "top");
+          c.ev.push({ t: "toDeck", card: pilot, pos: "top" });
+        }
+      }
+      return next();
+    }
+    case "payCost":
+      if (activeResources(c, me).length < instr.n) {
+        frame.pc = instr.fail;
+        return;
+      }
+      pay(c, me, instr.n);
+      return next();
+    case "damageByCount": {
+      const amount = candidates(c, instr.count, me, frame.source).length;
+      for (const id of targets(c, frame, instr.t)) dealDamage(c, id, amount, "effect", frame.source);
+      return next();
+    }
+    case "tokenCopy": {
+      const original = targets(c, frame, instr.t)[0];
+      if (original === undefined || !inst(c, original).token) return next();
+      if (!ensureRoom(c, frame)) return;
+      const token = createCard(c, inst(c, original).no, me, "limbo");
+      c.ev.push({ t: "token", player: me, card: token.id });
+      enterBattle(c, token.id, !!instr.rested);
+      return next();
+    }
+    case "shieldAreaDestroy": {
+      const enemy = other(me);
+      for (let i = 0; i < instr.n; i++) {
+        const base = c.s.players[enemy].base[0];
+        if (base !== undefined) destroy(c, base, frame.source);
+        else if (c.s.players[enemy].shields.length) breakShields(c, enemy, 1);
+      }
+      return next();
+    }
     case "discard": {
       const left = frame.repeat ?? instr.n;
       const hand = c.s.players[me].hand;
@@ -391,6 +442,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       return next();
     case "exResource":
       for (let i = 0; i < instr.n; i++) placeExResource(c, me);
+      if (instr.both) for (let i = 0; i < instr.n; i++) placeExResource(c, other(me));
       return next();
     case "mill": {
       const milled = c.s.players[me].deck.slice(0, instr.n);
@@ -452,7 +504,8 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         }
         const token = createCard(c, instr.no, me, "limbo");
         c.ev.push({ t: "token", player: me, card: token.id });
-        enterBattle(c, token.id, !!instr.rested);
+        if (def(c, token.id).type === "BASE") deployBase(c, token.id);
+        else enterBattle(c, token.id, !!instr.rested);
         left--;
       }
       delete frame.repeat;
@@ -473,7 +526,8 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         offerChoice(c, frame, "lookPick");
         return;
       }
-      shuffleIntoBottom(c, frame.looking);
+      if (instr.rest === "trash") for (const id of frame.looking) toTrash(c, id, "mill");
+      else shuffleIntoBottom(c, frame.looking);
       delete frame.looking;
       delete frame.repeat;
       return next();
@@ -501,6 +555,11 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         offerChoice(c, frame, "target");
         return;
       }
+      if (def(c, chosen).type === "BASE") {
+        delete frame.vars[DEPLOY];
+        deployBase(c, chosen);
+        return next();
+      }
       if (!ensureRoom(c, frame)) return;
       delete frame.vars[DEPLOY];
       enterBattle(c, chosen);
@@ -510,6 +569,10 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       const rested = c.s.players[me].resources.filter((id) => inst(c, id).rested).slice(0, instr.n);
       if (rested.length) c.s.marks[`readyRes:${me}`] = c.s.turn;
       for (const id of rested) ready(c, id);
+      if (instr.both) {
+        const theirs = c.s.players[other(me)].resources.filter((id) => inst(c, id).rested).slice(0, instr.n);
+        for (const id of theirs) ready(c, id);
+      }
       return next();
     }
 
@@ -615,7 +678,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     case "runPilotMain": {
       next();
       const pilot = inst(c, frame.source).pilot;
-      if (pilot !== null) runCommand(c, pilot, me, "main");
+      if (pilot !== null) runCommand(c, pilot, me, instr.timing ?? "main");
       return;
     }
     case "runMainOf": {
@@ -687,6 +750,11 @@ export function answer(c: Ctx, action: Action): void {
         return;
       case LOOK:
         if (card === null) {
+          frame.repeat = 0;
+        } else if (instr.op === "lookTop" && instr.toTop) {
+          // Stays where it is: the cards above it go to the bottom, so it ends up on top.
+          frame.looking = frame.looking!.filter((id) => id !== card);
+          c.ev.push({ t: "reveal", player: frame.controller, cards: [card] });
           frame.repeat = 0;
         } else if (instr.op === "lookTop" && instr.deploy) {
           // "You may deploy 1 Unit card … among them": only with room in the battle area.

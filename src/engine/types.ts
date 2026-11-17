@@ -49,6 +49,8 @@ export interface CardInstance {
   lastSource?: CardId;
   /** An EX Resource was used to pay for this card ("if you use an EX Resource to play this card"). */
   paidEx?: boolean;
+  /** How it was last destroyed (kept in the trash for 【Destroyed】 conditions). */
+  destroyedBy?: { kind: "battle" | "effect"; by?: string };
   /** Where it was deployed from ("if you deploy this Unit from your trash"). */
   from?: "hand" | "trash" | "other";
 }
@@ -82,6 +84,8 @@ export interface Modifier {
   filter?: Filter;
   /** A gained effect (an effect of another card's script, e.g. ST12-014). */
   effect?: EffectRef;
+  /** The card a flag points to (redirectBattleDamage). */
+  link?: CardId;
   until: "turn" | "battle" | "nextStart";
   source: CardId;
 }

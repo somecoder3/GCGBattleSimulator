@@ -45,7 +45,7 @@ describe("noun phrases", () => {
   });
 
   it("rejects what it does not know", () => {
-    expect(() => nounPhrase("1 enemy Unit belonging to each enemy player")).toThrow(ParseError);
+    expect(() => nounPhrase("1 enemy Unit that dances")).toThrow(ParseError);
   });
 });
 
