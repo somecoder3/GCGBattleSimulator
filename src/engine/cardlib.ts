@@ -52,9 +52,9 @@ export interface EngineCard {
 }
 
 const KEYWORD_LINE =
-  /^(?:【Activate[･・]Main】)?<(Blocker|First Strike|High-Maneuver|Suppression|Breach|Repair|Support)(?: (\d+))?>/;
+  /^(?:【Activate[･・]Main】)?[<[](Blocker|First Strike|High-Maneuver|Suppression|Breach|Repair|Support)(?: (\d+))?[>\]]/;
 
-/** Keywords on lines that start with the keyword (unconditional). */
+/** Keywords on lines that start with the keyword (unconditional); GD02-053 prints "[Suppression]". */
 export function parseKeywords(text: string): Keywords {
   const k: Keywords = { ...NO_KEYWORDS };
   for (const line of text.split(/\r?\n/)) {

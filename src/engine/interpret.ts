@@ -22,6 +22,7 @@ import {
   enterBattle,
   evalCond,
   hpOf,
+  hasFlag,
   inst,
   mark,
   matches,
@@ -54,8 +55,14 @@ export function effectDraw(c: Ctx, p: PlayerId, n: number): void {
   const before = c.s.players[p].hand.length;
   draw(c, p, n);
   if (c.s.players[p].hand.length === before) return;
+  c.s.marks[`effectDraw:${p}`] = c.s.turn;
   const me = c.s.players[p];
   for (const id of [...me.battle, ...me.base]) raise(c, "effectDraw", id);
+}
+
+function enemyBlocksReady(c: Ctx, p: PlayerId): boolean {
+  const enemy = c.s.players[other(p)];
+  return [...enemy.battle, ...enemy.base].some((id) => hasFlag(c, id, "noEnemyReady"));
 }
 
 export function startEffect(c: Ctx, t: PendingTrigger): void {
@@ -264,6 +271,8 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       return next();
     case "ready":
       for (const id of targets(c, frame, instr.t)) {
+        // "Enemy Units can't be set as active by enemy effects" (GD06-037, on the other player's card).
+        if (inst(c, id).owner === me && enemyBlocksReady(c, me)) continue;
         if (inst(c, id).zone === "resources" && inst(c, id).rested) c.s.marks[`readyRes:${me}`] = c.s.turn;
         ready(c, id);
       }
@@ -320,9 +329,10 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       return next();
     case "mod":
       for (const id of targets(c, frame, instr.t)) {
+        const shielded = (instr.ap ?? 0) < 0 && inst(c, id).owner !== me && hasFlag(c, id, "noApReduction");
         c.s.modifiers.push({
           target: id,
-          ap: instr.ap ?? 0,
+          ap: shielded ? 0 : (instr.ap ?? 0),
           hp: instr.hp ?? 0,
           until: instr.until,
           source: frame.source,
@@ -520,6 +530,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     case "modByCount": {
       const amount = candidates(c, instr.count, me, frame.source).length * instr.sign;
       for (const id of targets(c, frame, instr.t)) {
+        if (amount < 0 && inst(c, id).owner !== me && hasFlag(c, id, "noApReduction")) continue;
         c.s.modifiers.push({ target: id, ap: amount, hp: 0, until: instr.until, source: frame.source });
         c.ev.push({ t: "modifier", card: id, ap: amount, hp: 0 });
       }

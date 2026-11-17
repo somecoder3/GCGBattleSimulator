@@ -47,6 +47,8 @@ export interface CardInstance {
   lastDamage?: "battle" | "effect";
   /** The card that dealt the last damage (for "this Unit destroys an enemy Unit with damage"). */
   lastSource?: CardId;
+  /** An EX Resource was used to pay for this card ("if you use an EX Resource to play this card"). */
+  paidEx?: boolean;
   /** Where it was deployed from ("if you deploy this Unit from your trash"). */
   from?: "hand" | "trash" | "other";
 }

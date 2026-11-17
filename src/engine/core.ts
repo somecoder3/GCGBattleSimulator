@@ -127,8 +127,11 @@ function sumModifiers(c: Ctx, id: CardId, field: "ap" | "hp"): number {
     if (st.effect[field] && staticApplies(c, st, id)) sum += st.effect[field]!;
     if (field === "ap" && st.effect.apPer && staticApplies(c, st, id)) {
       const owner = inst(c, st.source).owner;
-      sum += candidates(c, st.effect.apPer.count, owner, st.source).length * st.effect.apPer.per;
+      const found = candidates(c, st.effect.apPer.count, owner, st.source);
+      const n = st.effect.apPer.unique ? new Set(found.map((x) => def(c, x).name)).size : found.length;
+      sum += n * st.effect.apPer.per;
     }
+    if (field === "ap" && st.effect.apFromDamage && staticApplies(c, st, id)) sum += inst(c, id).damage;
   }
   return sum;
 }
@@ -156,7 +159,11 @@ export function keywordsOf(c: Ctx, id: CardId): Keywords {
   const k: Keywords = { ...(def(c, id).keywords ?? NO_KEYWORDS) };
   for (const m of c.s.modifiers) if (m.target === id && m.keyword) addKeyword(k, m.keyword, m.amount);
   for (const st of activeStatics(c)) {
-    if (st.effect.keyword && staticApplies(c, st, id)) addKeyword(k, st.effect.keyword, st.effect.amount);
+    if (!st.effect.keyword || !staticApplies(c, st, id)) continue;
+    if (st.effect.keywordPer) {
+      const n = candidates(c, st.effect.keywordPer, inst(c, st.source).owner, st.source).length;
+      if (n > 0) addKeyword(k, st.effect.keyword, (st.effect.amount ?? 0) * n);
+    } else addKeyword(k, st.effect.keyword, st.effect.amount);
   }
   return k;
 }
@@ -174,10 +181,26 @@ export function flagFilters(c: Ctx, id: CardId, flag: FlagName): Filter[] | null
   for (const st of activeStatics(c)) {
     if (st.effect.flag === flag && staticApplies(c, st, id)) {
       found = true;
-      if (st.effect.flagFilter) filters.push(st.effect.flagFilter);
+      const f = st.effect.flagFilter;
+      if (f) filters.push(st.source === id ? f : resolveSelf(c, f, st.source));
     }
   }
   return found ? filters : null;
+}
+
+/** "… whose Lv. is equal to or lower than this Unit" in a filter applied to another card: as numbers. */
+function resolveSelf(c: Ctx, f: Filter, self: CardId): Filter {
+  if (f.lvMaxOf !== "self" && f.apMaxOf !== "self") return f;
+  const out: Filter = { ...f };
+  if (f.lvMaxOf === "self") {
+    out.lvMax = def(c, self).level;
+    delete out.lvMaxOf;
+  }
+  if (f.apMaxOf === "self") {
+    out.apMax = apOf(c, self);
+    delete out.apMaxOf;
+  }
+  return out;
 }
 
 export const hasFlag = (c: Ctx, id: CardId, flag: FlagName) => flagFilters(c, id, flag) !== null;
@@ -253,6 +276,32 @@ export function matches(
     if (!((b.attacker === source && b.target === id) || (b.target === source && b.attacker === id)))
       return false;
   }
+  if (f.battling) {
+    const opp = battlingWith(c, id);
+    if (opp === null || !matches(c, opp, f.battling, controller, source)) return false;
+  }
+  if (f.attacked && c.s.battle?.target !== id) return false;
+  if (f.notColors && d.color && f.notColors.includes(d.color)) return false;
+  if (f.anyKeyword) {
+    const k = keywordsOf(c, id);
+    if (!(k.blocker || k.firstStrike || k.highManeuver || k.suppression || k.breach || k.repair || k.support))
+      return false;
+  }
+  if (
+    f.hasDestroyed &&
+    !effectsOf(c, id).some(
+      (e) => e.compiled.effect.kind === "trigger" && e.compiled.effect.on === "destroyed",
+    )
+  )
+    return false;
+  if (f.pairedWith) {
+    const pilot = card.pilot;
+    if (pilot === null || !matches(c, pilot, f.pairedWith, controller, source, true)) return false;
+  }
+  if (f.pilotOf) {
+    if (card.zone !== "pilot" || card.pairedTo === null) return false;
+    if (!matches(c, card.pairedTo, f.pilotOf, controller, source)) return false;
+  }
   if (f.lvMaxOf === "self" && source !== null && d.level > def(c, source).level) return false;
   if (f.apMaxOf === "self" && source !== null) {
     const ap = card.zone === "battle" ? apOf(c, id) : d.ap;
@@ -309,6 +358,10 @@ export function candidates(c: Ctx, f: Filter, controller: PlayerId, source: Card
     const min = Math.min(...out.map((id) => def(c, id).level));
     return out.filter((id) => def(c, id).level === min);
   }
+  if (filter.lowestHp && out.length) {
+    const min = Math.min(...out.map((id) => hpOf(c, id)));
+    return out.filter((id) => hpOf(c, id) === min);
+  }
   if (filter.highestLv && out.length) {
     const max = Math.max(...out.map((id) => def(c, id).level));
     return out.filter((id) => def(c, id).level === max);
@@ -343,6 +396,15 @@ export function mark(c: Ctx, kind: "cmd" | "ownDestroyed", p: PlayerId, no: stri
 /** Players' flags from effects ("friendly Units can't be destroyed by enemy effects"). */
 export function playerHasFlag(c: Ctx, p: PlayerId, flag: FlagName): boolean {
   return c.s.modifiers.some((m) => m.target === -1 && m.player === p && m.flag === flag);
+}
+
+/** The card a Unit is battling (the attacker or its target), or null. */
+export function battlingWith(c: Ctx, id: CardId): CardId | null {
+  const b = c.s.battle;
+  if (!b || b.target === "player") return null;
+  if (b.attacker === id) return b.target;
+  if (b.target === id) return b.attacker;
+  return null;
 }
 
 export function evalCond(c: Ctx, cond: Cond, source: CardId, controller: PlayerId): boolean {
@@ -382,6 +444,35 @@ export function evalCond(c: Ctx, cond: Cond, source: CardId, controller: PlayerI
     return pilot !== null && matches(c, pilot, cond.selfPilot, controller, source, true);
   }
   if ("readiedResource" in cond) return c.s.marks[`readyRes:${controller}`] === c.s.turn;
+  if ("level" in cond) {
+    const n = c.s.players[controller].resources.length;
+    return (
+      (cond.level.min === undefined || n >= cond.level.min) &&
+      (cond.level.max === undefined || n <= cond.level.max)
+    );
+  }
+  if ("enemyPlayers" in cond) return 1 >= cond.enemyPlayers.min;
+  if ("enemyTrash" in cond) {
+    const n = c.s.players[other(controller)].trash.length;
+    return (
+      (cond.enemyTrash.min === undefined || n >= cond.enemyTrash.min) &&
+      (cond.enemyTrash.max === undefined || n <= cond.enemyTrash.max)
+    );
+  }
+  if ("battling" in cond) {
+    const opp = battlingWith(c, source);
+    return opp !== null && matches(c, opp, cond.battling, controller, source);
+  }
+  if ("pairedThisTurn" in cond) return c.s.marks[`paired:${source}`] === c.s.turn;
+  if ("drewByEffect" in cond) return c.s.marks[`effectDraw:${controller}`] === c.s.turn;
+  if ("enemyAttacked" in cond)
+    return (c.s.marks[`attacked:${other(controller)}`] === c.s.turn) === cond.enemyAttacked;
+  if ("selfPaidEx" in cond) return !!inst(c, source).paidEx;
+  if ("paidForEffects" in cond) {
+    const paid = c.s.marks[`paidFx:${controller}:${c.s.turn}`] ?? 0;
+    return paid >= cond.paidForEffects;
+  }
+  if ("opponentDiscarded" in cond) return c.s.marks[`oppDiscarded:${controller}`] === c.s.turn;
   if ("played" in cond) return markedThisTurn(c, "cmd", controller, cond.played);
   if ("selfFrom" in cond) return inst(c, source).from === cond.selfFrom;
   if ("pairedKill" in cond) return c.s.marks[`pairedKill:${controller}`] === c.s.turn;
@@ -470,6 +561,7 @@ export function moveTo(
   delete card.lastDamage;
   delete card.lastSource;
   delete card.from;
+  delete card.paidEx;
   if (card.token && !FIELD.has(zone) && zone !== "limbo") {
     card.zone = "gone"; // 5-17-2-5
     c.ev.push({ t: "removed", card: id });
@@ -535,7 +627,7 @@ export function rest(c: Ctx, id: CardId): void {
 
 export function ready(c: Ctx, id: CardId): void {
   const card = inst(c, id);
-  if (!card.rested) return;
+  if (!card.rested || hasFlag(c, id, "cantReady")) return;
   card.rested = false;
   c.ev.push({ t: "ready", card: id });
 }
@@ -545,11 +637,12 @@ export function activeResources(c: Ctx, p: PlayerId): CardId[] {
 }
 
 /** Reduction of Lv. and cost of a card in the hand or trash (GD05-004 Akatsuki, GD06-050 Legend). */
-function handDiscount(c: Ctx, p: PlayerId, id: CardId): number {
+function handDiscount(c: Ctx, p: PlayerId, id: CardId, forLevel = false): number {
   let discount = 0;
   const zone = inst(c, id).zone;
   for (const effect of def(c, id).script.effects) {
     if (effect.kind !== "handCost" || (effect.zone ?? "hand") !== zone) continue;
+    if (forLevel && effect.costOnly) continue;
     if (effect.unless && evalCond(c, effect.unless, id, p)) continue;
     if (effect.when && !evalCond(c, effect.when, id, p)) continue;
     discount +=
@@ -560,7 +653,7 @@ function handDiscount(c: Ctx, p: PlayerId, id: CardId): number {
 
 /** Lv. and cost to play a card from the hand. */
 export function levelOf(c: Ctx, p: PlayerId, id: CardId): number {
-  return Math.max(0, def(c, id).level - handDiscount(c, p, id));
+  return Math.max(0, def(c, id).level - handDiscount(c, p, id, true));
 }
 export function costOf(c: Ctx, p: PlayerId, id: CardId): number {
   return Math.max(0, def(c, id).cost - handDiscount(c, p, id));
@@ -574,8 +667,8 @@ export function canPlay(c: Ctx, p: PlayerId, id: CardId): boolean {
 }
 
 /** Pays a cost by resting active Resources; normal ones first, then EX Resources, which leave the game (5-17-3-2-3). */
-export function pay(c: Ctx, p: PlayerId, cost: number): void {
-  if (cost <= 0) return;
+export function pay(c: Ctx, p: PlayerId, cost: number): boolean {
+  if (cost <= 0) return false;
   const active = activeResources(c, p);
   const used = [
     ...active.filter((id) => !inst(c, id).token),
@@ -584,7 +677,9 @@ export function pay(c: Ctx, p: PlayerId, cost: number): void {
   if (used.length < cost) throw new Error("cannot pay cost");
   for (const id of used) rest(c, id);
   c.ev.push({ t: "pay", player: p, cards: used });
-  for (const id of used) if (inst(c, id).token) moveTo(c, id, "removal");
+  const ex = used.filter((id) => inst(c, id).token);
+  for (const id of ex) moveTo(c, id, "removal");
+  return ex.length > 0;
 }
 
 export function placeExResource(c: Ctx, p: PlayerId): void {
@@ -620,6 +715,7 @@ export function pairPilot(c: Ctx, pilot: CardId, unit: CardId): void {
   card.zone = "pilot";
   card.pairedTo = unit;
   inst(c, unit).pilot = pilot;
+  c.s.marks[`paired:${unit}`] = c.s.turn;
   const link = isLinked(c, unit);
   const owner = inst(c, unit).owner;
   c.ev.push({ t: "pair", player: owner, card: pilot, unit, link });
@@ -663,6 +759,8 @@ export function dealDamage(
   if (fromEnemy && amount > 0 && target.zone === "battle") amount += damageBoost(c, source);
   if (fromEnemy && kind === "effect") {
     if (hasFlag(c, id, "noEnemyEffectDamage")) amount = 0;
+    if (flagFilters(c, id, "noEffectDamageFrom")?.some((f) => matches(c, source, f, target.owner, id, true)))
+      amount = 0;
     for (const n of flagAmounts(c, id, "reduceEnemyEffectDamage")) amount -= n;
     const ignore = flagAmounts(c, id, "ignoreEnemyEffectDamageUpTo");
     if (ignore.length && amount <= Math.max(...ignore)) amount = 0;

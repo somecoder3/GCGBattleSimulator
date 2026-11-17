@@ -44,6 +44,22 @@ export interface Filter {
   highestLv?: boolean;
   /** In the current battle with the source card ("battling this Unit"). */
   battlingSelf?: boolean;
+  /** In the current battle with a card matching this filter ("battling a friendly (AEUG) Unit"). */
+  battling?: Filter;
+  /** The target of the current attack ("that is being attacked"). */
+  attacked?: boolean;
+  /** Color is none of these ("non-blue"). */
+  notColors?: Color[];
+  /** Has any keyword effect (<Blocker>, <Repair>, …). */
+  anyKeyword?: boolean;
+  /** Has a 【Destroyed】 effect. */
+  hasDestroyed?: boolean;
+  /** Only the matching cards with the lowest HP. */
+  lowestHp?: boolean;
+  /** Paired with a Pilot matching this filter. */
+  pairedWith?: Filter;
+  /** Paired with (the Pilot of) a Unit matching this filter: for Pilots in play. */
+  pilotOf?: Filter;
   /** Card name contains none of these ("without "X" in its card name"). */
   notNames?: string[];
 }
@@ -71,6 +87,26 @@ export type Cond =
   | { selfPilot: Filter }
   /** The controller set one of their Resources as active with an effect this turn. */
   | { readiedResource: true }
+  /** The controller's Lv. (number of Resources). */
+  | { level: { min?: number; max?: number } }
+  /** Number of enemy players (always 1 here; "if there are 2 or more enemy players"). */
+  | { enemyPlayers: { min: number } }
+  /** Cards in the opponent's trash. */
+  | { enemyTrash: { min?: number; max?: number } }
+  /** The effect's card is battling a card matching the filter. */
+  | { battling: Filter }
+  /** A Pilot was paired with the effect's card this turn. */
+  | { pairedThisTurn: true }
+  /** The controller drew with an effect this turn. */
+  | { drewByEffect: true }
+  /** The controller's opponent attacked this turn. */
+  | { enemyAttacked: boolean }
+  /** An EX Resource was used to pay for the effect's card. */
+  | { selfPaidEx: true }
+  /** The controller paid at least this much for their Units' effects this turn. */
+  | { paidForEffects: number }
+  /** The opponent discarded because of one of the controller's effects this turn. */
+  | { opponentDiscarded: true }
   /** The controller activated the 【Main】/【Action】 of a matching Command card this turn. */
   | { played: Filter }
   /** One of the controller's Units was destroyed this turn by the effect of a matching own card. */
@@ -102,6 +138,20 @@ export type FlagName =
   | "noBattleDamageFromOnce"
   /** Can't receive any damage from enemy Units matching the filter (ST07-015). */
   | "noDamageFrom"
+  /** Can't receive effect damage from enemy cards matching the filter. */
+  | "noEffectDamageFrom"
+  /** While rested: all enemy Units (also Link Units) must attack it if they can. */
+  | "tauntAll"
+  /** Can't be set as active (also not in the start phase). */
+  | "cantReady"
+  /** (On a card in play) Enemy Units can't be set as active by their controller's effects. */
+  | "noEnemyReady"
+  /** Its AP can't be reduced by enemy effects. */
+  | "noApReduction"
+  /** (On a card in play) Friendly Shields can't receive battle damage from enemy Units. */
+  | "protectShields"
+  /** (On a card in play) Friendly Shields can't receive battle damage from enemy Units matching the filter. */
+  | "protectShieldsFrom"
   /** (On a player) Shield area cards can't receive damage from enemy Units matching the filter. */
   | "protectShieldArea"
   /** May attack in the turn it was deployed. */
@@ -322,7 +372,11 @@ export type Effect =
       /** Traits the targets gain ("All your Units gain (Neo Zeon)"). */
       traits?: string[];
       /** "gets AP+2 for each of your rested (CB) Units" */
-      apPer?: { count: Filter; per: number };
+      apPer?: { count: Filter; per: number; unique?: boolean };
+      /** AP + the damage this Unit has received (GD05-051). */
+      apFromDamage?: boolean;
+      /** `keyword` (with `amount`) once per card matching the filter ("the same number of <Repair 1> as …"). */
+      keywordPer?: Filter;
     }
   /**
    * In the hand: Lv. and cost lower by `per` for each card matching `count`, unless `unless` holds
@@ -338,6 +392,8 @@ export type Effect =
       fixed?: number;
       unless?: Cond;
       when?: Cond;
+      /** Only the cost is reduced, not the Lv. */
+      costOnly?: boolean;
     }
   | AltCost;
 

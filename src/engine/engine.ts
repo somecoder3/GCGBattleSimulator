@@ -274,7 +274,7 @@ const STEPS: Record<Step, (c: Ctx) => void> = {
     const player = s.players[s.active];
     // Decided before anything is set active: "rested Units with the lowest Lv." (ST14-001) would change.
     const all = [...player.battle, ...player.resources, ...player.base];
-    const stay = new Set(all.filter((id) => hasFlag(c, id, "stayRested")));
+    const stay = new Set(all.filter((id) => hasFlag(c, id, "stayRested") || hasFlag(c, id, "cantReady")));
     for (const id of all) if (!stay.has(id)) inst(c, id).rested = false; // 7-2-3
     // "Won't be set as active during the start phase of … next turn" ends now.
     s.modifiers = s.modifiers.filter(
@@ -510,12 +510,14 @@ function onlyUnitsOnDeploy(c: Ctx, id: CardId): boolean {
 
 function attackTargets(c: Ctx, unit: CardId, p: PlayerId): Action[] {
   // "Enemy Units other than Link Units choose this rested Unit as their attack target if possible" (GD05-086).
-  if (!isLinked(c, unit)) {
-    const taunting = c.s.players[other(p)].battle.filter(
-      (id) => inst(c, id).rested && hasFlag(c, id, "taunt"),
-    );
-    if (taunting.length) return taunting.map((target): Action => ({ type: "attack", unit, target }));
-  }
+  // "Enemy Units choose this rested Unit as their attack target if possible" (tauntAll: also Link Units).
+  const taunting = c.s.players[other(p)].battle.filter(
+    (id) =>
+      inst(c, id).rested &&
+      !hasFlag(c, id, "cantBeAttacked") &&
+      (hasFlag(c, id, "tauntAll") || (!isLinked(c, unit) && hasFlag(c, id, "taunt"))),
+  );
+  if (taunting.length) return taunting.map((target): Action => ({ type: "attack", unit, target }));
   const options: Action[] = [];
   if (!hasFlag(c, unit, "cantAttackPlayer") && !onlyUnitsOnDeploy(c, unit)) {
     options.push({ type: "attack", unit, target: "player" });
@@ -591,29 +593,35 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       return;
     }
     case "deployUnit": {
-      pay(c, p, costOf(c, p, action.card));
+      const ex = pay(c, p, costOf(c, p, action.card));
       if (action.replace !== undefined) toTrash(c, action.replace, "overflow"); // not destroyed (11-4-2-1)
       enterBattle(c, action.card);
+      if (ex) inst(c, action.card).paidEx = true;
       return;
     }
     case "pair": {
-      pay(c, p, costOf(c, p, action.card));
+      const ex = pay(c, p, costOf(c, p, action.card));
       pairPilot(c, action.card, action.unit);
+      if (ex) inst(c, action.card).paidEx = true;
       return;
     }
-    case "deployBase":
-      pay(c, p, costOf(c, p, action.card));
+    case "deployBase": {
+      const ex = pay(c, p, costOf(c, p, action.card));
       deployBase(c, action.card);
+      if (ex) inst(c, action.card).paidEx = true;
       return;
+    }
     case "playCommand": {
       const card = def(c, action.card);
+      let ex: boolean;
       if (action.discard !== undefined) {
         const alt = card.script.effects.find((e) => e.kind === "altCost");
-        pay(c, p, alt?.kind === "altCost" ? alt.cost : costOf(c, p, action.card));
+        ex = pay(c, p, alt?.kind === "altCost" ? alt.cost : costOf(c, p, action.card));
         moveTo(c, action.discard, "trash");
         c.ev.push({ t: "toTrash", card: action.discard, reason: "discard" });
-      } else pay(c, p, costOf(c, p, action.card));
+      } else ex = pay(c, p, costOf(c, p, action.card));
       moveTo(c, action.card, "limbo"); // 3-4-3
+      if (ex) inst(c, action.card).paidEx = true;
       c.ev.push({ t: "play", player: p, card: action.card });
       mark(c, "cmd", p, card.no);
       const timing = decision.kind === "main" ? "main" : "action";
@@ -630,7 +638,11 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       const { ref, compiled } = effectsOf(c, action.card)[action.effect]!;
       const e = compiled.effect;
       if (e.kind !== "activated") throw new Error("not an activated effect");
-      if (e.cost.resources) pay(c, p, e.cost.resources);
+      if (e.cost.resources) {
+        pay(c, p, e.cost.resources);
+        const key = `paidFx:${p}:${s.turn}`;
+        if (def(c, action.card).type !== "BASE") s.marks[key] = (s.marks[key] ?? 0) + e.cost.resources;
+      }
       if (e.cost.restSelf) rest(c, action.card);
       startEffect(c, { ref, source: action.card, controller: p, event: null, origin: "activated" });
       if (e.cost.destroySelf) toTrash(c, action.card, "destroyed");
@@ -647,6 +659,7 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
     }
     case "attack": {
       rest(c, action.unit); // 8-2-1
+      s.marks[`attacked:${p}`] = s.turn;
       s.battle = { attacker: action.unit, attackerOwner: p, target: action.target, blocked: false };
       c.ev.push({ t: "attack", attacker: action.unit, target: action.target });
       setStep(c, "attack");
@@ -685,6 +698,16 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
   }
 }
 
+/** "While this Unit is rested, friendly Shields can't receive battle damage from enemy Units" (GD03-070). */
+function shieldsProtected(c: Ctx, p: PlayerId, attacker: CardId): boolean {
+  for (const id of [...c.s.players[p].battle, ...c.s.players[p].base]) {
+    if (hasFlag(c, id, "protectShields")) return true;
+    const filters = flagFilters(c, id, "protectShieldsFrom");
+    if (filters?.some((f) => matches(c, attacker, f, p, id))) return true;
+  }
+  return false;
+}
+
 /** Battle damage a Unit receives from an attacker, after "can't receive battle damage" effects. */
 function battleDamageTo(c: Ctx, target: CardId, from: CardId, amount: number): number {
   const owner = inst(c, target).owner;
@@ -717,11 +740,11 @@ function resolveBattleDamage(c: Ctx): void {
     if (shieldAreaProtected(c, defender, attacker)) return; // e.g. ST02-013
     if (enemy.base.length) {
       const base = enemy.base[0]!;
-      dealDamage(c, base, atkAp, "battle", attacker); // 8-5-2-4
+      dealDamage(c, base, battleDamageTo(c, base, attacker, atkAp), "battle", attacker); // 8-5-2-4
       rulesManagement(c);
       if (inst(c, base).zone !== "base") destroyedByAttacker(c, attacker, base, "destroysShieldAreaCard");
     } else if (enemy.shields.length) {
-      if (atkAp > 0) {
+      if (atkAp > 0 && !shieldsProtected(c, defender, attacker)) {
         const top = enemy.shields[0]!;
         breakShields(c, defender, kw.suppression ? 2 : 1); // 8-5-2-3, 13-1-7
         destroyedByAttacker(c, attacker, top, "destroysShieldAreaCard");

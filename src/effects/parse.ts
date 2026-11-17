@@ -43,7 +43,12 @@ const COLOR_WORDS: Record<string, Color> = {
 export function cleanLines(text: string): string[] {
   const out: string[] = [];
   for (const raw of text.split(/\r?\n/)) {
-    let line = raw.trim().replace(/\s+/g, " ");
+    let line = raw
+      .trim()
+      .replace(/\s+/g, " ")
+      // "gains<Blocker>", "[Suppression]" (printing variants)
+      .replace(/([^\s】])<(?=[A-Z])/g, "$1 <")
+      .replace(/^\[(Blocker|Suppression|First Strike|High-Maneuver|Breach \d+|Repair \d+)\]/, "<$1>");
     if (!line || line === "-" || line.startsWith("(")) continue;
     // "<Blocker> (Rest this Unit …)" — the reminder may contain nested parentheses.
     const kw = line.match(/^((?:【[^】]+】)*<[^>]+>)\s*\(/);
@@ -61,7 +66,7 @@ function sentences(body: string): string[] {
   const protectedBody = body.replace(/Lv\.(\s?)(?!\s?[A-Z])/g, "Lv§$1");
   return protectedBody
     .split(/(?<=\.)\s+/)
-    .map((s) => s.replace(/Lv§\s?/g, "Lv.").trim())
+    .map((s) => s.replace(/Lv§/g, "Lv.").trim())
     .filter(Boolean);
 }
 
@@ -119,7 +124,9 @@ function qualifiers(rest: string, filter: Filter): void {
       take(/^cards?(?= |$)/, () => undefined) ||
       take(/^other than Unit tokens/, () => (filter.token = false)) ||
       take(/^battling this Unit/, () => (filter.battlingSelf = true)) ||
-      take(/^whose Lv\.? ?is equal to or lower than (this|that) Unit/, (m) => {
+      take(/^with a keyword effect/, () => (filter.anyKeyword = true)) ||
+      take(/^with a 【Destroyed】 effect/, () => (filter.hasDestroyed = true)) ||
+      take(/^whose Lv\.? ?(?:is|are) equal to or lower than (this|that) Unit/, (m) => {
         filter.lvMaxOf = m[1] === "this" ? "self" : "that";
       }) ||
       take(/^(?:whose AP is|with AP) equal to or less than (this Unit|that Unit|it)/, (m) => {
@@ -661,6 +668,53 @@ const COND_PATTERNS: [RegExp, (m: RegExpMatchArray) => Cond][] = [
   [/^you deploy this Unit from your trash$/, () => ({ selfFrom: "trash" })],
   [/^this(?: Unit)? is damaged$/, () => ({ selfIs: { damaged: true } })],
   [
+    /^this Unit is damaged and Lv\.(\d+) or lower$/,
+    (m) => ({ selfIs: { damaged: true, lvMax: num(m[1]!) } }),
+  ],
+  [/^this Unit is rested$/, () => ({ selfIs: { rested: true } })],
+  [/^this Unit is ((?:\([^()]+\)\/?)+)$/, (m) => ({ selfIs: { traits: traitsOf(m[1]!) } })],
+  [/^this Unit is (blue|green|red|white|purple)$/, (m) => ({ selfIs: { colors: [COLOR_WORDS[m[1]!]!] } })],
+  [/^this Unit has ?<([^>]+)>$/, (m) => ({ selfIs: { keyword: keyword(m[1]!) } })],
+  [/^this Unit is battling (.+)$/, (m) => ({ battling: nounPhrase(`1 ${m[1]!}`).filter })],
+  [/^it is attacking an enemy Unit$/, () => ({ attackingUnit: true })],
+  [/^you are Lv\.(\d+) or higher$/, (m) => ({ level: { min: num(m[1]!) } })],
+  [/^there are (\d+) or more enemy players$/, (m) => ({ enemyPlayers: { min: num(m[1]!) } })],
+  [
+    /^(\d+) to (\d+) enemy Units are in play$/,
+    (m) => ({ count: { side: "enemy" }, min: num(m[1]!), max: num(m[2]!) }),
+  ],
+  [/^no enemy Base is in play$/, () => ({ count: nounPhrase("1 enemy Base").filter, max: 0 })],
+  [
+    /^there is an? ((?:friendly|enemy) .+?) in play$/,
+    (m) => ({ count: nounPhrase(`1 ${m[1]!}`).filter, min: 1 }),
+  ],
+  [/^you have (\d+) or less cards in your hand$/, (m) => ({ hand: { max: num(m[1]!) }, side: "friendly" })],
+  [
+    /^your opponent has (\d+) or more cards in their hand$/,
+    (m) => ({ hand: { min: num(m[1]!) }, side: "enemy" }),
+  ],
+  [/^an enemy player has (\d+) or more cards in their trash$/, (m) => ({ enemyTrash: { min: num(m[1]!) } })],
+  [/^you have any Shields in play$/, () => ({ shields: { min: 1 }, side: "friendly" })],
+  [
+    /^you have no EX Resources$/,
+    () => ({ count: { side: "friendly", zone: "resources", types: ["EX RESOURCE"] }, max: 0 }),
+  ],
+  [
+    /^your opponent has an EX Resource$/,
+    () => ({ count: { side: "enemy", zone: "resources", types: ["EX RESOURCE"] }, min: 1 }),
+  ],
+  [/^you have drawn with an effect during this turn$/, () => ({ drewByEffect: true })],
+  [/^you use an EX Resource to play this card$/, () => ({ selfPaidEx: true })],
+  [/^no enemy Units have attacked this turn$/, () => ({ enemyAttacked: false })],
+  [
+    /^you have paid a total of ([①-⑩]) or more for your Units' ?effects this turn$/,
+    (m) => ({ paidForEffects: "①②③④⑤⑥⑦⑧⑨⑩".indexOf(m[1]!) + 1 }),
+  ],
+  [
+    /^you have an? non-(blue|green|red|white|purple) ((?:\([^()]+\)\/?)+) Pilot in play$/,
+    (m) => ({ pilotInPlay: { notColors: [COLOR_WORDS[m[1]!]!], traits: traitsOf(m[2]!) } }),
+  ],
+  [
     /^this is an? (blue|green|red|white|purple) Unit$/,
     (m) => ({ selfIs: { colors: [COLOR_WORDS[m[1]!]!] } }),
   ],
@@ -738,6 +792,10 @@ const COND_PATTERNS: [RegExp, (m: RegExpMatchArray) => Cond][] = [
       min: num(m[1]!),
     }),
   ],
+  [
+    /^there are (\d+) or more ((?:other |rested |active |damaged |enemy |friendly )*Units) in play$/,
+    (m) => ({ count: nounPhrase(`1 ${m[2]!.replace(/Units$/, "Unit")}`).filter, min: num(m[1]!) }),
+  ],
   [/^there are (\d+) or less enemy Shields$/, (m) => ({ shields: { max: num(m[1]!) }, side: "enemy" })],
   [/^there is a player with (\d+) or less Shields$/, (m) => ({ shields: { max: num(m[1]!) }, side: "any" })],
   [
@@ -745,6 +803,27 @@ const COND_PATTERNS: [RegExp, (m: RegExpMatchArray) => Cond][] = [
     (m) => ({ hand: { min: num(m[1]!) }, side: "enemy" }),
   ],
 ];
+
+/**
+ * Conditions about the card chosen before ("If it has <Repair>, …", "if it is a (Jupitris) Unit"), else
+ * the general ones.
+ */
+function scopedCondition(text: string, scope: Scope): Cond {
+  let m: RegExpMatchArray | null;
+  const it = scope.it;
+  if (it && it !== "self") {
+    if ((m = text.match(/^it has ?<([^>]+)>$/)))
+      return { varMatches: it, filter: { keyword: keyword(m[1]!) } };
+    if ((m = text.match(/^it is paired with an? (.+)$/)))
+      return { varMatches: it, filter: { pairedWith: nounPhrase(`1 ${m[1]!}`).filter } };
+    if ((m = text.match(/^it is an? (.+)$/))) {
+      const f = nounPhrase(`1 ${m[1]!}`).filter;
+      delete f.zone;
+      return { varMatches: it, filter: f };
+    }
+  }
+  return condition(text);
+}
 
 export function condition(text: string): Cond {
   const t = text.trim();
@@ -802,7 +881,7 @@ export function parseBody(body: string, ctx: ParseContext, it: string | null = n
     // "… If there are 4 or more Command cards in your trash, choose 1 enemy Unit instead." The last
     // choice (or damage) becomes the alternative.
     if ((pre = s.match(/^If (.+?), (?:choose (.+)|deal (\d+) damage) instead$/))) {
-      const cond = condition(pre[1]!);
+      const cond = scopedCondition(pre[1]!, scope);
       const steps = scope.steps;
       const i = steps.findLastIndex((x) => x.op === (pre![2] ? "choose" : "damage"));
       const old = steps[i];
@@ -949,7 +1028,7 @@ export function parseBody(body: string, ctx: ParseContext, it: string | null = n
     } else if ((m = s.match(/^If (.+?), (.+)$/))) {
       // The condition covers the rest of the segment.
       const then: Step[] = [];
-      scope.steps.push({ op: "if", cond: condition(m[1]!), then });
+      scope.steps.push({ op: "if", cond: scopedCondition(m[1]!, scope), then });
       scope.steps = then;
       s = m[2]!;
     }
@@ -1270,7 +1349,207 @@ function staticSentence(sentence: string): Effect | Effect[] {
       flagFilter: nounPhrase(`1 enemy Unit ${m[1]!}`).filter,
     };
   }
+  if ((m = s.match(/^This Unit gets ((?:AP|HP)[+-]\d+) and <([^>]+)>$/))) {
+    const amount = Number(m[2]!.match(/ (\d+)$/)?.[1] ?? 0);
+    return [
+      { kind: "static", target: "self", ...apHp(m[1]!) },
+      { kind: "static", target: "self", keyword: keyword(m[2]!), ...(amount ? { amount } : {}) },
+    ];
+  }
+  if ((m = s.match(/^This Unit gets ((?:AP|HP)[+-]\d+) during your (opponent's )?turn$/))) {
+    return { kind: "static", target: "self", ...apHp(m[1]!), cond: { yourTurn: !m[2] } };
+  }
+  if ((m = s.match(/^[Aa]ll (.+?) get ((?:AP|HP)[+-]\d+) during your (opponent's )?turn$/))) {
+    const np = nounPhrase(`all ${m[1]!.replace(/^your /, "friendly ")}`);
+    return { kind: "static", target: np.filter, ...apHp(m[2]!), cond: { yourTurn: !m[3] } };
+  }
+  if ((m = s.match(/^[Aa]ll (.+?) gain <([^>]+)>$/))) {
+    const np = nounPhrase(`all ${m[1]!.replace(/^your /, "friendly ")}`);
+    const amount = Number(m[2]!.match(/ (\d+)$/)?.[1] ?? 0);
+    return { kind: "static", target: np.filter, keyword: keyword(m[2]!), ...(amount ? { amount } : {}) };
+  }
+  if (
+    (m = s.match(
+      /^This Unit and all your Units with "([^"]+)" or "([^"]+)" in their card name get ((?:AP|HP)[+-]\d+)$/,
+    ))
+  ) {
+    return [
+      { kind: "static", target: "self", ...apHp(m[3]!) },
+      {
+        kind: "static",
+        target: { side: "friendly", names: [m[1]!, m[2]!], other: true, types: ["UNIT", "UNIT TOKEN"] },
+        ...apHp(m[3]!),
+      },
+    ];
+  }
+  if (s === "This Unit can't receive enemy battle damage") {
+    return { kind: "static", target: "self", flag: "noBattleDamageFrom", flagFilter: { side: "enemy" } };
+  }
+  if (s === "This Unit can't receive battle damage") {
+    return { kind: "static", target: "self", flag: "noBattleDamageFrom", flagFilter: {} };
+  }
+  if (
+    (m = s.match(
+      /^this (Unit|Base) can't receive (battle |effect )?damage from enemy (Units?|Commands?) ?(.*)$/i,
+    ))
+  ) {
+    const filter = nounPhrase(
+      `1 enemy ${m[3]!.replace(/s$/, "")}${m[3]!.startsWith("Command") ? " card" : ""} ${m[4]!}`.trim(),
+    ).filter;
+    const flag =
+      m[2] === "battle " ? "noBattleDamageFrom" : m[2] === "effect " ? "noEffectDamageFrom" : "noDamageFrom";
+    return { kind: "static", target: "self", flag, flagFilter: filter };
+  }
+  // "When this Unit receives enemy battle damage, reduce it by 2", "… damage from an enemy, reduce it by 1"
+  if (
+    (m = s.match(
+      /^When this Unit receives (enemy |enemy battle |enemy effect )?damage(?: from an enemy)?, (?:if (.+?), )?reduce it by (\d+)$/,
+    ))
+  ) {
+    const flag =
+      m[1] === "enemy battle "
+        ? "reduceEnemyBattleDamage"
+        : m[1] === "enemy effect "
+          ? "reduceEnemyEffectDamage"
+          : "reduceEnemyDamage";
+    return {
+      kind: "static",
+      target: "self",
+      flag,
+      amount: num(m[3]!),
+      ...(m[2] ? { cond: condition(m[2]) } : {}),
+    };
+  }
+  if ((m = s.match(/^When one of your (.+?) receives enemy (effect |battle )?damage, reduce it by (\d+)$/))) {
+    const flag =
+      m[2] === "effect "
+        ? "reduceEnemyEffectDamage"
+        : m[2] === "battle "
+          ? "reduceEnemyBattleDamage"
+          : "reduceEnemyDamage";
+    return { kind: "static", target: nounPhrase(`all friendly ${m[1]!}`).filter, flag, amount: num(m[3]!) };
+  }
+  // Cost reductions in the hand or trash.
+  if ((m = s.match(/^This card in your (hand|trash) gets (?:Lv\. ?-(\d+) and )?cost -(\d+)$/))) {
+    return {
+      kind: "handCost",
+      zone: m[1] as "hand" | "trash",
+      fixed: num(m[3]!),
+      ...(m[2] ? {} : { costOnly: true }),
+    };
+  }
+  if (
+    (m = s.match(
+      /^Reduce the cost of this card in your hand by an amount equal to the number of (.+?) in your trash$/,
+    ))
+  ) {
+    return {
+      kind: "handCost",
+      count: { ...nounPhrase(`all ${m[1]!}`).filter, side: "friendly", zone: "trash" },
+      per: 1,
+      costOnly: true,
+    };
+  }
+  // Taunts.
+  if (s === "Enemy Units choose this rested Unit as their attack target if possible when attacking") {
+    return { kind: "static", target: "self", flag: "tauntAll" };
+  }
+  if (
+    (m = s.match(
+      /^Enemy Units choose one of your rested (.+?) as their attack target if possible when attacking$/,
+    ))
+  ) {
+    return { kind: "static", target: nounPhrase(`all friendly rested ${m[1]!}`).filter, flag: "tauntAll" };
+  }
+  if ((m = s.match(/^This Unit can't attack while (.+)$/))) {
+    return { kind: "static", target: "self", flag: "cantAttack", cond: condition(m[1]!) };
+  }
+  if (s === "This Unit can't attack") return { kind: "static", target: "self", flag: "cantAttack" };
+  if (s === "This Unit can't be set as active or paired with a Pilot") {
+    return [
+      { kind: "static", target: "self", flag: "cantReady" },
+      { kind: "static", target: "self", flag: "cantBePaired" },
+    ];
+  }
+  if (s === "Enemy Units can't be set as active by enemy effects") {
+    return { kind: "static", target: "self", flag: "noEnemyReady" };
+  }
+  if (s === "This Unit's AP can't be reduced by enemy effects") {
+    return { kind: "static", target: "self", flag: "noApReduction" };
+  }
+  if (s === "Increase this Unit's AP by an amount equal to the amount of damage it has received") {
+    return { kind: "static", target: "self", apFromDamage: true };
+  }
+  if (
+    (m = s.match(
+      /^Increase this Unit's AP by an amount equal to the number of (.+?)( with unique names)? in your (hand|trash)$/,
+    ))
+  ) {
+    const what = m[1]!.replace(/ Pilot cards\/Command cards$/, " cards");
+    const count: Filter = {
+      ...nounPhrase(`all ${what}`).filter,
+      side: "friendly",
+      zone: m[3] as "hand" | "trash",
+    };
+    if (/Pilot cards\/Command cards$/.test(m[1]!)) count.types = ["PILOT", "COMMAND"];
+    return { kind: "static", target: "self", apPer: { count, per: 1, ...(m[2] ? { unique: true } : {}) } };
+  }
+  if (
+    (m = s.match(/^This Unit gains the same number of <([^>]+)> as the number of (.+?) you have in play$/))
+  ) {
+    const amount = Number(m[1]!.match(/ (\d+)$/)?.[1] ?? 1);
+    return {
+      kind: "static",
+      target: "self",
+      keyword: keyword(m[1]!),
+      amount,
+      keywordPer: nounPhrase(`all friendly ${m[2]!}`).filter,
+    };
+  }
+  if (s === "Friendly Shields can't receive battle damage from enemy Units") {
+    return { kind: "static", target: "self", flag: "protectShields" };
+  }
+  if ((m = s.match(/^Friendly Bases can't receive damage from enemy Units (.+)$/))) {
+    return {
+      kind: "static",
+      target: { side: "friendly", zone: "base", types: ["BASE", "EX BASE"] },
+      flag: "noDamageFrom",
+      flagFilter: nounPhrase(`1 enemy Unit ${m[1]!}`).filter,
+    };
+  }
+  if (s === "During your opponent's turn, the enemy Unit battling this Unit gains <First Strike>") {
+    return {
+      kind: "static",
+      target: { side: "enemy", battlingSelf: true, types: ["UNIT", "UNIT TOKEN"] },
+      keyword: "firstStrike",
+      cond: { yourTurn: false },
+    };
+  }
+  // Conditional wrappers: "During your (opponent's) turn, (while …,) …", "While …, …", "If …, …".
+  if ((m = s.match(/^During your (opponent's )?turn, (?:while (.+?), )?(.+)$/))) {
+    const conds: Cond[] = [{ yourTurn: !m[1] }];
+    if (m[2]) conds.push(condition(m[2]));
+    return withCond(staticSentence(thisUnit(m[3]!)), { and: conds });
+  }
+  if ((m = s.match(/^(?:While|If) (.+?), (.+)$/))) {
+    return withCond(staticSentence(thisUnit(m[2]!)), condition(m[1]!));
+  }
   throw new ParseError(`unknown static sentence "${s}"`);
+}
+
+/** "it gets …", "this gets …" in a constant effect: this Unit. */
+function thisUnit(s: string): string {
+  return capital(s.replace(/^(?:it|this) (gets|gains|can't|may)/, "this Unit $1"));
+}
+
+function withCond(effects: Effect | Effect[], cond: Cond): Effect[] {
+  const list = [effects].flat();
+  for (const e of list) {
+    if (e.kind === "static") e.cond = e.cond ? { and: [cond, e.cond] } : cond;
+    else if (e.kind === "handCost") e.when = e.when ? { and: [cond, e.when] } : cond;
+    else throw new ParseError("condition on a non-constant effect");
+  }
+  return list;
 }
 
 /** One printed line -> one effect (or null for lines without game effect here). */
