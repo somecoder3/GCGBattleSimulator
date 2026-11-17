@@ -2,7 +2,8 @@
 // fit its view (opponent.ts: own list, estimated opponent deck), plays every option in each of them with
 // the v0 rules for both players up to its own next main phase (so the opponent's whole turn, with the
 // cards the opponent may really have, is part of the result), and picks the option with the best
-// average evaluation. With many options, v1 first narrows them down.
+// average evaluation. With many options, v1 first narrows them down, and successive halving spends the
+// samples on the options that are still in the race (see SearchOptions.halving).
 //
 // This is "perfect information Monte Carlo" over determinizations rather than a full ISMCTS tree: the
 // engine's decisions are fine-grained (every target, every pass), so a tree would spend most of its budget
@@ -37,6 +38,12 @@ export interface SearchOptions {
   width: number;
   /** "round": up to the own next main phase (through the opponent's turn); "turn": to the end of this turn. */
   horizon?: "round" | "turn";
+  /**
+   * Successive halving (default true): all options start with a few samples, the worse half drops out
+   * after each round and the rest get twice as many, so the last two are compared with `samples` each.
+   * false: every option gets `samples` (the M7 behaviour).
+   */
+  halving?: boolean;
 }
 
 const SEARCHED = new Set<Decision["kind"]>(["main", "block", "action", "effect"]);
@@ -83,48 +90,68 @@ export class SearchPolicy implements Policy {
     let candidates = ranked.slice(0, this.options.width);
     let totals = candidates.map(() => 0);
     let counts = candidates.map(() => 0);
+    let alive = candidates.map((_, i) => i);
     let rounds = 1;
-    let anyOut: boolean; // some option did not lose in some sample (counted in the last-chance phase)
-    const sample = () => {
-      const base = sampleState(view, me, this.engine.lib, this.knowledge, this.rng);
-      candidates.forEach((option, i) => {
-        const score = this.rollout(base, option, me, rounds);
+    let anyOut: boolean; // some option did not lose in some sample (read in the last-chance phase)
+
+    // All options are compared on the same sampled states (fair comparison, fewer samples needed).
+    const bases: GameState[] = [];
+    const base = (k: number) => {
+      while (bases.length <= k) bases.push(sampleState(view, me, this.engine.lib, this.knowledge, this.rng));
+      return bases[k]!;
+    };
+    const run = (i: number, from: number, to: number) => {
+      for (let k = from; k < to; k++) {
+        const score = this.rollout(base(k), candidates[i]!, me, rounds);
         if (Number.isFinite(score)) {
           totals[i]! += score;
           counts[i]!++;
           if (score > this.lossBelow) anyOut = true;
         }
-      });
+      }
     };
-    const bestAverage = () =>
-      Math.max(...candidates.map((_, i) => (counts[i] ? totals[i]! / counts[i]! : -Infinity)));
-    for (let k = 0; k < this.options.samples; k++) sample();
+    const average = (i: number) => (counts[i] ? totals[i]! / counts[i]! : -Infinity);
+    const bestAverage = () => Math.max(...alive.map(average));
+    const samples = this.options.samples;
+
+    if (this.options.halving === false) {
+      for (const i of alive) run(i, 0, samples);
+    } else {
+      // Successive halving: samples per remaining option so far (`done`) double each round; the last
+      // two options end with `samples` each. 8 options, 16 samples: 4 / 8 / 16 = 64 rollouts instead of 128.
+      let done = 0;
+      for (;;) {
+        const halvings = Math.ceil(Math.log2(alive.length));
+        const target = Math.min(samples, Math.max(2, samples >> Math.max(0, halvings - 1)));
+        for (const i of alive) run(i, done, target);
+        done = target;
+        if (alive.length <= 2 && done >= samples) break;
+        // The better half stays; ties keep v1's order.
+        alive = [...alive]
+          .sort((x, y) => average(y) - average(x) || x - y)
+          .slice(0, Math.ceil(alive.length / 2));
+      }
+    }
 
     // Only in the main phase, where a plan like the one above starts; targets, blocks and passes in a
     // lost position follow from it and would only cost time.
     if (decision.kind === "main" && bestAverage() <= this.lossBelow) {
       // Last chance (see top): all options, more samples, while even the best one still loses.
       candidates = ranked.slice(0, LAST_CHANCE_WIDTH);
+      alive = candidates.map((_, i) => i);
       rounds = 2;
       totals = candidates.map(() => 0);
       counts = candidates.map(() => 0);
       anyOut = false;
       for (let k = 0; k < LAST_CHANCE_SAMPLES; k++) {
-        if (k >= this.options.samples && bestAverage() > this.lossBelow) break;
+        if (k >= samples && bestAverage() > this.lossBelow) break;
         if (k >= LAST_CHANCE_GIVE_UP && !anyOut) break; // no way out found at all
-        sample();
+        for (const i of alive) run(i, k, k + 1);
       }
     }
 
-    let best = 0;
-    let bestScore = -Infinity;
-    candidates.forEach((_, i) => {
-      const avg = counts[i] ? totals[i]! / counts[i]! : -Infinity;
-      if (avg > bestScore) {
-        bestScore = avg;
-        best = i;
-      }
-    });
+    let best = alive[0]!;
+    for (const i of alive) if (average(i) > average(best)) best = i;
     return candidates[best]!;
   }
 

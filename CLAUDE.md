@@ -154,6 +154,12 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
     Ausweg). Prüfstellung „Base für den letzten Schild, vielleicht der Pilot zum Sieg“: Schwer 16/30 → 30/30,
     Sehr schwer 25/30 → 29/30; Test in `tests/ai/search.test.ts`. Kosten +33 % Rechenzeit bei Suche-Läufen,
     Stärke gleich. Leicht/Normal finden solche Auswege nicht. Details `docs/AI.md`.
+  - Such-KI mit **Successive Halving** (`SearchOptions.halving`, Standard an): Optionen bekommen erst wenige
+    Stichproben, die schlechtere Hälfte fällt je Runde heraus; gleiche Stichproben für alle Optionen. Gleich
+    stark (neu gegen alt 50,9 % Schwer, 49,8 % Sehr schwer), 1,3× bzw. 1,5× schneller pro Entscheidung.
+    GPU-Frage des Nutzers: Engine auf GPU lohnt nicht (verzweigter Code); ein gelerntes Bewertungsnetz
+    (Inferenz per WebGPU/ONNX) wäre ein eigenes Forschungsprojekt; „kleine Hebel“ (kürzere Simulationen,
+    gemeinsame Ergebnisse) vom Nutzer zurückgestellt.
 - Beobachtung: Shining Gundam (M01, meistgespielt) gewinnt bei v1 nur ~40 %; die Karten sind korrekt (Partie
   per `npm run game` geprüft), die KI spielt das Special-Move-Timing schlecht (v0 wirft z. B. Master Asia ab).
 

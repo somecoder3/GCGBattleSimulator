@@ -65,6 +65,22 @@ Top-8-Meta-Decks 110 statt 83 s für 864 Spiele (+33 %), Spielstärke gleich (50
 Hinweis: Suche – v1 lag in diesem Lauf bei 50,8 % (47,5–54,1 %, 864 Spiele), in M7 bei 54,3 % (800 Spiele);
 die Intervalle überlappen.
 
+**Successive Halving (17. Nov.):** Statt jeder Option alle Stichproben zu geben, bekommen alle zuerst wenige,
+nach jeder Runde fällt die schlechtere Hälfte heraus, die übrigen bekommen doppelt so viele; die letzten zwei
+werden mit `samples` Stichproben verglichen wie vorher. Alle Optionen laufen auf denselben ausgewürfelten
+Stellungen. Sehr schwer (8 Optionen, 16 Stichproben): 4 / 8 / 16 = 64 statt 128 Simulationen pro
+Entscheidung; Schwer (6 / 6): 21 statt 36. `SearchOptions.halving: false` ergibt das alte Verfahren.
+Gemessen (Top-8-Meta, neu gegen alt direkt, Sitze/Startspieler/Deckseiten ausgeglichen):
+
+| Stufe       | Spiele | neu gegen alt        | Zeit pro Entscheidung (neu / alt) |
+| ----------- | ------ | -------------------- | --------------------------------- |
+| Schwer      | 1296   | 50,9 % (48,2–53,6 %) | 29,9 / 39,0 ms (1,30×)            |
+| Sehr schwer | 648    | 49,8 % (46,0–53,7 %) | 62,9 / 93,0 ms (1,48×)            |
+
+Gleich stark, schneller; weniger als die rechnerischen 2×, weil die v1-Vorauswahl und Entscheidungen mit
+nur zwei Optionen gleich viel kosten. Simulator Suche – v1 (864 Spiele, Seed 1): 91,5 statt 110 s, 52,3 %
+(49,0–55,6 %); Suche stark – v1 (288 Spiele): 58,7 % (52,9–64,2 %), 202 ms pro Spiel insgesamt.
+
 **Schwierigkeitsgrade im Spiel** (`DIFFICULTIES` in `src/ai/registry.ts`): Leicht = v0, Normal = v1,
 Schwer = Suche (Standard), Sehr schwer = Suche stark.
 

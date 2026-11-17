@@ -119,4 +119,36 @@ describe("search AI", () => {
       }
     }
   }, 60_000);
+
+  it("spends fewer rollouts with successive halving: 8 options, 16 samples = 64 instead of 128", () => {
+    // Many options (attacks, Units to deploy, end), and a position that is not lost.
+    const s = scenario({
+      engine,
+      filler: "ST01-005",
+      turn: 5,
+      p0: { hand: ["ST01-005", "ST01-003", "ST01-004"], battle: ["ST01-005", "ST01-003"], resources: 6 },
+      p1: {
+        battle: [
+          { no: "ST02-005", rested: true },
+          { no: "ST02-007", rested: true },
+        ],
+      },
+    });
+    expect(s.pending!.options.length).toBeGreaterThanOrEqual(8);
+    const knowledge = { deck: st1!, field: [{ deck: st2!, weight: 1 }] };
+    const rollouts = (halving: boolean) => {
+      const ai = new SearchPolicy(engine, knowledge, 1, { samples: 16, width: 8, halving });
+      let n = 0;
+      const original = (ai as unknown as { rollout: (...a: unknown[]) => number }).rollout.bind(ai);
+      (ai as unknown as { rollout: (...a: unknown[]) => number }).rollout = (...a: unknown[]) => (
+        n++,
+        original(...a)
+      );
+      const action = ai.choose(viewFor(s, 0), s.pending!);
+      expect(s.pending!.options).toContainEqual(action);
+      return n;
+    };
+    expect(rollouts(false)).toBe(128);
+    expect(rollouts(true)).toBe(64);
+  });
 });
