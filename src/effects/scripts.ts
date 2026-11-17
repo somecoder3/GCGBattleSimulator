@@ -9,6 +9,16 @@ import { cleanLines, parseCard, type ParseContext } from "./parse";
 export interface CompiledScript extends CardScript {
   compiled: CompiledEffect[];
   compiledGranted: CompiledEffect[];
+  /** Trigger kinds of the card's own (not dormant) effects and of the effects it gives as a Pilot. */
+  triggerKinds: ReadonlySet<string>;
+  grantedTriggerKinds: ReadonlySet<string>;
+  /** Has constant effects of its own / gives some as a Pilot (to skip cards quickly). */
+  hasStatic: boolean;
+  grantedHasStatic: boolean;
+}
+
+function triggerKinds(effects: CardScript["effects"]): ReadonlySet<string> {
+  return new Set(effects.flatMap((e) => (e.kind === "trigger" && !e.dormant ? [e.on] : [])));
 }
 
 export function parseContext(cards: Iterable<CardDef>): ParseContext {
@@ -37,5 +47,9 @@ export function buildScript(card: CardDef, ctx: ParseContext): CompiledScript {
     ...script,
     compiled: script.effects.map(compileEffect),
     compiledGranted: script.granted.map(compileEffect),
+    triggerKinds: triggerKinds(script.effects),
+    grantedTriggerKinds: triggerKinds(script.granted),
+    hasStatic: script.effects.some((e) => e.kind === "static" && !e.dormant),
+    grantedHasStatic: script.granted.some((e) => e.kind === "static"),
   };
 }

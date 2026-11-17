@@ -160,7 +160,17 @@ export class CardLib {
         aliases: [],
         pairable: false,
         link: [],
-        script: { ...base.script, effects: [], granted: [], compiled: [], compiledGranted: [] },
+        script: {
+          ...base.script,
+          effects: [],
+          granted: [],
+          compiled: [],
+          compiledGranted: [],
+          triggerKinds: new Set(),
+          grantedTriggerKinds: new Set(),
+          hasStatic: false,
+          grantedHasStatic: false,
+        },
       };
       this.unitForms.set(key, card);
     }

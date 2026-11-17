@@ -149,11 +149,22 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
     hervorgehoben), Deckliste mit Bildchen (Bildausschnitt) und großer Kartenvorschau beim Überfahren
     (nur Maus), gemeinsame Komponente `src/app/components/HoverTip.svelte`. Decks-Reiter am Handy lief über
     den Rand (Grid `1fr` → `minmax(0, 1fr)`).
+- **M9 (17. Nov.), erster Teil fertig: alle Karten unterstützt** (`npm run coverage`: 100 %, 1123 Karten,
+  925 automatisch, 34 Handskripte; Test in `tests/cards/m9.test.ts` hält das fest). Neu: Ereignis-Trigger über
+  `raiseForPlayer`/`EventInfo`, verzögerte und verliehene Effekte (`dormant` + `grantEffect`, auch für
+  Spieler), Ersatz- und Pair-Kosten (`altCost`, `pairCost`, Aktionen mit `sacrifice`/`alt`), Piloten als
+  Ziel, viele Filter/Bedingungen; Details und Auslegungen in `docs/EFFECTS.md` („Erweiterungen in M9“).
+  Vorgehen: Rundenweise, nach jeder Runde Vergleich aller Kartenskripte mit dem Stand davor (keine zuvor
+  verstandene Karte darf sich unbeabsichtigt ändern), neue Skripte gegen den Text gelesen.
+  - Fallen: Der Compiler nutzt das Feld `to` für Sprungziele (ein Schritt mit Feld `to` wird überschrieben,
+    darum `copyKeywords.into`); Bedingungen über Effektvariablen auch in `not`/`or` (`frameCond`).
+  - Leistung: `activeStatics` überspringt Karten ohne Dauereffekte (`hasStatic`): v1 mit Meta-Decks 290 statt
+    368 ms Rechenzeit pro Spiel, Spiele identisch (verglichen). Fuzz 100 000 Spiele ohne Fehler.
+  - Tests: 226.
 - Aufbau: `src/data/` (Kartenmodell, Decklisten), `src/effects/` (DSL, Übersetzer, Compiler, Handskripte),
   `src/engine/`, `src/ai/`, `src/sim/`, `src/app/` (Svelte), `tools/` (`images.ts`, `sim.ts`, `coverage.ts`),
   `tests/`. Geplanter Rest siehe `docs/PLAN.md` Abschnitt 3.
-- Nächster Schritt: **M9** restliche Karten (Abdeckung 73 %), Q&A-Regelfälle, Feinschliff, Vorbereitung
-  GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
+- Nächster Schritt: Rest von **M9**: Q&A-Regelfälle, Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
   vom Nutzer gepusht, 16. Nov.; der Push aus der Sitzung war vom Sicherheitsfilter abgelehnt worden).

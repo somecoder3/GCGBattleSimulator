@@ -95,15 +95,26 @@ function activeStatics(c: Ctx): { source: CardId; effect: StaticEffect }[] {
   c.depth++;
   try {
     const out: { source: CardId; effect: StaticEffect }[] = [];
+    // Cards that gained an effect from another card (rare): their effects are looked up in full.
+    let gained: Set<CardId> | null = null;
+    for (const m of c.s.modifiers) if (m.effect && m.target >= 0) (gained ??= new Set()).add(m.target);
     for (const p of [0, 1] as const) {
-      for (const id of [...c.s.players[p].battle, ...c.s.players[p].base]) {
-        for (const { compiled } of effectsOf(c, id)) {
-          const effect = compiled.effect;
-          if (effect.kind !== "static") continue;
-          if (effect.cond && !evalCond(c, effect.cond, id, inst(c, id).owner)) continue;
-          out.push({ source: id, effect });
+      for (const list of [c.s.players[p].battle, c.s.players[p].base])
+        for (const id of list) {
+          const card = inst(c, id);
+          if (
+            !def(c, id).script.hasStatic &&
+            !(card.pilot !== null && def(c, card.pilot).script.grantedHasStatic) &&
+            !gained?.has(id)
+          )
+            continue;
+          for (const { compiled } of effectsOf(c, id)) {
+            const effect = compiled.effect;
+            if (effect.kind !== "static") continue;
+            if (effect.cond && !evalCond(c, effect.cond, id, inst(c, id).owner)) continue;
+            out.push({ source: id, effect });
+          }
         }
-      }
     }
     return out;
   } finally {
@@ -1082,6 +1093,7 @@ export function raise(
   anyDamage = false,
   info: EventInfo = {},
 ): void {
+  if (!mayTrigger(c, id, kind)) return;
   const controller = inst(c, id).owner;
   for (const { ref, compiled } of effectsOf(c, id)) {
     const effect = compiled.effect;
@@ -1091,6 +1103,14 @@ export function raise(
     if (effect.once && c.s.oncePerTurn[onceKey(id, ref)] === c.s.turn) continue;
     c.fresh.push({ ref, source: id, controller, event, origin: "trigger" });
   }
+}
+
+/** Fast check: can the card have a trigger of this kind (own, from its Pilot or gained)? */
+function mayTrigger(c: Ctx, id: CardId, kind: TriggerKind): boolean {
+  const card = inst(c, id);
+  if (def(c, id).script.triggerKinds.has(kind)) return true;
+  if (card.pilot !== null && def(c, card.pilot).script.grantedTriggerKinds.has(kind)) return true;
+  return c.s.modifiers.some((m) => m.target === id && m.effect !== undefined);
 }
 
 /**

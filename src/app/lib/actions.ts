@@ -51,15 +51,16 @@ export function actionLabel(action: Action, name: (id: CardId) => string): strin
     case "redraw":
       return "Neu ziehen (Mulligan)";
     case "deployUnit":
+      if (action.sacrifice !== undefined) return `Günstiger einsetzen, ${name(action.sacrifice)} zerstören`;
+      if (action.alt) return "Günstiger einsetzen";
       return action.replace === undefined ? "Einsetzen" : `Einsetzen, ersetzt ${name(action.replace)}`;
     case "pair":
       return `Als Pilot in ${name(action.unit)}`;
     case "deployBase":
       return "Base einsetzen";
     case "playCommand":
-      return action.discard === undefined
-        ? "Ausspielen"
-        : `Günstiger ausspielen, ${name(action.discard)} abwerfen`;
+      if (action.discard !== undefined) return `Günstiger ausspielen, ${name(action.discard)} abwerfen`;
+      return action.alt ? "Günstiger ausspielen" : "Ausspielen";
     case "activate":
       return `Effekt aktivieren${action.effect > 0 ? ` (${action.effect + 1})` : ""}`;
     case "attack":

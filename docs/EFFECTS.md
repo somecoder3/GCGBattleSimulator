@@ -1,6 +1,6 @@
 # Karteneffekte
 
-Stand: alle Starter-Decks (16. Nov. 2026). Wie Kartentexte zu ausführbaren Effekten werden, und wie man eine Karte
+Stand: M9, alle Karten (17. Nov. 2026). Wie Kartentexte zu ausführbaren Effekten werden, und wie man eine Karte
 ergänzt oder korrigiert.
 
 ## Überblick
@@ -50,9 +50,14 @@ npm run coverage -- --set GD01,ST05       # dazu jede nicht verstandene Zeile mi
 npm run coverage -- --card ST01-015       # Skript einer Karte
 ```
 
-Stand 16. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **73,2 % vollständig** (164 ohne Text,
-640 automatisch, 18 von Hand), 301 teilweise. **Alle Starter-Sets ST01–ST14 und alle Karten aller 15
-Meta-Archetypen zu 100 %** (`npm run coverage -- --meta`, `docs/META.md`). Vor M5: 51,6 %.
+Stand 17. Nov. 2026 (1123 Karten ohne Ressourcen/EX-Token): **100 % vollständig** (164 ohne Text,
+925 automatisch, 34 von Hand), keine teilweise. Ein Test (`tests/cards/m9.test.ts`) schlägt fehl, sobald
+eine Karte (z. B. nach einem GCGDB-Update) nicht mehr vollständig verstanden wird. Verlauf: vor M5 51,6 %,
+nach M5 59,5 %, alle Archetypen 65,1 %, alle Starter 73,2 %, M9 100 %.
+
+„Vollständig“ heißt: Jede Zeile wird von einem Muster oder Handskript erfasst. Ob die Auslegung stimmt,
+sichern Kartentests (für die meisten neuen Mechaniken einer), Fuzz-Läufe mit Invarianten und die
+Auslegungen unten; einzelne seltene Texte sind vereinfacht (siehe „Auslegungen“).
 
 ## Erweiterungen in M5
 
@@ -137,6 +142,41 @@ Die neuen Satzmuster gelten für alle Sets; dadurch sind 91 weitere Karten volls
   des Kampfes), ST14-015 (geruhte Ressource, dann eine aktiv, wenn diesen Zug noch keine durch Effekt).
 - Kartentests: `tests/cards/starters2.test.ts`.
 
+## Erweiterungen in M9 (alle Karten)
+
+- **Ereignis-Trigger** (`raiseForPlayer` in `core.ts`, Ereignis-Infos `EventInfo`): eigene Unit zerstört
+  eine gegnerische Unit/Schildzonen-Karte (`allyDestroys`, auch über Effektschaden der Unit), wird angegriffen
+  (`attacked`), eine Unit greift an (`unitAttacks`), eigene Karte erhält Schaden (`allyDamaged`, Kampf/Effekt,
+  vom Gegner, Quelle mit `sourceFilter`), heilt (`recovered`), wird durch Effekt geruht/aktiv gesetzt, EX
+  Resource gelegt/verbraucht, Command-【Main】/【Action】 aktiviert (`commandUsed`, „using an EX Resource“ über
+  `CardInstance.paidEx`), eigene Unit durch Effekt zerstört, AP durch Gegner gesenkt, Zugende jedes Spielers
+  (`anyTurnEnd`), <Blocker>/<Support> benutzt, Kosten für einen Unit-Effekt bezahlt (`effectPaid`), eigene Unit
+  fügt Kampfschaden zu. Ein Schnellweg (`triggerKinds` je Karte) überspringt Karten ohne passenden Trigger.
+- **Verzögerte und verliehene Effekte:** „During this turn, when one of your … destroys …“ (Spieler-Modifier
+  mit Effekt), „When it destroys … during this turn“, „It gains the following effect during this turn: ■…“.
+  Der verliehene Effekt steht als `dormant` im Skript der Karte, wirkt dort nie selbst und wird per
+  `grantEffect` (Index) verliehen; der Übersetzer vergibt die Indizes (`hide`, Platzhalter für ■-Texte).
+- **Kosten:** Ersatzkosten für Units/Commands (`altCost`: abwerfen, eigene Unit zerstören, oder nur Bedingung;
+  Aktionen `deployUnit`/`playCommand` mit `sacrifice`/`discard`/`alt`), günstigeres Pairen je Ziel-Unit
+  (`pairCost`), Kostensenkungen nur für Kosten (`costOnly`), nach Anzahl im Trash, im Trash, bedingt; Effekt-
+  Kosten „Rest 2 of your Units“, „Exile 3 (Titans) cards“, „Pay ①“ im Effekt (`payCost`).
+- **Filter:** Pilot als Ziel (`zone: "pilots"`, `pilotOf`), Unit oder Base (`zone: "field"`), „battling …“,
+  „that is being attacked“, „paired with a (Newtype) Pilot“, „without <Breach>“, „non-blue“, „with a keyword
+  effect“, „with a 【Destroyed】 effect“, „with the lowest HP“, „Lv.1 or lower or has 1 or less AP“ (`anyOf`),
+  Link-Bedingung („a Unit with the [X] link condition“).
+- **Dauereffekte:** Schutz („can't receive (battle/effect) damage from …“, Schilde, Bases), Angriffszwang
+  auch für Link-Units (`tauntAll`), „deployed rested“, „can't be set as active“, „AP can't be reduced“, AP
+  nach Schaden/Handkarten/Trash-Karten mit verschiedenen Namen, Keywords je Token, „While/If …“ und
+  „During your (opponent's) turn …“ als allgemeine Hüllen, 【Once per Turn】 bei Schadensreduktionen.
+- **Schritte:** Pilot zurück auf die Hand/aufs Deck, Kampfschaden umleiten (`redirectBattleDamage`), Token-
+  Kopie, Base-Token, Schaden nach Anzahl/AP/gelegten Karten, Keywords einer Trash-Karte übernehmen, alle
+  Spieler ziehen/EX Resource legen, Gegner entscheidet („That enemy player may discard 1“), Wahl mit
+  verschiedenen Namen, Wahl aus gelegten Karten, Pilot aus den angesehenen Karten pairen.
+- **Handskripte** (16 neu): EB01-003, EB01-023, EB01-059, EB01-062, EB01-078, GD02-011, GD03-117, GD04-036,
+  GD04-067, GD04-116, GD05-026, GD05-034, GD06-018, GD06-039, GD06-042, GD06-118.
+- **Leistung:** Dauereffekte werden nur bei Karten gesucht, die welche haben können (`hasStatic`). v1 mit
+  Meta-Decks: 290 statt 368 ms Rechenzeit pro Spiel (vor M9), bei gleichen Ergebnissen.
+
 ## Eine Karte ergänzen oder korrigieren
 
 1. `npm run coverage -- --card <Nr>` zeigt Text, Skript und nicht verstandene Zeilen.
@@ -179,6 +219,16 @@ Die neuen Satzmuster gelten für alle Sets; dadurch sind 91 weitere Karten volls
 - ST07-015 Ptolemaios hält jeden Schaden solcher Units ab, auch <Breach>.
 - ST14-001 The-O: Welche Units geruht bleiben, wird vor dem Aktivsetzen bestimmt.
 - ST13-014 Final Duty setzt die Karte nur ein, wenn Platz ist.
+- M9: „Choose 1 enemy player“, „all players“, „belonging to each enemy player“ gelten für zwei Spieler; Texte
+  „If there are 2 or more enemy players“ sind nie erfüllt. Bei „All players each look at the top card …“
+  (EB01-023, EB01-078) nimmt der Gegner eine passende Karte immer und lässt sonst alles oben.
+- „While this Unit has 1 HP“ (GD03-061) meint die verbleibenden HP (HP minus Schaden).
+- „destroys an enemy shield area card with damage“ zählt wie „with battle damage“ (nur der Angriff, nicht
+  <Breach>).
+- Ersatzwahlen „you may rest this Unit/Base instead“ (GD03-079, GD05-124) werden automatisch genutzt, wenn
+  die Ersatzkarte aktiv ist.
+- „At the end of a turn where you have paid ① or more for one of your other (Militia)/(Dianna Counter) Units'
+  effects“ (GD04-069) prüft die Traits der bezahlten Karte, nicht „other“.
 - Starter-Decklisten ST05–ST14: Produktlisten von exburst.dev (ST11 stimmt mit tcgtalk.com überein; für
   ST05 weicht eine Vorab-Liste von essential-japan.com in sechs Anzahlen ab). ST09 enthält Karten für
   zwei Decks; beide offiziellen Rezepte (gundam-gcg.com `deck-026` Lila-Weiß, `deck-027` Rot-Lila) sind
