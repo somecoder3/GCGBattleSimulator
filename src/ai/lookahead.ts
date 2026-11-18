@@ -49,8 +49,9 @@ export class LookaheadPolicy implements Policy {
   rank(view: GameState, decision: Decision): Action[] {
     const base = determinize(view);
     const me = decision.player;
+    const options = this.rules.allowed(view, decision); // the EX Resource rule
     const preferred = this.rules.choose(base, decision);
-    const ordered = [preferred, ...decision.options.filter((o) => o !== preferred)];
+    const ordered = [preferred, ...options.filter((o) => o !== preferred)];
     const scored = ordered.map((option, i) => ({ option, i, score: this.score(base, option, me) }));
     scored.sort((a, b) => b.score - a.score || a.i - b.i);
     return scored.map((x) => x.option);

@@ -194,7 +194,12 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Dialog in `PlayScreen`, Wurf in `SessionSetup.start` und im Log. Die KI wählt immer zu beginnen
   (`src/ai/turnorder.ts`): gemessen mit `npm run first` gewinnt **jedes** von 30 Decks als Startspieler öfter
   (+9 bis +30 Punkte, gesamt 62 %), auch ohne Lv.-1-Karten (Vermutung des Nutzers widerlegt). Simulator bleibt
-  ausgeglichen. EX Resource: keine KI hebt sie bewusst auf (Bewertung kennt keine Ressourcen), `docs/AI.md`.
+  ausgeglichen.
+- **EX Resource (18. Nov., Nutzerwunsch):** Regeln als `RuleOptions.ex` (`free`/`never`/`hand`/`deck`/`level`,
+  Ausnahmen `exLink`, `exEmergency`), `Engine.spendsEx`/`resourceCost`, Filter `HeuristicPolicy.allowed`
+  (auch in v1/Suche). Standard jetzt `deck` + Link-Ausnahme (`DEFAULT_EX`): EX Resource erst, wenn die höchste
+  Unit des Decks ohne sie erreichbar bleibt, außer für einen linkenden Piloten. Gegen die alte Regel (`ex-free`)
+  v0 **55,8 %**, v1 **54,1 %** (9216 Spiele); hand+link und link-only gleich stark. Tabelle `docs/AI.md`.
 - Nutzerwunsch für später: **Kombos** (Turnierlisten bauen darauf) besser erkennen und nutzen, eigener Schritt.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.

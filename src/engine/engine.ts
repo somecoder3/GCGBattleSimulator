@@ -167,6 +167,37 @@ export class Engine {
   level(state: GameState, p: PlayerId): number {
     return state.players[p].resources.length;
   }
+  /** Resources a main/action option rests to pay its cost (0 for options without a Resource cost). */
+  resourceCost(state: GameState, p: PlayerId, action: Action): number {
+    const c = newCtx(this.lib, state);
+    switch (action.type) {
+      case "deployUnit": {
+        const alt = action.alt || action.sacrifice !== undefined ? altCostOf(c, action.card) : null;
+        return alt ? alt.cost : costOf(c, p, action.card);
+      }
+      case "pair":
+        return pairCostOf(c, p, action.card, action.unit);
+      case "deployBase":
+        return costOf(c, p, action.card);
+      case "playCommand": {
+        const alt = action.discard !== undefined || action.alt ? altCostOf(c, action.card) : null;
+        return alt ? alt.cost : costOf(c, p, action.card);
+      }
+      case "activate": {
+        const e = effectsOf(c, action.card)[action.effect]?.compiled.effect;
+        return e?.kind === "activated" ? (e.cost.resources ?? 0) : 0;
+      }
+      default:
+        return 0;
+    }
+  }
+  /** Would this option use up an EX Resource (normal Resources are paid first, 5-17-3-2-3)? */
+  spendsEx(state: GameState, p: PlayerId, action: Action): boolean {
+    const cost = this.resourceCost(state, p, action);
+    if (cost <= 0) return false;
+    const active = state.players[p].resources.filter((id) => !state.cards[id]!.rested);
+    return active.filter((id) => !state.cards[id]!.token).length < cost;
+  }
 }
 
 function emptyPlayer(id: PlayerId): PlayerState {

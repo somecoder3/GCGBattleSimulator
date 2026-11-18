@@ -203,11 +203,46 @@ Resource von Spieler 2 gleicht das nicht aus. Mit anderer KI oder Regeln neu mes
 Im Simulator bleibt der Startspieler ausgeglichen (Blöcke à 8): Da die KI immer beginnen will, wäre Würfeln
 dort nur ein zufälliger Startspieler mit mehr Streuung.
 
-**EX Resource:** Die Engine zahlt Kosten mit normalen Ressourcen zuerst und nimmt die EX Resource nur, wenn
-die normalen nicht reichen (sie zählt bis dahin fürs Level mit). Keine KI entscheidet ausdrücklich, sie
-aufzuheben: v0 spielt eine Karte, sobald sie bezahlbar ist; v1 und die Suche bewerten die Stellung zu Beginn
-der nächsten eigenen Main Phase, und die Bewertung kennt weder Ressourcen noch Level. Dass eine verbrauchte
-EX Resource später ein Level fehlt, sieht also keine KI.
+## EX Resource (`RuleOptions.ex`, 18. Nov. 2026, Nutzerwunsch)
+
+Die Engine zahlt Kosten mit normalen Ressourcen zuerst und nimmt die EX Resource nur, wenn die normalen
+nicht reichen; bis dahin zählt sie fürs Level mit. Ob eine Option sie verbraucht, sagt
+`Engine.spendsEx` (Kosten aus `resourceCost`, auch Pair-, Ersatz- und Activate-Kosten). Die Regel filtert
+in v0 die Optionen der Main Phase und des Action Steps (`HeuristicPolicy.allowed`), v1 und die Suche
+nehmen nur erlaubte Optionen in die Vorausschau (`LookaheadPolicy.rank`), und alle Fortsetzungen spielen
+v0. Erlaubt keine Regel etwas, bleiben alle Optionen. Vorher (`ex-free`) nahm jede KI sie, sobald sie für
+eine bezahlbare Karte nötig war; die Bewertung kennt keine Ressourcen, darum sah keine KI das fehlende Level.
+
+Regeln (`npm run ab -- --b <Variante>`):
+
+- `free`: wie vorher.
+- `never`: nie.
+- `hand` (Idee 1 des Nutzers): nicht, solange eine andere Unit auf der Hand danach nicht mehr erreichbar
+  wäre (Lv. > Level nach dem Verbrauch).
+- `deck` (Idee 3): erst, wenn die höchste Unit des eigenen Decks auch ohne sie erreichbar bleibt (Level nach
+  dem Verbrauch ≥ höchstes Unit-Level; die Deckliste kennt die KI, `Knowledge.deck`). Ohne Deckliste wie `hand`.
+- `level` mit `exLevel` 5/7/8/9: erst ab diesem Level nach dem Verbrauch.
+- Ausnahmen: `+link` (Idee 2) ein Pilot, der linkt, darf sie immer nehmen (v0 setzt Units vor Piloten, die
+  normalen Ressourcen gehen zuerst: Unit mit 3 normalen, Pilot für den Link mit der EX Resource);
+  `+sos` ohne eigene Unit im Spiel immer.
+
+Gemessen (Meta Top 8, je 9216 Spiele, Anteil der neuen Regel gegen `free`):
+
+| Regel                      | v0                   | v1             |
+| -------------------------- | -------------------- | -------------- |
+| never                      | 52,0 %               | 52,3 %         |
+| hand                       | 53,5 %               | 53,7 %         |
+| hand+link                  | **54,9 %**           | 53,7 %         |
+| hand+link+sos              | 52,7 %               |                |
+| deck                       | 52,4 %               |                |
+| deck+link                  | **54,9 %**           | **54,2 %**     |
+| level5 / level7 / level9   | 53,9 / 52,9 / 52,2 % | – / 53,4 % / – |
+| link-only (`never` + link) | **54,9 %**           | 54,0 %         |
+
+Direkt (v1, 18 432 Spiele): deck+link gegen link-only 49,9 %, gegen hand+link 49,9 %: gleich stark.
+**Standard ist `deck` + link** (`DEFAULT_EX`): beide Ideen des Nutzers verbunden, und anders als „nie“ kann
+die KI sie spät noch nutzen. Bestätigt mit neuem Seed: v0 **55,8 %**, v1 **54,1 %** (53,1–55,1 %) gegen die
+alte Regel. Deutlich größter Gewinn aller bisherigen Regeländerungen. Ausnahme „ohne Unit immer“ schadet.
 
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 

@@ -4,7 +4,7 @@
 
 import type { Instr } from "../effects/compile";
 import type { Engine } from "../engine/engine";
-import type { Action, CardId, Decision, GameState, PlayerId } from "../engine/types";
+import type { Action, CardId, Decision, DeckList, GameState, PlayerId } from "../engine/types";
 import { HIDDEN } from "../engine/view";
 import { DEFAULT_MULLIGAN, keepHand } from "./mulligan";
 import type { Policy } from "./types";
@@ -30,7 +30,30 @@ export interface RuleOptions {
   lateDraw?: boolean;
   /** Choose AP-/AP+ targets by value only, not by the fights they change (before 18 Nov 2026). */
   plainApTargets?: boolean;
+  /** When the EX Resource may be used up (docs/AI.md "EX Resource"); default DEFAULT_EX. */
+  ex?: ExRule;
+  /** Exception to `ex`: a Pilot that links may always use it (part of the default; with `ex` set, only if given). */
+  exLink?: boolean;
+  /** Exception to `ex`: may always use it while no own Unit is in play. */
+  exEmergency?: boolean;
+  /** For `ex: "level"`: the level that must remain after using it. */
+  exLevel?: number;
+  /** The AI's own deck list (for `ex: "deck"`; set by makePolicy). */
+  ownDeck?: DeckList;
 }
+
+/**
+ * When the AI may use up its EX Resource (it counts for the level until then):
+ * - free: whenever the normal Resources don't cover a cost (the engine pays them first);
+ * - never;
+ * - hand: not while another Unit in the hand would no longer be reachable (Lv. > level after using it);
+ * - deck: not before the highest-level Unit of the own deck stays reachable without it;
+ * - level: not before the level after using it is at least `exLevel`.
+ */
+export type ExRule = "free" | "never" | "hand" | "deck" | "level";
+
+/** The default: hold it until the highest Unit of the deck stays reachable; a linking Pilot may use it. */
+export const DEFAULT_EX = { ex: "deck" as ExRule, exLink: true };
 
 export class HeuristicPolicy implements Policy {
   readonly name = "heuristic-v0";
@@ -38,9 +61,62 @@ export class HeuristicPolicy implements Policy {
   constructor(
     private readonly engine: Engine,
     private readonly options: RuleOptions = {},
-  ) {}
+  ) {
+    // The default EX Resource rule (measured 18 Nov 2026, docs/AI.md): "deck" with the link exception.
+    this.ex = options.ex ?? DEFAULT_EX.ex;
+    this.exLink = options.ex ? !!options.exLink : DEFAULT_EX.exLink;
+    const units = options.ownDeck?.main.map((no) => engine.lib.get(no)).filter((c) => c.type === "UNIT");
+    this.topLevel = units?.length ? Math.max(...units.map((c) => c.level)) : undefined;
+  }
+
+  /** The highest level of a Unit in the own deck (for `ex: "deck"`). */
+  private readonly topLevel: number | undefined;
+  private readonly ex: ExRule;
+  private readonly exLink: boolean;
+
+  /** The options the EX Resource rule allows (all, if it allows none). */
+  allowed(view: GameState, decision: Decision): Action[] {
+    if (this.ex === "free" || (decision.kind !== "main" && decision.kind !== "action"))
+      return decision.options;
+    const p = decision.player;
+    const kept = decision.options.filter(
+      (o) => !this.engine.spendsEx(view, p, o) || this.mayUseEx(view, p, o),
+    );
+    return kept.length ? kept : decision.options;
+  }
+
+  private mayUseEx(s: GameState, p: PlayerId, o: Action): boolean {
+    const me = s.players[p];
+    if (this.options.exEmergency && me.battle.length === 0) return true;
+    if (this.exLink && o.type === "pair" && links(this.engine, s, o.unit, o.card)) return true;
+    const after = me.resources.length - 1; // the level once it is used up
+    // Without the own deck list (tests, hand-built states) "deck" looks at the hand.
+    const rule = this.ex === "deck" && this.topLevel === undefined ? "hand" : this.ex;
+    switch (rule) {
+      case "never":
+        return false;
+      case "hand": {
+        const played = "card" in o ? o.card : undefined;
+        return !me.hand.some(
+          (h) => h !== played && s.cards[h]!.no !== HIDDEN && this.unitLevel(s, h) > after,
+        );
+      }
+      case "deck":
+        return after >= this.topLevel!;
+      case "level":
+        return after >= (this.options.exLevel ?? 7);
+      default:
+        return true;
+    }
+  }
+
+  private unitLevel(s: GameState, id: CardId): number {
+    const c = this.engine.card(s, id);
+    return c.type === "UNIT" ? c.level : 0;
+  }
 
   choose(view: GameState, decision: Decision): Action {
+    if (this.ex !== "free") decision = { ...decision, options: this.allowed(view, decision) };
     const options = decision.options;
     if (options.length === 1) return options[0]!;
     const ctx = new Ctx(this.engine, view, decision.player, this.options);
@@ -61,6 +137,16 @@ export class HeuristicPolicy implements Policy {
         return ctx.effect(decision);
     }
   }
+}
+
+/** Would this Pilot link with this Unit (its link condition)? */
+function links(engine: Engine, s: GameState, unit: CardId, pilot: CardId): boolean {
+  const u = engine.card(s, unit);
+  const p = engine.card(s, pilot);
+  if (!p.pilotName) return false;
+  return u.link.some((c) =>
+    "pilotName" in c ? p.pilotName!.includes(c.pilotName) : p.traits.includes(c.trait),
+  );
 }
 
 /** The option with the highest score, if that score is positive. */
@@ -239,12 +325,7 @@ class Ctx {
   }
 
   links(unit: CardId, pilot: CardId): boolean {
-    const u = this.card(unit);
-    const p = this.card(pilot);
-    if (!p.pilotName) return false;
-    return u.link.some((c) =>
-      "pilotName" in c ? p.pilotName!.includes(c.pilotName) : p.traits.includes(c.trait),
-    );
+    return links(this.engine, this.s, unit, pilot);
   }
 
   /** Enemy Units that could block an attack of `unit` (active, <Blocker>). */

@@ -25,6 +25,20 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   "plain-ap-targets": { rules: { plainApTargets: true } },
   /** Both Command rules as before 18 Nov 2026. */
   "old-commands": { rules: { eagerCommands: true, eagerMainCommands: true } },
+  // EX Resource rules (docs/AI.md "EX Resource"; default: ex-deck+link). "ex-free": the rule before 18 Nov 2026;
+  "ex-free": { rules: { ex: "free" } },
+  // "+link": a linking Pilot may use it, "+sos": also without Units.
+  "ex-never": { rules: { ex: "never" } },
+  "ex-hand": { rules: { ex: "hand" } },
+  "ex-hand+link": { rules: { ex: "hand", exLink: true } },
+  "ex-hand+link+sos": { rules: { ex: "hand", exLink: true, exEmergency: true } },
+  "ex-deck": { rules: { ex: "deck" } },
+  "ex-deck+link": { rules: { ex: "deck", exLink: true } },
+  "ex-level5": { rules: { ex: "level", exLevel: 5 } },
+  "ex-level7": { rules: { ex: "level", exLevel: 7 } },
+  "ex-level8": { rules: { ex: "level", exLevel: 8 } },
+  "ex-level9": { rules: { ex: "level", exLevel: 9 } },
+  "ex-link-only": { rules: { ex: "never", exLink: true } },
   "mulligan-basic": { mulligan: "basic" },
   "mulligan-never": { mulligan: "never" },
 };
