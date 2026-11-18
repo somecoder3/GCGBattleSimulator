@@ -336,9 +336,16 @@ Nu Gundam (+13 Punkte), Char's Zaku Ⅱ (+12), Victory (+6), Blue White Control 
 spielt in seinem Zug also nichts von der Hand, und die eigenen Angriffe im nächsten Zug sehen zu gut aus.
 `round` bewertet vor den eigenen Angriffen und hat das Problem kaum.
 
-**Standard für v1 (Normal) ist seit 18. Nov. `round`**; 1,4× Rechenzeit. Die Suche (Schwer) nutzt für ihre
-Vorauswahl weiter `turn` und gewinnt gegen das neue v1 noch 51,7 % (48,4–55,1 %, 864 Spiele Meta; gegen
-das alte v1 54,3 %).
+**Standard für v1 (Normal) ist seit 18. Nov. `round`.** Rechenzeit (ein Kern, beste Listen, dieselben
+Partien mit der Variante auf beiden Seiten): v1 `turn` 0,10 s pro Spiel / 0,9 ms pro Entscheidung (300 Spiele),
+v1 `round` 0,19 s / 1,5 ms, also etwa 1,7–1,9×. Im Spiel gegen den Menschen nicht spürbar, Simulationen
+mit v1 dauern knapp doppelt so lange.
+
+Die Suche (Schwer) gewinnt gegen das neue v1 noch 51,7 % (48,4–55,1 %, 864 Spiele Meta; gegen das alte v1
+54,3 %). **Suche mit `round` in der Vorauswahl** (`npm run ab -- --ai search --a round --b turn`): beste Listen
+49,4 % (47,4–51,4 %), Konsenslisten 49,5 % (47,6–51,5 %), je 2496 Spiele, also kein Gewinn, ihre eigenen
+Stichproben laufen schon über eine Runde. Kosten +10 % pro Spiel (1,75 → 1,92 s, 40 Spiele), +3 % pro
+Entscheidung (14,1 → 14,5 ms). Nicht übernommen (Nutzer entscheidet); „Sehr schwer“ braucht ~3,5 s pro Spiel.
 
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
