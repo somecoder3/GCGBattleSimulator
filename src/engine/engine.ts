@@ -191,6 +191,11 @@ export class Engine {
         return 0;
     }
   }
+  /** The compiled program of an activated effect option (`activate` action), for the AI. */
+  activatedProgram(state: GameState, action: Action): Program | undefined {
+    if (action.type !== "activate") return undefined;
+    return effectsOf(newCtx(this.lib, state), action.card)[action.effect]?.compiled.program;
+  }
   /** Would this option use up an EX Resource (normal Resources are paid first, 5-17-3-2-3)? */
   spendsEx(state: GameState, p: PlayerId, action: Action): boolean {
     const cost = this.resourceCost(state, p, action);

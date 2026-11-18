@@ -164,6 +164,19 @@ beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (
   Gemessen (Meta Top 8, je 9216 Spiele): Ziehen v0 50,0 %, v1 50,5 % (49,5–51,5 %); AP-Ziele v0 50,5 %, v1
   50,2 %: kein messbarer Unterschied (die Fälle sind selten, v1 sieht Häufung ohnehin per Vorausschau).
   Behalten, weil die Entscheidungen in den Prüfstellungen richtig sind und nichts schlechter wird.
+- **Resten (18. Nov., Nutzerwunsch, `restValue`):** Was das Resten einer gegnerischen Unit jetzt ändert. Im
+  eigenen Zug: der beste lohnende Angriff auf sie (nur geruhte Units sind angreifbar; wie `attackScore`:
+  zerstören und überleben 2 + Wert, Tausch Wertdifferenz), dazu mit <Breach> 2 + Breach (+2 bei ≤ 2
+  Schilden), wenn Schild oder Base getroffen werden, und +2, wenn ein <Blocker> den Angreifern aus dem Weg
+  geht. Im gegnerischen Zug: eine aktive Unit, die noch angreifen könnte, 1 + AP/2 (+3 bei ≤ 1 Schild).
+  Verwendet für Rest-Commands in der Main Phase (110 nur ab Wert 2, vorher immer, wenn es Angreifer und eine
+  aktive gegnerische Unit gab), im Action Step (vorher **nie**), Activate-Effekte, die nur gegnerische
+  Units resten (vorher immer), und die Zielwahl aller Rest-Effekte (vorher nach Wert, auch schon geruhte).
+  Alte Regel: `plain-rest`. Gemessen: v0 **51,1 %** (50,1–52,1 %, 9216 Spiele, Top 8), mit 15 Archetypen
+  50,4 %; v1 50,7 % (9216) und 50,4 % (49,7–51,2 %, 18 432): kleiner Vorteil für v0, bei v1 nicht messbar.
+  Nur 5 von 15 Archetypen haben Rest-Karten (M01, M04, M08, M11, M12), dazu Burst-Effekte; der Effekt ist
+  verdünnt. `npm run ab -- --by-deck` zeigt dieselbe Messung je Deck (A und B mit demselben Deck), ist bei
+  1152 Spielen je Seite aber noch ±4 Punkte ungenau.
 - **Effekt-Entscheidungen:** Burst und „you may“ immer ja; bei Zielen liest sie im übersetzten Programm, was
   mit dem Ziel geschieht (Schaden, Zerstörung, Ruhen … = schaden; AP+, Bereitmachen, Erholen … = helfen) und
   wählt danach gegnerische bzw. eigene Karten, bei Schaden bevorzugt solche, die dadurch zerstört werden.

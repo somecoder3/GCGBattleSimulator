@@ -203,6 +203,10 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   v0 **55,8 %**, v1 **54,1 %** (9216 Spiele); hand+link und link-only gleich stark. Tabelle `docs/AI.md`.
   Ausnahme für Commands ab Level N (`exCommandLevel`, `ex-cmd3…9`): bei Lv. 3–4 schlechter (Standard gewinnt
   v1 51,5/51,2 %), ab Lv. 5 gleich → nicht übernommen.
+- **Resten (18. Nov., Nutzerwunsch):** `restValue` in `src/ai/heuristic.ts` (lohnender Angriff auf die
+  geruhte Unit, Breach-Bonus, Blocker aus dem Weg, im gegnerischen Zug verhinderte Angriffe) steuert
+  Rest-Commands (Main Phase und jetzt auch Action Step), Activate-Effekte und die Zielwahl; alt `plain-rest`.
+  v0 51,1 %, v1 50,4 % (n. s.); nur 5 von 15 Archetypen haben Rest-Karten. `npm run ab -- --by-deck`.
 - Nutzerwunsch für später: **Kombos** (Turnierlisten bauen darauf) besser erkennen und nutzen, eigener Schritt.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.

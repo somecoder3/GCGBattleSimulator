@@ -53,6 +53,30 @@ describe("v0: AP changes by the fights they change", () => {
   });
 });
 
+describe("v0: resting by what it changes", () => {
+  const REST = "GD02-101"; // 【Main】/【Action】 rest 1 to 2 enemy Units of Lv.2 or lower (Lv.1, cost 1)
+  const RICK_DOM = "GD01-030"; // 3/3 <Breach 2>
+
+  it("rests only if an attack on the rested Unit pays off", () => {
+    const pays = scenario({ p0: { battle: [RICK_DOM], hand: [REST] }, p1: { battle: [GM] } });
+    expect(plays(pays, REST)).toBe(true); // Rick Dom destroys the GM, survives, Breach hits a Shield
+    const trade = scenario({ p0: { battle: [GM], hand: [REST] }, p1: { battle: [GM] } });
+    expect(plays(trade, REST)).toBe(false); // GM against GM: an even trade, nothing gained
+    const old = new HeuristicPolicy(engine, { plainRest: true }).choose(viewFor(trade, 0), trade.pending!);
+    expect(old.type === "playCommand").toBe(true); // the old rule rests whenever it can attack
+  });
+
+  it("chooses an active Unit worth resting", () => {
+    const s = scenario({
+      p0: { battle: [RICK_DOM], hand: [REST] },
+      p1: { battle: [{ no: GM, rested: true }, GM] },
+    });
+    engine.apply(s, { type: "playCommand", card: s.players[0].hand[0]! });
+    const pick = v0.choose(viewFor(s, 0), s.pending!);
+    expect(pick.type === "target" && !s.cards[pick.card]!.rested).toBe(true);
+  });
+});
+
 describe("v0: Commands in the main phase", () => {
   it("plays an AP boost for this turn only when it makes an attack kill", () => {
     const kill = scenario({

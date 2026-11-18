@@ -14,6 +14,8 @@ const END_MAIN = 10;
 /** A Base is only deployed if that gains at least this much (see Ctx.baseSwapGain). */
 const MIN_BASE_GAIN = 0.5;
 
+/** Resting an enemy Unit is worth a Command or an activated effect from this rest value on. */
+const REST_WORTH = 2;
 const HARMFUL = new Set(["rest", "damage", "destroy", "bounce", "toDeck", "exile"]);
 const BENEFICIAL = new Set(["ready", "recover", "grant", "toHand"]);
 const HARMFUL_FLAGS = new Set(["cantAttack", "cantAttackPlayer", "cantBePaired", "stayRested"]);
@@ -34,6 +36,8 @@ export interface RuleOptions {
   ex?: ExRule;
   /** Exception to `ex`: a Pilot that links may always use it (part of the default; with `ex` set, only if given). */
   exLink?: boolean;
+  /** Rest enemy Units without checking what it changes (the rule before 18 Nov 2026). */
+  plainRest?: boolean;
   /** Exception to `ex`: a Command may use it from this level on (Resources incl. the EX Resource). */
   exCommandLevel?: number;
   /** Exception to `ex`: may always use it while no own Unit is in play. */
@@ -277,7 +281,7 @@ class Ctx {
         if (this.options.eagerMainCommands) return 80 + this.card(o.card).level * 5;
         return this.mainCommandScore(o.card);
       case "activate":
-        return 60;
+        return this.restUseless(o) ? -1 : 60;
       case "attack":
         return this.attackScore(o.unit, o.target);
       case "support": {
@@ -386,6 +390,9 @@ class Ctx {
           else neutral = true; // chip damage: like other small effects
         } else if (until === "battle") {
           // waits for a battle
+        } else if (instr.op === "rest" && !this.options.plainRest) {
+          // Rest: only if it lets an attack pay off, takes a Blocker out of the way (restValue).
+          if (enemies.some((u) => this.restValue(u) >= REST_WORTH)) best = Math.max(best, 110);
         } else if (instr.op === "rest" || instr.op === "mod") {
           // AP- or rest during this turn: worth it when this turn's attacks can use it.
           const useful =
@@ -457,6 +464,59 @@ class Ctx {
     return keep.every((c) => active >= c.cost);
   }
 
+  /**
+   * What resting this enemy Unit changes now (0: nothing). In the own turn: the best attack on it that
+   * pays (it can only be attacked while rested), more if the attacker has <Breach> and the Breach damage
+   * reaches a Shield or the Base, and a <Blocker> out of the way of the attackers. In the opponent's
+   * turn: an active Unit that could still attack can't any more.
+   */
+  restValue(unit: CardId): number {
+    const card = this.s.cards[unit]!;
+    if (card.rested || !this.known(unit)) return 0;
+    const enemy = this.s.players[this.enemy];
+    if (this.s.active === this.enemy) {
+      if (card.enteredTurn >= this.s.turn || this.ap(unit) <= 0) return 0;
+      const shields = this.s.players[this.me].shields.length;
+      return 1 + this.ap(unit) * 0.5 + (shields <= 1 ? 3 : 0);
+    }
+    const attackers = this.s.players[this.me].battle.filter((a) => this.canAttackNow(a));
+    let best = 0;
+    for (const a of attackers) {
+      const { kills, survives } = this.fight(a, unit);
+      if (!kills) continue;
+      let gain = survives ? 2 + this.unitValue(unit) : this.unitValue(unit) - this.unitValue(a);
+      const breach = this.keywords(a).breach;
+      if (breach > 0 && (enemy.shields.length || enemy.base.length)) {
+        gain += 2 + breach + (enemy.shields.length <= 2 ? 2 : 0);
+      }
+      best = Math.max(best, gain);
+    }
+    if (this.keywords(unit).blocker && attackers.length) best += 2;
+    return best;
+  }
+
+  /** A friendly Unit that can still attack this turn. */
+  canAttackNow(unit: CardId): boolean {
+    const card = this.s.cards[unit]!;
+    return this.known(unit) && !card.rested && card.enteredTurn < this.s.turn && this.ap(unit) > 0;
+  }
+
+  /** An activated effect that only rests enemy Units, none of them worth resting now. */
+  restUseless(o: Action): boolean {
+    if (this.options.plainRest) return false;
+    const program = this.engine.activatedProgram(this.s, o);
+    if (!program?.some((i) => i.op === "rest")) return false;
+    const effects = program.filter((i) => "t" in i && typeof i.t === "string");
+    const sides = new Map<string, string | undefined>();
+    for (const i of program)
+      if ((i.op === "choose" || i.op === "all") && i.as) sides.set(i.as, i.filter.side);
+    const onlyRestEnemy = effects.every(
+      (i) => i.op === "rest" && "t" in i && sides.get(String(i.t).split("+")[0] ?? "") === "enemy",
+    );
+    if (!onlyRestEnemy) return false;
+    return !this.s.players[this.enemy].battle.some((u) => this.restValue(u) >= REST_WORTH);
+  }
+
   /** Would `attacker` destroy `defender` in battle, and would it survive? */
   fight(attacker: CardId, defender: CardId): { kills: boolean; survives: boolean } {
     const kills = this.ap(attacker) >= this.hpLeft(defender);
@@ -513,7 +573,7 @@ class Ctx {
       const play = this.options.eagerCommands || this.commandMatters(o.card);
       return play ? 50 + this.card(o.card).level : 0;
     }
-    if (o.type === "activate") return 40;
+    if (o.type === "activate") return this.restUseless(o) ? 0 : 40;
     return 0;
   }
 
@@ -549,6 +609,12 @@ class Ctx {
         if (["destroy", "bounce", "exile", "toDeck"].includes(instr.op) && enemies.length) return true;
         if (effect.damage > 0 && enemies.some((u) => this.hpLeft(u) <= effect.damage)) return true;
         if (instr.op === "mod" && enemyBattler) return true;
+        if (
+          instr.op === "rest" &&
+          !this.options.plainRest &&
+          enemies.some((u) => this.restValue(u) >= REST_WORTH)
+        )
+          return true;
       } else if (effect.kind === "help") {
         if (instr.op === "recover" && damagedFriend) return true;
         if ((instr.op === "mod" || instr.op === "grant" || instr.op === "flag") && myBattler) return true;
@@ -590,7 +656,7 @@ class Ctx {
     return scored[0]!.o;
   }
 
-  targetScore(o: Action, intent: { kind: Intent; damage: number; ap?: number }): number {
+  targetScore(o: Action, intent: { kind: Intent; damage: number; ap?: number; rest?: boolean }): number {
     if (o.type === "done") return 0; // stop choosing unless a target is worth it
     if (o.type !== "target") return -1;
     const card = this.s.cards[o.card]!;
@@ -599,6 +665,9 @@ class Ctx {
     const value = inPlay ? this.unitValue(o.card) : this.keepValue(o.card);
     if (intent.kind === "neutral") return friendly ? 1 + value : 0.5;
     const good = intent.kind === "harm" ? !friendly : friendly;
+    if (good && inPlay && intent.rest && !friendly && !this.options.plainRest && this.known(o.card)) {
+      return 1 + this.restValue(o.card) + value * 0.1;
+    }
     if (good && inPlay && intent.ap && !this.options.plainApTargets && this.known(o.card)) {
       return 1 + this.apChangeValue(o.card, intent.ap) + value * 0.1;
     }
@@ -636,7 +705,7 @@ class Ctx {
   }
 
   /** What the running effect does to the cards it is choosing (from its compiled program). */
-  intent(): { kind: Intent; damage: number; ap?: number } {
+  intent(): { kind: Intent; damage: number; ap?: number; rest?: boolean } {
     const frame = this.s.frames[this.s.frames.length - 1];
     if (!frame) return { kind: "neutral", damage: 0 };
     const script = this.engine.lib.get(frame.ref.no).script;
@@ -662,8 +731,9 @@ function safe<T>(value: () => T, fallback: () => T): T {
   }
 }
 
-function classify(instr: Instr): { kind: Intent; damage: number; ap?: number } {
+function classify(instr: Instr): { kind: Intent; damage: number; ap?: number; rest?: boolean } {
   if (instr.op === "damage") return { kind: "harm", damage: instr.amount };
+  if (instr.op === "rest") return { kind: "harm", damage: 0, rest: true };
   if (HARMFUL.has(instr.op)) return { kind: "harm", damage: 0 };
   if (BENEFICIAL.has(instr.op)) return { kind: "help", damage: 0 };
   if (instr.op === "mod") {

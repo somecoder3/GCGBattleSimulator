@@ -3,6 +3,7 @@
 //
 //   npm run ab -- --ai v0 --a default --b eager-commands --games 9216
 //   npm run ab -- --ai v1 --a default --b mulligan-basic
+//   npm run ab -- --ai v0 --a default --b plain-rest --by-deck   also the share of A per deck of A
 
 import { availableParallelism } from "node:os";
 import { parseArgs } from "node:util";
@@ -23,6 +24,7 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   "eager-main-commands": { rules: { eagerMainCommands: true } },
   "late-draw": { rules: { lateDraw: true } },
   "plain-ap-targets": { rules: { plainApTargets: true } },
+  "plain-rest": { rules: { plainRest: true } },
   /** Both Command rules as before 18 Nov 2026. */
   "old-commands": { rules: { eagerCommands: true, eagerMainCommands: true } },
   // EX Resource rules (docs/AI.md "EX Resource"; default: ex-deck+link). "ex-free": the rule before 18 Nov 2026;
@@ -59,6 +61,7 @@ const { values: args } = parseArgs({
     games: { type: "string", default: "9216" },
     seed: { type: "string", default: "21" },
     decks: { type: "string", default: "8" },
+    "by-deck": { type: "boolean", default: false },
   },
 });
 const a = VARIANTS[args.a];
@@ -89,6 +92,7 @@ process.stderr.write(`\r${games.length} Spiele in ${((performance.now() - starte
 let wins = 0;
 let n = 0;
 let errors = 0;
+const byDeck = new Map<string, { a: number; an: number; b: number; bn: number }>();
 for (const g of games) {
   if (g.error) {
     errors++;
@@ -96,11 +100,31 @@ for (const g of games) {
   }
   n++;
   const seatA = g.slots[0] === 0 ? 0 : 1;
-  wins += g.winner === null ? 0.5 : g.winner === seatA ? 1 : 0;
+  const w = g.winner === null ? 0.5 : g.winner === seatA ? 1 : 0;
+  wins += w;
+  // Per deck: how A and B do with it (the difference is the rule's effect for that deck).
+  const ta = byDeck.get(g.decks[seatA]) ?? { a: 0, an: 0, b: 0, bn: 0 };
+  ta.a += w;
+  ta.an++;
+  byDeck.set(g.decks[seatA], ta);
+  const tb = byDeck.get(g.decks[1 - seatA]!) ?? { a: 0, an: 0, b: 0, bn: 0 };
+  tb.b += 1 - w;
+  tb.bn++;
+  byDeck.set(g.decks[1 - seatA]!, tb);
 }
 const [low, high] = wilson(wins, n);
 const pct = (x: number) => `${(x * 100).toFixed(1)} %`;
 console.log(`${ai}: ${args.a} gegen ${args.b}: ${pct(wins / n)} (${pct(low)}–${pct(high)}, ${n} Spiele)`);
 if (errors) console.log(`${errors} Spiele mit Fehler`);
+if (args["by-deck"]) {
+  console.log(`  Deck   ${args.a.padStart(10)}  ${args.b!.padStart(10)}  Differenz`);
+  for (const [id, t] of [...byDeck].sort((x, y) => x[0].localeCompare(y[0]))) {
+    const a = t.a / t.an;
+    const b = t.b / t.bn;
+    console.log(
+      `  ${id.padEnd(5)} ${pct(a).padStart(10)}  ${pct(b).padStart(10)}  ${pct(a - b).padStart(9)}  (${t.an} Spiele je Seite)`,
+    );
+  }
+}
 for (const w of workers) await w.close();
 process.exit(0);
