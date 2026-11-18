@@ -177,11 +177,13 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   18 432 behaltenen Händen abgeleitet, im direkten Vergleich v1 gegen v1 **51,4 %** (50,9–51,9 %, 36 864
   Spiele); Mulligans 2 % → 43 %. Regel pro KI-Platz wählbar (`SimJob.mulligans`, `makePolicy(…, mulligan)`),
   Werkzeug `npm run mulligan`. Details `docs/AI.md` „Mulligan“.
-- **v0 hält Action-Commands zurück (18. Nov.):** `commandMatters` in `src/ai/heuristic.ts`. Danach gemessen
-  (`npm run ab`, neues Werkzeug für Varianten-Vergleiche, alte Regel als `eager-commands`): v0 49,9 %, v1
-  50,7 % (50,0–51,4 %) – kaum Wirkung, da nur 0,19 Entscheidungen pro Spiel betroffen; die KI spielt Commands
-  fast immer in der eigenen Main Phase (3,9 pro Spiel), dort wäre der größere Hebel. Optionen der v0-Regeln:
-  `RuleOptions` (`SimJob.rules`, `makePolicy(…, rules)`).
+- **Command-Regeln der KI (18. Nov., Nutzerwunsch):** v0 spielt Commands nach Wirkung und Dauer
+  (`mainCommandScore`, `commandMatters` in `src/ai/heuristic.ts`): „during this battle“ nur im Kampf,
+  „during this turn“ nur, wenn es diesen Zug hilft, Ziehen am Ende der Main Phase mit Ressourcen-Reserve für
+  Action-Commands. Gemessen mit `npm run ab` (neues Werkzeug für Varianten, alte Regeln als
+  `eager-commands`/`eager-main-commands`/`old-commands`): v1 neu gegen alt **51,0 %** (50,3–51,7 %), v0 Main-
+  Phase-Regel 50,6 %; die Action-Regel allein ändert nur 0,19 Entscheidungen pro Spiel. Optionen:
+  `RuleOptions` (`SimJob.rules`, `makePolicy(…, rules)`), Details `docs/AI.md`.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles

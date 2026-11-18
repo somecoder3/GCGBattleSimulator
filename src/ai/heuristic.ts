@@ -24,6 +24,8 @@ type Intent = "harm" | "help" | "neutral";
 export interface RuleOptions {
   /** Play every Action Command at once (the rule before 18 Nov 2026), instead of `commandMatters`. */
   eagerCommands?: boolean;
+  /** Play every Command in the main phase as soon as possible (the rule before 18 Nov 2026). */
+  eagerMainCommands?: boolean;
 }
 
 export class HeuristicPolicy implements Policy {
@@ -42,6 +44,7 @@ export class HeuristicPolicy implements Policy {
       case "mulligan":
         return ctx.mulligan(options);
       case "main":
+        ctx.mainOptions = options;
         return best(options, (o) => ctx.mainScore(o)) ?? options.find((o) => o.type === "endMain")!;
       case "block":
         return best(options, (o) => ctx.blockScore(o)) ?? options[0]!;
@@ -77,6 +80,9 @@ class Ctx {
     readonly me: PlayerId,
     readonly options: RuleOptions = {},
   ) {}
+
+  /** The options of the current main decision (to see which Units can still attack this turn). */
+  mainOptions: Action[] = [];
 
   get enemy(): PlayerId {
     return this.me === 0 ? 1 : 0;
@@ -174,7 +180,8 @@ class Ctx {
         return exBase ? 85 : 15 + gain;
       }
       case "playCommand":
-        return 80 + this.card(o.card).level * 5;
+        if (this.options.eagerMainCommands) return 80 + this.card(o.card).level * 5;
+        return this.mainCommandScore(o.card);
       case "activate":
         return 60;
       case "attack":
@@ -242,6 +249,114 @@ class Ctx {
     return this.s.players[this.enemy].battle.filter(
       (id) => this.known(id) && !this.s.cards[id]!.rested && this.keywords(id).blocker,
     );
+  }
+
+  /**
+   * A Command in the main phase, by what its effects do and how long they last (docs/AI.md):
+   * - removal (destroy, return, exile, or damage that destroys an enemy Unit): early, as before;
+   * - "during this battle" only: never (it waits for a battle, see commandMatters);
+   * - "during this turn" for own Units: before attacking, only if it helps an attack this turn;
+   * - "during this turn" against enemy Units (AP-, rest): only if Units can attack this turn;
+   * - drawing and other effects: at the end of the main phase, and only if enough Resources stay
+   *   active for an Action Command in the hand (for the opponent's turn).
+   */
+  mainCommandScore(id: CardId): number {
+    const card = this.card(id);
+    const program = card.script.compiled.find(
+      (e) => e.effect.kind === "command" && e.effect.timing.includes("main"),
+    )?.program;
+    if (!program) return -1;
+    const attackers = new Set(this.mainOptions.flatMap((o) => (o.type === "attack" ? [o.unit] : [])));
+    const enemies = this.s.players[this.enemy].battle.filter((u) => this.known(u));
+    // The side a choice is made from (by its variable).
+    const sides = new Map<string, "friendly" | "enemy" | undefined>();
+    for (const instr of program) {
+      if ((instr.op === "choose" || instr.op === "all") && instr.as) sides.set(instr.as, instr.filter.side);
+    }
+    let best = -1;
+    let neutral = false;
+    for (const instr of program) {
+      if (!("t" in instr) || typeof instr.t !== "string") {
+        if (
+          ["draw", "exResource", "token", "placeResource", "lookTop", "lookTopArrange", "deploy"].includes(
+            instr.op,
+          )
+        )
+          neutral = true;
+        continue;
+      }
+      const side = instr.t === "self" ? "friendly" : sides.get(instr.t.split("+")[0]!);
+      const effect = classify(instr);
+      const until = "until" in instr ? instr.until : undefined;
+      if (effect.kind === "harm" && side === "enemy") {
+        if (["destroy", "bounce", "exile", "toDeck"].includes(instr.op) && enemies.length) {
+          best = Math.max(best, 80 + card.level * 5);
+        } else if (effect.damage > 0) {
+          if (enemies.some((u) => this.hpLeft(u) <= effect.damage))
+            best = Math.max(best, 80 + card.level * 5);
+          else neutral = true; // chip damage: like other small effects
+        } else if (until === "battle") {
+          // waits for a battle
+        } else if (instr.op === "rest" || instr.op === "mod") {
+          // AP- or rest during this turn: worth it when this turn's attacks can use it.
+          const useful =
+            attackers.size > 0 &&
+            enemies.some((u) => (instr.op === "rest" ? !this.s.cards[u]!.rested : true));
+          if (useful) best = Math.max(best, 110);
+        } else if (instr.op === "flag" && instr.flag === "stayRested") {
+          best = Math.max(best, 60);
+        }
+      } else if (effect.kind === "help" && side === "friendly") {
+        if (until === "battle") continue;
+        if (until === "turn") {
+          if (attackers.size > 0 && this.buffHelps(instr, attackers)) best = Math.max(best, 120);
+          continue;
+        }
+        // Lasting help (recover, back to the hand, set active …): like other small effects.
+        if (instr.op !== "recover" || this.s.players[this.me].battle.some((u) => this.s.cards[u]!.damage > 0))
+          neutral = true;
+      } else if (effect.kind === "neutral" || instr.op === "toHand") {
+        neutral = true;
+      }
+    }
+    if (best > 0) return best;
+    if (neutral && this.resourcesLeftForAction(id)) return END_MAIN + 1;
+    return -1;
+  }
+
+  /** Does a "during this turn" boost help an attack this turn? */
+  buffHelps(instr: Instr, attackers: Set<CardId>): boolean {
+    if (instr.op === "mod") {
+      const plus = instr.ap ?? 0;
+      if (plus <= 0) return false;
+      const enemyBase = this.s.players[this.enemy].base.length > 0;
+      const rested = this.s.players[this.enemy].battle.filter(
+        (u) => this.known(u) && this.s.cards[u]!.rested,
+      );
+      // A kill that needs the extra AP, or more damage to the enemy Base.
+      return [...attackers].some(
+        (a) =>
+          enemyBase || rested.some((t) => this.ap(a) < this.hpLeft(t) && this.ap(a) + plus >= this.hpLeft(t)),
+      );
+    }
+    // Keywords and attack options (<High-Maneuver>, <Breach>, "may attack active Units" …).
+    return instr.op === "grant" || instr.op === "flag";
+  }
+
+  /** After paying for `id`, can an Action Command in the hand still be paid in the opponent's turn? */
+  resourcesLeftForAction(id: CardId): boolean {
+    const me = this.s.players[this.me];
+    const active = me.resources.filter((r) => !this.s.cards[r]!.rested).length - this.card(id).cost;
+    const keep = me.hand
+      .filter((h) => h !== id && this.known(h) && this.card(h).no !== this.card(id).no)
+      .map((h) => this.card(h))
+      .filter(
+        (c) =>
+          c.type === "COMMAND" &&
+          c.level <= me.resources.length &&
+          c.script.compiled.some((e) => e.effect.kind === "command" && e.effect.timing.includes("action")),
+      );
+    return keep.every((c) => active >= c.cost);
   }
 
   /** Would `attacker` destroy `defender` in battle, and would it survive? */

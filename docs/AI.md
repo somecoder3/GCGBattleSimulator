@@ -129,14 +129,21 @@ beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (
 
 - **Wert einer Unit:** AP + verbleibende HP + Lv./2, Zuschläge für Keywords und Pilot.
 - **Mulligan:** siehe Abschnitt „Mulligan“ (gilt für alle KIs).
-- **Action-Commands** (seit 18. Nov. 2026, `commandMatters`): nur, wenn sie jetzt etwas ändern: eine
-  gegnerische Unit entfernen oder durch Schaden zerstören, den laufenden Kampf beeinflussen (AP, Keywords,
-  Schutz der eigenen kämpfenden Unit, neues Angriffsziel) oder eine beschädigte eigene Unit heilen; sonstige
-  Effekte (Ziehen …) am Ende des gegnerischen Zuges. Vorher spielte v0 jedes Action-Command sofort (als
-  Variante `eager-commands` in `npm run ab` erhalten). In der Main Phase unverändert. **Gemessen** (Meta Top 8,
-  `npm run ab`): v0 neu gegen alt 49,9 % (49,4–50,4 %, 36 864 Spiele), v1 50,7 % (50,0–51,4 %, 18 432 Spiele).
-  Kaum Wirkung, weil die Regel nur 0,19 Entscheidungen pro Spiel ändert: Fast alle Commands spielt die KI schon
-  in der eigenen Main Phase (3,9 pro Spiel); dort liegt der größere Hebel.
+- **Commands** (seit 18. Nov. 2026, `mainCommandScore` und `commandMatters`), nach Wirkung und Dauer:
+  - Entfernen (zerstören, auf die Hand, verbannen, oder Schaden, der eine gegnerische Unit zerstört): in der
+    Main Phase früh, im Action Step sofort.
+  - Nur „during this battle“: nie in der Main Phase; im Action Step, wenn sie den laufenden Kampf ändern
+    (AP, Keywords, Schutz der eigenen kämpfenden Unit, neues Angriffsziel).
+  - „During this turn“ für eigene Units: in der Main Phase vor den Angriffen, nur wenn sie diesen Zug helfen
+    (AP+ ermöglicht einen Kill oder trifft eine gegnerische Base; Keywords/Angriffsflags, wenn es Angreifer gibt).
+  - „During this turn“ gegen gegnerische Units (AP−, ruhen): nur, wenn eigene Units diesen Zug angreifen können.
+  - Ziehen und Sonstiges (Token, Ressourcen, Karte aus dem Trash, heilen): am Ende der Main Phase, wenn sonst
+    nichts mehr sinnvoll ist, und nur, wenn danach genug aktive Ressourcen für jedes Action-Command auf der
+    Hand bleiben (für den gegnerischen Zug); im Action Step am Ende des gegnerischen Zuges.
+    Gemessen (Meta Top 8, `npm run ab`): nur Action-Regel: v0 49,9 % (36 864 Spiele), v1 50,7 % (50,0–51,4 %,
+    18 432); nur Main-Phase-Regel: v0 50,6 % (50,1–51,1 %, 36 864); beide gegen die alten Regeln
+    (`old-commands`): **v1 51,0 % (50,3–51,7 %, 18 432 Spiele)**. v1 entscheidet seine eigenen Züge per
+    Vorausschau; die Regeln wirken dort über die Fortsetzungen.
 - **Main Phase** (Reihenfolge ergibt sich aus den Punkten): tödlicher Angriff › Units einsetzen (höheres
   Lv. zuerst) › Pilot setzen (Link bevorzugt; Commands mit 【Pilot】 nur bei Link) › Base (siehe unten) › Commands › Activate-Effekte › Angriff auf eine geruhte Unit, die zerstört wird und die eigene
   überlebt › Spieler angreifen (außer ein aktiver <Blocker> würde die Unit ohne Verlust zerstören) ›
