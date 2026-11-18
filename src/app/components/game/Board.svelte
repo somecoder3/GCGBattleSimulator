@@ -20,7 +20,7 @@
     primaryCard,
     secondary,
   } from "../../lib/actions";
-  import { cardName, describeSteps, type LogLine } from "../../lib/gamelog";
+  import { cardName, describeStart, describeSteps, type LogLine } from "../../lib/gamelog";
   import BoardCard from "./BoardCard.svelte";
   import CardInfo from "./CardInfo.svelte";
 
@@ -174,7 +174,10 @@
 
   function refresh(step?: LogStep) {
     view = session.view();
-    lines = describeSteps(engine, session.steps, human);
+    lines = [
+      ...(session.setup.start ? describeStart(session.setup.start, human) : []),
+      ...describeSteps(engine, session.steps, human),
+    ];
     selected = null;
     flashed = new Set(step && step.player !== human ? touched(step.events) : []);
     reveal(step);

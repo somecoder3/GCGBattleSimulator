@@ -185,6 +185,30 @@ die aufgedruckten Werte zurück.
 Schwächen von v0: keine Vorausschau, keine Planung des Ressourcen-Einsatzes, spielt Commands sofort,
 hält keine Blocker zurück, Support kaum genutzt.
 
+## Startspieler (`src/sim/start.ts`, `src/ai/turnorder.ts`, `npm run first`)
+
+Regel (Rules Q&A Q8): Schere-Stein-Papier oder Ähnliches, der Gewinner wählt vor dem Ansehen der Starthand,
+wer beginnt. Im Spiel gegen die KI (Standard „Würfeln, Gewinner wählt“) würfeln beide einen W6, bei
+Gleichstand neu; der Wurf hängt nur vom Seed ab (gleicher Seed, gleicher Wurf) und steht im Log. Gewinnt der
+Mensch, wählt er; gewinnt die KI, wählt `aiWantsFirst`.
+
+Messung (18. Nov. 2026, v1, 15 Meta-Archetypen untereinander und 16 Starter-Decks untereinander, je 5760
+bzw. 5440 Spiele, je Deck 336 Spiele als Erster und als Zweiter ohne Spiegel): **jedes Deck gewinnt als
+Startspieler öfter**, um 9 bis 30 Prozentpunkte; insgesamt 62,0 %. Die Vermutung „ohne Karte mit Lv. 1 und
+Kosten 1 lieber als Zweiter“ trifft nicht zu: M11 (keine solche Karte, Ø Lv. 4,1) hat den größten Vorteil
+(+30), M02/M04/M12 ohne solche Karte +28/+28/+28; die kleinsten Vorteile haben ST09R (+9), ST13 (+10),
+ST11 (+14), ST09W (+16). Ein Zusammenhang mit billigen Units oder Ø-Level ist nicht zu erkennen. Darum
+wählt die KI immer zu beginnen. Gründe: Spieler 1 zieht schon im ersten Zug und greift zuerst an; die EX
+Resource von Spieler 2 gleicht das nicht aus. Mit anderer KI oder Regeln neu messen: `npm run first`.
+Im Simulator bleibt der Startspieler ausgeglichen (Blöcke à 8): Da die KI immer beginnen will, wäre Würfeln
+dort nur ein zufälliger Startspieler mit mehr Streuung.
+
+**EX Resource:** Die Engine zahlt Kosten mit normalen Ressourcen zuerst und nimmt die EX Resource nur, wenn
+die normalen nicht reichen (sie zählt bis dahin fürs Level mit). Keine KI entscheidet ausdrücklich, sie
+aufzuheben: v0 spielt eine Karte, sobald sie bezahlbar ist; v1 und die Suche bewerten die Stellung zu Beginn
+der nächsten eigenen Main Phase, und die Bewertung kennt weder Ressourcen noch Level. Dass eine verbrauchte
+EX Resource später ein Level fehlt, sieht also keine KI.
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen

@@ -5,6 +5,8 @@
   import { SNAPSHOT, cardLib, deckChoices, deckLabel, preset } from "../../lib/decks";
   import type { PlayerId } from "../../../engine/types";
   import { GameSession, type SavedSession } from "../../../sim/session";
+  import { rollForStart, type StartRoll } from "../../../sim/start";
+  import { aiWantsFirst } from "../../../ai/turnorder";
   import Board from "./Board.svelte";
 
   let { pool }: { pool: CardPool } = $props();
@@ -27,7 +29,9 @@
   let myDeck = $state(preset.play && DECKS.some((d) => d.id === preset.play) ? preset.play : DECKS[0]!.id);
   preset.play = null;
   let aiDeck = $state(DECKS[1]!.id);
-  let starter = $state<"random" | "me" | "ai">("random");
+  let starter = $state<"roll" | "me" | "ai">("roll");
+  /** The die roll before the game, while the winner chooses who goes first. */
+  let roll = $state.raw<StartRoll>();
   let aiName = $state<AiName>("search");
   // What the AI expects you to play: the meta by share, starter decks a little.
   const field = DECKS.map((d) => ({ deck: d.deck, weight: d.share ?? 0.01 }));
@@ -56,20 +60,35 @@
     }
   }
 
+  // The human plays in seat 0, the AI in seat 1.
+  const HUMAN: PlayerId = 0;
+  const AI: PlayerId = 1;
+
   function start() {
+    if (starter === "roll") roll = rollForStart(seed >>> 0);
+    else launch(starter === "me" ? HUMAN : AI);
+  }
+
+  /** The AI's choice after winning the roll (src/ai/turnorder.ts). */
+  function aiChoice(): PlayerId {
+    return aiWantsFirst(DECKS.find((d) => d.id === aiDeck)!.deck) ? AI : HUMAN;
+  }
+
+  function launch(firstPlayer: PlayerId) {
     const mine = DECKS.find((d) => d.id === myDeck)!;
     const theirs = DECKS.find((d) => d.id === aiDeck)!;
-    const human: PlayerId = 0;
-    const s = seed >>> 0;
-    const firstPlayer: PlayerId = starter === "me" ? human : starter === "ai" ? 1 : ((s % 2) as PlayerId);
     session = new GameSession(engine, {
       decks: [mine.deck, theirs.deck],
-      options: { seed: s, firstPlayer },
-      human,
+      options: { seed: seed >>> 0, firstPlayer },
+      human: HUMAN,
       ai: aiName,
       deckNames: [`${mine.id} ${mine.name}`, `${theirs.id} ${theirs.name}`],
+      ...(roll ? { start: { ...roll, first: firstPlayer } } : {}),
     });
+    roll = undefined;
   }
+
+  const FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
   function resume() {
     if (!saved) return;
@@ -128,7 +147,7 @@
       <label>
         Wer beginnt
         <select bind:value={starter}>
-          <option value="random">Zufall</option>
+          <option value="roll">Würfeln, Gewinner wählt</option>
           <option value="me">Du</option>
           <option value="ai">KI</option>
         </select>
@@ -141,14 +160,53 @@
         </span>
       </label>
     </div>
-    <div class="actions">
-      <button class="btn primary" onclick={start}>Spiel starten</button>
-      {#if saved}
-        <button class="btn" onclick={resume}>
-          Partie fortsetzen ({saved.deckNames?.join(" gegen ") ?? "gespeichert"}, {saved.actions.length} Entscheidungen)
-        </button>
-      {/if}
-    </div>
+    {#if roll}
+      {@const last = roll.rolls[roll.rolls.length - 1]!}
+      <div class="roll" role="status">
+        {#if roll.rolls.length > 1}
+          <p class="ties">
+            Gleichstand: {roll.rolls
+              .slice(0, -1)
+              .map((r) => r[0])
+              .join(", ")} – noch einmal gewürfelt.
+          </p>
+        {/if}
+        <div class="dice">
+          <figure class:win={roll.winner === HUMAN}>
+            <span class="die" aria-hidden="true">{FACES[last[HUMAN] - 1]}</span>
+            <figcaption>Du: {last[HUMAN]}</figcaption>
+          </figure>
+          <figure class:win={roll.winner === AI}>
+            <span class="die" aria-hidden="true">{FACES[last[AI] - 1]}</span>
+            <figcaption>KI: {last[AI]}</figcaption>
+          </figure>
+        </div>
+        {#if roll.winner === HUMAN}
+          <p>Du hast gewonnen und wählst, wer beginnt.</p>
+          <div class="actions">
+            <button class="btn primary" onclick={() => launch(HUMAN)}>Ich beginne</button>
+            <button class="btn" onclick={() => launch(AI)}>Die KI beginnt</button>
+          </div>
+        {:else}
+          {@const first = aiChoice()}
+          <p>
+            Die KI hat gewonnen und wählt: <strong>{first === AI ? "Sie beginnt." : "Du beginnst."}</strong>
+          </p>
+          <div class="actions">
+            <button class="btn primary" onclick={() => launch(first)}>Weiter</button>
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <div class="actions">
+        <button class="btn primary" onclick={start}>Spiel starten</button>
+        {#if saved}
+          <button class="btn" onclick={resume}>
+            Partie fortsetzen ({saved.deckNames?.join(" gegen ") ?? "gespeichert"}, {saved.actions.length} Entscheidungen)
+          </button>
+        {/if}
+      </div>
+    {/if}
   </section>
 {/if}
 
@@ -203,6 +261,69 @@
     border: 1px solid var(--line);
     border-radius: 8px;
     background: var(--bg-sunken);
+  }
+  .roll {
+    margin-top: 22px;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-sunken);
+    text-align: center;
+  }
+  .roll p {
+    margin: 10px 0 0;
+  }
+  .roll .ties {
+    margin: 0 0 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .roll .actions {
+    justify-content: center;
+  }
+  .dice {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+  }
+  .dice figure {
+    margin: 0;
+    opacity: 0.55;
+    transition: opacity 0.3s 0.7s;
+  }
+  .dice figure.win {
+    opacity: 1;
+  }
+  .die {
+    display: block;
+    font-size: 64px;
+    line-height: 1;
+    animation: tumble 0.7s ease-out;
+  }
+  .dice figure.win .die {
+    color: var(--accent, currentColor);
+  }
+  figcaption {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  @keyframes tumble {
+    0% {
+      transform: translateY(-24px) rotate(-200deg) scale(0.6);
+      opacity: 0;
+    }
+    70% {
+      transform: translateY(4px) rotate(10deg) scale(1.05);
+      opacity: 1;
+    }
+    100% {
+      transform: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .die {
+      animation: none;
+    }
   }
   .actions {
     display: flex;

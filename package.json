@@ -27,6 +27,7 @@
     "icons": "tsx tools/icons.ts",
     "tune": "tsx tools/tune.ts",
     "mulligan": "tsx tools/mulligan.ts",
+    "first": "tsx tools/first.ts",
     "ab": "tsx tools/ab.ts"
   },
   "devDependencies": {

@@ -5,6 +5,7 @@ import type { Engine } from "../../engine/engine";
 import type { CardId, GameEvent, GameState, PlayerId } from "../../engine/types";
 import { isHiddenFrom } from "../../engine/view";
 import type { LogStep } from "../../sim/session";
+import type { StartChoice } from "../../sim/start";
 
 export interface LogLine {
   /** Action index this line belongs to (-1 = setup); rollback goes to just before it. */
@@ -32,6 +33,22 @@ const REASONS = {
 
 export function describeSteps(engine: Engine, steps: readonly LogStep[], human: PlayerId): LogLine[] {
   return steps.flatMap((step) => describeStep(engine, step, human));
+}
+
+/** The die roll before the game: "Würfeln: Du 5, KI 3. Du darfst wählen, wer beginnt." */
+export function describeStart(start: StartChoice, human: PlayerId): LogLine[] {
+  const ai = (human === 0 ? 1 : 0) as PlayerId;
+  const rolls = start.rolls.map((r) => `Du ${r[human]}, KI ${r[ai]}`).join("; ");
+  const chooser = start.winner === human ? "Du darfst" : "Die KI darf";
+  return [
+    {
+      index: -1,
+      actor: null,
+      subject: start.winner,
+      kind: "info",
+      text: `Würfeln: ${rolls}. ${chooser} wählen, wer beginnt.`,
+    },
+  ];
 }
 
 export function describeStep(engine: Engine, step: LogStep, human: PlayerId): LogLine[] {

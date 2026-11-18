@@ -189,6 +189,13 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
     dieselbe Unit, solange es etwas ändert; `apChangeValue`). Engine summiert AP-Änderungen korrekt (Q95).
     Gemessen: kein messbarer Unterschied (v1 50,5 % / 50,2 %, je 9216 Spiele), behalten. Varianten
     `late-draw`, `plain-ap-targets`.
+- **Startspieler (18. Nov., Nutzerwunsch):** Im Spiel wird vor der Partie gewürfelt (`rollForStart` in
+  `src/sim/start.ts`, W6 je Seite, Gleichstand neu, nur vom Seed abhängig), der Gewinner wählt (Rules Q&A Q8);
+  Dialog in `PlayScreen`, Wurf in `SessionSetup.start` und im Log. Die KI wählt immer zu beginnen
+  (`src/ai/turnorder.ts`): gemessen mit `npm run first` gewinnt **jedes** von 30 Decks als Startspieler öfter
+  (+9 bis +30 Punkte, gesamt 62 %), auch ohne Lv.-1-Karten (Vermutung des Nutzers widerlegt). Simulator bleibt
+  ausgeglichen. EX Resource: keine KI hebt sie bewusst auf (Bewertung kennt keine Ressourcen), `docs/AI.md`.
+- Nutzerwunsch für später: **Kombos** (Turnierlisten bauen darauf) besser erkennen und nutzen, eigener Schritt.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles

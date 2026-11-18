@@ -3,6 +3,7 @@
 // The log is rebuilt the same way, so it always matches the current state.
 
 import { cloneState } from "../engine/clone";
+import type { StartChoice } from "./start";
 import type { AiName } from "../ai/registry";
 import type { Policy } from "../ai/types";
 import type { Engine } from "../engine/engine";
@@ -18,6 +19,8 @@ export interface SessionSetup {
   deckNames?: [string, string];
   /** The opponent AI (default: the best heuristic). */
   ai?: AiName;
+  /** The die roll for who goes first and the winner's choice (shown in the log; the engine uses options.firstPlayer). */
+  start?: StartChoice;
 }
 
 export interface SavedSession extends SessionSetup {
