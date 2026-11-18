@@ -10,7 +10,7 @@ import { parseArgs } from "node:util";
 import type { RuleOptions } from "../src/ai/heuristic";
 import type { MulliganRule } from "../src/ai/mulligan";
 import { parseAiName } from "../src/ai/registry";
-import { metaDecks } from "../src/meta/decks";
+import { metaDecks, type MetaList } from "../src/meta/decks";
 import { runPool } from "../src/sim/pool";
 import { fullRounds, type SimJob } from "../src/sim/runner";
 import { wilson } from "../src/sim/stats";
@@ -25,6 +25,10 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   "late-draw": { rules: { lateDraw: true } },
   "plain-ap-targets": { rules: { plainApTargets: true } },
   "plain-rest": { rules: { plainRest: true } },
+  fuel: { rules: { comboFuel: true } },
+  links: { rules: { linkValue: true } },
+  "pair-any-pilot": { rules: { pairAnyPilot: true } },
+  combos: { rules: { comboFuel: true, linkValue: true } },
   "idle-commands": { rules: { searchIdleCommands: true } },
   /** Both Command rules as before 18 Nov 2026. */
   "old-commands": { rules: { eagerCommands: true, eagerMainCommands: true } },
@@ -63,6 +67,7 @@ const { values: args } = parseArgs({
     seed: { type: "string", default: "21" },
     decks: { type: "string", default: "8" },
     "by-deck": { type: "boolean", default: false },
+    list: { type: "string", default: "consensus" },
   },
 });
 const a = VARIANTS[args.a];
@@ -70,7 +75,7 @@ const b = args.b ? VARIANTS[args.b] : undefined;
 if (!a || !b) throw new Error(`--a/--b: one of ${Object.keys(VARIANTS).join(", ")}`);
 
 const ai = parseAiName(args.ai);
-const decks = metaDecks(loadSnapshot(), loadLib(), Number(args.decks)).map((d) => ({
+const decks = metaDecks(loadSnapshot(), loadLib(), Number(args.decks), args.list as MetaList).map((d) => ({
   id: d.id,
   name: d.name,
   deck: d.deck,

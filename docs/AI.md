@@ -289,6 +289,36 @@ Früh (Lv. 3–4) schadet die Ausnahme messbar, ab Lv. 5 ist sie gleichauf (ab L
 spielt Commands nur, wenn sie etwas bewirken, und spät erlaubt die Deck-Regel die EX Resource meist ohnehin).
 Kein Level bringt einen Vorteil → Standard unverändert, die Option bleibt zum Messen.
 
+## Kombos (`src/ai/synergy.ts`, `npm run combos`, 18. Nov. 2026, Nutzerwunsch)
+
+Ausgangslage: Mit v1 schneiden die besten Turnierlisten (`M01B` …) im Schnitt **schlechter** ab als die
+Konsenslisten (49,1 % gegen 50,9 %, 12 Archetypen, 4800 Spiele `--list both`), obwohl sie im Turnier besser
+sind. Vermutung: Die Turnierlisten bauen auf Kombos, die die KI nicht nutzt. Am deutlichsten Shining Gundam
+(M01/M01B 44 %/39 %).
+
+**Erkennung:** `deckSynergies` liest aus den übersetzten Effekten jedes Filters auf eigene Karten mit Trait,
+Name oder Kartentyp im Trash („2 (MF) Unit cards from your trash“, „3 or more (MF) cards in your trash“,
+„a Unit with "Master Gundam" in its card name“) und sucht die passenden Karten im Deck; dazu Links zwischen
+Units und Piloten des Decks. Allgemeine Filter („1 of your Units“) zählen nicht. `npm run combos -- M01B`
+zeigt die Beziehungen eines Decks, `npm run combos` die der Meta-Archetypen. `deckPlan` macht daraus pro
+Karte einen Trash-Wert (`trashFuel`: Kopien der suchenden Karten / Kopien der passenden) und pro Pilot die
+Units, die er linkt.
+
+**Versuche** (`npm run ab`, beste Listen der 12 Archetypen, `--list best`):
+
+| Variante                                                            | v0                | v1                              |
+| ------------------------------------------------------------------- | ----------------- | ------------------------------- |
+| `comboFuel`: Trash-Karten des Plans abwerfen (v0), im Trash +1 (v1) | 50,0 % (9360)     | 49,3 % (4992)                   |
+| `linkValue`: gelinkte Unit +1,5 in der Bewertung                    | –                 | 49,5 % (4992)                   |
+| beides                                                              | –                 | 49,2 % (4992), M01B −7,7 Punkte |
+| Pilot wartet auf seine Link-Unit (Standard, alt `pairAnyPilot`)     | **50,8 %** (9360) | 49,9 % (4992)                   |
+
+(Anteil der neuen Regel gegen die alte.) Feste Zusatzwerte für Kombo-Teile helfen also nicht; im Trash
+sind die Karten v1 eine Runde lang mehr wert, als sie in der kurzen Vorausschau einbringen. Übernommen ist
+nur die Pilot-Regel: v0 setzt einen Piloten nicht in eine Unit, die er nicht linkt, wenn eine Unit, die er
+linkt, auf der Hand liegt und spätestens nächsten Zug spielbar ist (Lv. ≤ Level + 1). `comboFuel` und
+`linkValue` bleiben als abschaltbare Versuche (`RuleOptions`, Varianten `fuel`, `links`, `combos`).
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen

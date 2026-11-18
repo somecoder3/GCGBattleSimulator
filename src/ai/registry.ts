@@ -71,7 +71,7 @@ function basePolicy(
   rules: RuleOptions,
 ): Policy {
   const w = weights ? { ...DEFAULT_WEIGHTS, ...weights } : DEFAULT_WEIGHTS;
-  if (knowledge.deck && (rules.ex ?? "deck") === "deck") rules = { ...rules, ownDeck: knowledge.deck };
+  if (knowledge.deck) rules = { ...rules, ownDeck: knowledge.deck };
   switch (name) {
     case "random":
       return new RandomPolicy(seed);

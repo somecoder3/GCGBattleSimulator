@@ -4,6 +4,7 @@
 import type { Engine } from "../engine/engine";
 import { other } from "../engine/engine";
 import type { CardId, GameState, PlayerId } from "../engine/types";
+import type { DeckPlan } from "./synergy";
 
 export interface Weights {
   win: number;
@@ -29,6 +30,10 @@ export interface Weights {
   /** Per attacker more than the defender has blockers, when the defender has no Shields and no Base. */
   lethalPressure: number;
   deckLow: number;
+  /** Per card in the own trash that the own deck's effects look for there (DeckPlan.trashFuel, at most 1). */
+  fuel: number;
+  /** Per Unit in play that is linked (its 【During Link】 effects and link bonuses last beyond the horizon). */
+  linked: number;
 }
 
 export const DEFAULT_WEIGHTS: Weights = {
@@ -52,12 +57,23 @@ export const DEFAULT_WEIGHTS: Weights = {
   exposed: 0.15,
   lethalPressure: 6,
   deckLow: 3,
+  fuel: 1,
+  linked: 1.5,
 };
+
+/** Combo knowledge of the evaluation (docs/AI.md "Kombos"); experiments, off by default (not better). */
+export interface ComboKnowledge {
+  /** The own deck's plan: trash fuel. */
+  plan?: DeckPlan;
+  /** Value linked Units (both players). */
+  links?: boolean;
+}
 
 export class Evaluator {
   constructor(
     private readonly engine: Engine,
     private readonly w: Weights = DEFAULT_WEIGHTS,
+    private readonly combo: ComboKnowledge = {},
   ) {}
 
   evaluate(s: GameState, me: PlayerId): number {
@@ -65,10 +81,10 @@ export class Evaluator {
       if (s.result.winner === null) return 0;
       return s.result.winner === me ? this.w.win - s.turn : -this.w.win + s.turn;
     }
-    return this.side(s, me) - this.side(s, other(me));
+    return this.side(s, me, true) - this.side(s, other(me), false);
   }
 
-  private side(s: GameState, p: PlayerId): number {
+  private side(s: GameState, p: PlayerId, own: boolean): number {
     const w = this.w;
     const player = s.players[p];
     const enemy = s.players[other(p)];
@@ -78,6 +94,10 @@ export class Evaluator {
     for (const id of player.base) v += this.hpLeft(s, id) * w.baseHp;
     v += Math.min(player.hand.length, w.handCap) * w.hand;
     if (player.deck.length <= 3) v -= (4 - player.deck.length) * w.deckLow;
+    const plan = own ? this.combo.plan : undefined;
+    if (plan) {
+      for (const id of player.trash) v += Math.min(1, plan.trashFuel.get(s.cards[id]!.no) ?? 0) * w.fuel;
+    }
 
     // Units that will stay rested while the enemy can attack them are worth less: the active player's
     // rested Units face all enemy Units next turn, the other player's rested Units face the active
@@ -89,6 +109,7 @@ export class Evaluator {
         const hp = this.hpLeft(s, id);
         if (threats.some((t) => this.engine.ap(s, t) >= hp)) value *= 1 - w.exposed;
       }
+      if (this.combo.links && this.engine.isLinked(s, id)) value += w.linked;
       v += value;
     }
 

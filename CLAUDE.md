@@ -224,7 +224,13 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 - **Zusammengeführt am 18. Nov.** (Pull-Konflikte nur in `CLAUDE.md` und `tools/ab.ts`, beide Seiten behalten):
   `allowed()` filtert jetzt EX-Regel und wirkungslose Action-Commands; `commandMatters` kennt dabei auch das
   neue Resten (`restValue`), Rest-Commands im gegnerischen Zug bleiben also für v1/Suche erlaubt.
-- Nutzerwunsch für später: **Kombos** (Turnierlisten bauen darauf) besser erkennen und nutzen, eigener Schritt.
+- **Kombos, erster Schritt (18. Nov., Nutzerwunsch):** Bei v1 sind die besten Turnierlisten schwächer als
+  die Konsenslisten (49,1 % gegen 50,9 %). `src/ai/synergy.ts` erkennt Kombos aus den Effekten (Filter auf
+  eigene Karten mit Trait/Name im Trash oder Spiel, Links), `npm run combos -- M01B` zeigt sie. Feste
+  Zusatzwerte (Trash-Karten des Plans, gelinkte Units) machen v1 nicht stärker (49,2–49,5 %) → nur als
+  Versuch `comboFuel`/`linkValue`. Übernommen: Pilot wartet auf eine Link-Unit auf der Hand (v0 50,8 %,
+  v1 49,9 %; alt `pairAnyPilot`). `npm run ab -- --list best` misst mit Turnierlisten; `npm run game` kennt
+  `M01B`. Details `docs/AI.md` „Kombos“. Offen: die kurze Vorausschau von v1 sieht mehrzügige Pläne nicht.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles

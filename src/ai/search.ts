@@ -27,7 +27,7 @@ import { seedRng, type RngState } from "../engine/rng";
 import type { Action, Decision, GameState, PlayerId } from "../engine/types";
 import { DEFAULT_WEIGHTS, Evaluator, type Weights } from "./evaluate";
 import { HeuristicPolicy, type RuleOptions } from "./heuristic";
-import { LookaheadPolicy } from "./lookahead";
+import { comboKnowledge, LookaheadPolicy } from "./lookahead";
 import { sampleState, type Knowledge } from "./opponent";
 import type { Policy } from "./types";
 
@@ -75,7 +75,7 @@ export class SearchPolicy implements Policy {
     this.name = `search-${options.samples}`;
     this.rules = new HeuristicPolicy(engine, rules);
     this.lookahead = new LookaheadPolicy(engine, weights, "turn", rules);
-    this.evaluator = new Evaluator(engine, weights);
+    this.evaluator = new Evaluator(engine, weights, comboKnowledge(engine, rules));
     this.rng = seedRng(seed ^ 0x5ea7c4);
     this.lossBelow = -weights.win / 2;
   }

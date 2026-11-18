@@ -3,10 +3,12 @@
 // M4 replaces it with an evaluation function and search within the turn.
 
 import type { Instr } from "../effects/compile";
+import { satisfiesLink } from "../engine/cardlib";
 import type { Engine } from "../engine/engine";
 import type { Action, CardId, Decision, DeckList, GameState, PlayerId } from "../engine/types";
 import { HIDDEN } from "../engine/view";
 import { DEFAULT_MULLIGAN, keepHand } from "./mulligan";
+import { planFor, type DeckPlan } from "./synergy";
 import type { Policy } from "./types";
 
 /** Score of "do nothing more" in the main phase; options below it are never chosen. */
@@ -49,9 +51,21 @@ export interface RuleOptions {
   exEmergency?: boolean;
   /** For `ex: "level"`: the level that must remain after using it. */
   exLevel?: number;
-  /** The AI's own deck list (for `ex: "deck"`; set by makePolicy). */
+  /** The AI's own deck list (for `ex: "deck"` and the combos; set by makePolicy). */
   ownDeck?: DeckList;
+  /**
+   * Experiment (docs/AI.md "Kombos", not better): cards the own deck wants in the trash are cheaper to
+   * discard (v0) and worth something there (v1/search evaluation).
+   */
+  comboFuel?: boolean;
+  /** Experiment (not better): v1/search value linked Units in the evaluation. */
+  linkValue?: boolean;
+  /** Pair a Pilot with any Unit, even if a Unit it links is in the hand (before 18 Nov 2026). */
+  pairAnyPilot?: boolean;
 }
+
+/** keepValue points less for a card the own deck wants in the trash (per DeckPlan.trashFuel, at most 1). */
+const FUEL_DISCARD = 2;
 
 /**
  * When the AI may use up its EX Resource (it counts for the level until then):
@@ -153,7 +167,9 @@ export class HeuristicPolicy implements Policy {
         return best(options, (o) => ctx.actionScore(o)) ?? options[0]!;
       case "discard":
         // The card least worth keeping; scores must be positive for best().
-        return best(options, (o) => (o.type === "discard" ? 1000 - ctx.keepValue(o.card) : 0)) ?? options[0]!;
+        return (
+          best(options, (o) => (o.type === "discard" ? 1000 - ctx.discardKeep(o.card) : 0)) ?? options[0]!
+        );
       case "effect":
         return ctx.effect(decision);
     }
@@ -258,6 +274,32 @@ class Ctx {
     return v;
   }
 
+  /** The own deck's combo plan (src/ai/synergy.ts), if known. */
+  get plan(): DeckPlan | undefined {
+    if (!this.options.comboFuel || !this.options.ownDeck) return undefined;
+    return planFor(this.engine.lib, this.options.ownDeck);
+  }
+
+  /**
+   * A Pilot that should wait for a Unit it links: one in the own hand that is playable now or next turn
+   * (Lv. at most the level + 1). Pairing it with another Unit would waste the link (docs/AI.md "Kombos").
+   */
+  waitsForLink(pilot: CardId): boolean {
+    const level = this.s.players[this.me].resources.length;
+    const p = this.card(pilot);
+    return this.s.players[this.me].hand.some((h) => {
+      if (!this.known(h)) return false;
+      const unit = this.card(h);
+      return unit.type === "UNIT" && unit.level <= level + 1 && satisfiesLink(unit, p);
+    });
+  }
+
+  /** keepValue for discarding: a card the own deck wants in the trash is cheaper to discard. */
+  discardKeep(id: CardId): number {
+    const fuel = this.known(id) ? (this.plan?.trashFuel.get(this.s.cards[id]!.no) ?? 0) : 0;
+    return this.keepValue(id) - Math.min(1, fuel) * FUEL_DISCARD;
+  }
+
   mulligan(options: Action[]): Action {
     const keep = keepHand(this.engine, this.s, this.me, DEFAULT_MULLIGAN); // src/ai/mulligan.ts
     return options.find((o) => o.type === (keep ? "keepHand" : "redraw"))!;
@@ -281,6 +323,7 @@ class Ctx {
         const link = this.links(o.unit, o.card);
         // A Command with 【Pilot】 is usually better used as a Command unless it links.
         if (pilot.type === "COMMAND" && !link) return 20;
+        if (!link && !this.options.pairAnyPilot && this.waitsForLink(o.card)) return -1;
         return 90 + pilot.level * 10 + (link ? 30 : 0) + this.unitValue(o.unit) * 0.5;
       }
       case "deployBase": {
@@ -652,7 +695,9 @@ class Ctx {
       case "overflow":
         return best(options, (o) => (o.type === "target" ? 1000 - this.unitValue(o.card) : 0)) ?? options[0]!;
       case "discard":
-        return best(options, (o) => (o.type === "target" ? 1000 - this.keepValue(o.card) : 0)) ?? options[0]!;
+        return (
+          best(options, (o) => (o.type === "target" ? 1000 - this.discardKeep(o.card) : 0)) ?? options[0]!
+        );
       case "lookPick":
       case "lookTop":
         return best(options, (o) => (o.type === "target" ? 1 + this.keepValue(o.card) : 0)) ?? options[0]!;

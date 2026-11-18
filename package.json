@@ -28,6 +28,7 @@
     "tune": "tsx tools/tune.ts",
     "mulligan": "tsx tools/mulligan.ts",
     "first": "tsx tools/first.ts",
+    "combos": "tsx tools/combos.ts",
     "ab": "tsx tools/ab.ts",
     "play": "tsx tools/play.ts"
   },

@@ -10,7 +10,8 @@ import type { Engine } from "../engine/engine";
 import { DEFAULT_RESOURCE } from "../engine/deck";
 import type { Action, Decision, GameState } from "../engine/types";
 import { HIDDEN } from "../engine/view";
-import { DEFAULT_WEIGHTS, Evaluator, type Weights } from "./evaluate";
+import { DEFAULT_WEIGHTS, Evaluator, type ComboKnowledge, type Weights } from "./evaluate";
+import { planFor } from "./synergy";
 import { HeuristicPolicy, type RuleOptions } from "./heuristic";
 import type { Policy } from "./types";
 
@@ -34,7 +35,7 @@ export class LookaheadPolicy implements Policy {
     rules: RuleOptions = {},
   ) {
     this.rules = new HeuristicPolicy(engine, rules);
-    this.evaluator = new Evaluator(engine, weights);
+    this.evaluator = new Evaluator(engine, weights, comboKnowledge(engine, rules));
   }
 
   choose(view: GameState, decision: Decision): Action {
@@ -80,4 +81,10 @@ export function determinize(view: GameState): GameState {
   const s = cloneState(view);
   for (const card of s.cards) if (card.no === HIDDEN) card.no = FILLER;
   return s;
+}
+
+/** What the evaluation knows about combos, by the rule switches (docs/AI.md "Kombos"). */
+export function comboKnowledge(engine: Engine, rules: RuleOptions): ComboKnowledge {
+  const plan = rules.ownDeck && rules.comboFuel ? planFor(engine.lib, rules.ownDeck) : undefined;
+  return { ...(plan ? { plan } : {}), links: !!rules.linkValue };
 }

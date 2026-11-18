@@ -49,6 +49,7 @@ npm run images -- --download          # fehlende Bilder langsam von gundam-gcg.c
 | `npm run mulligan` | Mulligan-Regeln der KI messen (`docs/AI.md`)                |
 | `npm run ab`       | Zwei Varianten derselben KI gegeneinander messen            |
 | `npm run first`    | Vorteil als Startspieler je Deck messen                     |
+| `npm run combos`   | Kombos eines Decks aus den Kartentexten anzeigen            |
 
 Aufbau der Regel-Engine: [docs/ENGINE.md](docs/ENGINE.md), Karteneffekte: [docs/EFFECTS.md](docs/EFFECTS.md),
 KI und Stärkemessungen: [docs/AI.md](docs/AI.md), Meta-Decks: [docs/META.md](docs/META.md), offizielle
