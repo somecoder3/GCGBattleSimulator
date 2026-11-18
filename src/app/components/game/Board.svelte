@@ -206,21 +206,32 @@
 
   // Destroyed Shields are revealed to both players; they are shown for a moment in the middle of the
   // board. The card number comes from the full state, since the card may be hidden again by now
-  // (a Burst that goes to the AI's hand).
-  let revealed = $state.raw<{ id: CardId; card: CardDef; owner: PlayerId }[]>([]);
+  // (a Burst that goes to the AI's hand). Cards the human looked at and put under the deck (Gundam
+  // Maxter …) are shown the same way, so the human knows which cards are gone for now.
+  type Revealed = { id: CardId; card: CardDef; owner: PlayerId; under?: boolean };
+  let revealed = $state.raw<Revealed[]>([]);
   let revealTimer: ReturnType<typeof setTimeout> | undefined;
 
   function reveal(step?: LogStep) {
-    const fresh = (step?.events ?? []).flatMap((e) => {
-      if (e.t !== "shieldBreak") return [];
-      const card = pool.get(session.state.cards[e.card]!.no);
-      return card ? [{ id: e.card, card, owner: e.player }] : [];
+    const fresh = (step?.events ?? []).flatMap((e): Revealed[] => {
+      if (e.t === "shieldBreak") {
+        const card = pool.get(session.state.cards[e.card]!.no);
+        return card ? [{ id: e.card, card, owner: e.player }] : [];
+      }
+      if (e.t === "toDeck" && e.seenBy === human && e.pos === "bottom") {
+        const card = pool.get(session.state.cards[e.card]!.no);
+        return card ? [{ id: e.card, card, owner: human, under: true }] : [];
+      }
+      return [];
     });
     if (!step) revealed = [];
     if (!fresh.length) return;
-    revealed = [...revealed, ...fresh].slice(-4);
+    // A new kind replaces the old one (Shields and cards under the deck have different titles).
+    const same = revealed.length && !!revealed[0]!.under === !!fresh[0]!.under;
+    revealed = [...(same ? revealed : []), ...fresh].slice(-5);
     clearTimeout(revealTimer);
-    revealTimer = setTimeout(() => (revealed = []), 2800);
+    // Several cards under the deck take longer to read than a broken Shield; a click closes it earlier.
+    revealTimer = setTimeout(() => (revealed = []), fresh[0]!.under ? 6000 : 2800);
   }
 
   onDestroy(() => clearTimeout(revealTimer));
@@ -717,14 +728,18 @@
     {#if revealed.length}
       <button class="reveal" transition:fade={{ duration: 200 }} onclick={() => (revealed = [])}>
         <span class="reveal-title">
-          Schild {revealed.every((r) => r.owner === human)
-            ? "von dir"
-            : revealed.every((r) => r.owner !== human)
-              ? "der KI"
-              : ""}
-          aufgedeckt
+          {#if revealed[0]?.under}
+            Unter dein Deck
+          {:else}
+            Schild {revealed.every((r) => r.owner === human)
+              ? "von dir"
+              : revealed.every((r) => r.owner !== human)
+                ? "der KI"
+                : ""}
+            aufgedeckt
+          {/if}
         </span>
-        <span class="reveal-cards">
+        <span class="reveal-cards" style:--n={revealed.length}>
           {#each revealed as r (r.id)}
             <span class="reveal-card" in:fly={{ y: 30, duration: 300 }}>
               <CardImage card={r.card} src={cardImageUrl(r.card, "full")} eager />
@@ -1219,10 +1234,13 @@
   }
   .reveal {
     position: absolute;
-    left: 50%;
+    left: 12px;
+    right: 12px;
     top: 50%;
     z-index: 5;
-    transform: translate(-50%, -50%);
+    width: fit-content;
+    margin: 0 auto;
+    transform: translateY(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1240,13 +1258,16 @@
   }
   .reveal-cards {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 10px;
   }
   .reveal-card {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    width: clamp(110px, 11vw, 170px);
+    /* Up to 5 cards (under the deck) in one row. */
+    width: min(clamp(110px, 11vw, 170px), calc((100vw - 120px) / var(--n)));
     font-size: 12px;
     color: var(--text-dim);
   }
@@ -1540,7 +1561,7 @@
       max-height: 34dvh;
     }
     .reveal-card {
-      width: 28vw;
+      width: min(28vw, calc((100vw - 80px) / var(--n)));
     }
     .banner {
       font-size: 24px;

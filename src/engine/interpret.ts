@@ -258,6 +258,13 @@ function uniqueByNo(c: Ctx, ids: CardId[]): CardId[] {
 }
 
 /** Offers the current choice of `frame.choosing` to the controller (or to `player`). */
+/** The controller looks at the top n cards of their deck (the log and the board show them to that player). */
+function look(c: Ctx, frame: Frame, me: PlayerId, n: number): CardId[] {
+  const cards = (frame.looking = c.s.players[me].deck.slice(0, n));
+  if (cards.length) c.ev.push({ t: "look", player: me, cards: [...cards] });
+  return cards;
+}
+
 function offerChoice(c: Ctx, frame: Frame, prompt: Decision["prompt"], player?: PlayerId): void {
   const ch = frame.choosing!;
   const options: Action[] = (prompt === "discard" ? uniqueByNo(c, ch.candidates) : ch.candidates).map(
@@ -753,11 +760,9 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
     }
 
     case "lookTop": {
-      frame.looking ??= c.s.players[me].deck.slice(0, instr.n);
+      const looking = frame.looking ?? look(c, frame, me, instr.n);
       const pickable = instr.pick
-        ? frame.looking.filter((id) =>
-            matches(c, id, { ...instr.pick!, zone: undefined }, me, frame.source, true),
-          )
+        ? looking.filter((id) => matches(c, id, { ...instr.pick!, zone: undefined }, me, frame.source, true))
         : [];
       const left = frame.repeat ?? instr.pickCount ?? 0;
       if (pickable.length && left > 0) {
@@ -766,16 +771,16 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         offerChoice(c, frame, "lookPick");
         return;
       }
-      if (instr.rest === "trash") for (const id of frame.looking) toTrash(c, id, "mill");
-      else shuffleIntoBottom(c, frame.looking);
+      if (instr.rest === "trash") for (const id of looking) toTrash(c, id, "mill");
+      else shuffleIntoBottom(c, looking, me);
       delete frame.looking;
       delete frame.repeat;
       return next();
     }
     case "lookTopArrange": {
-      frame.looking ??= c.s.players[me].deck.slice(0, instr.n);
-      if (frame.looking.length > 1) {
-        frame.choosing = { as: ARRANGE, left: 1, optional: false, candidates: [...frame.looking] };
+      const looking = frame.looking ?? look(c, frame, me, instr.n);
+      if (looking.length > 1) {
+        frame.choosing = { as: ARRANGE, left: 1, optional: false, candidates: [...looking] };
         offerChoice(c, frame, "lookTop");
         return;
       }
@@ -840,18 +845,20 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
       return next();
     }
     case "peek":
-      frame.looking = c.s.players[me].deck.slice(0, instr.n);
+      look(c, frame, me, instr.n);
       return next();
     case "unpeek":
       delete frame.looking;
       return next();
-    case "topToBottom":
+    case "topToBottom": {
+      const seen = frame.looking;
       for (const id of c.s.players[me].deck.slice(0, instr.n)) {
         moveTo(c, id, "deck", "bottom");
-        c.ev.push({ t: "toDeck", card: id, pos: "bottom" });
+        c.ev.push({ t: "toDeck", card: id, pos: "bottom", ...(seen?.includes(id) ? { seenBy: me } : {}) });
       }
       delete frame.looking;
       return next();
+    }
     case "damageShieldArea":
       damageShieldArea(c, other(me), instr.amount, "effect", frame.source);
       return next();
@@ -1044,7 +1051,7 @@ export function answer(c: Ctx, action: Action): void {
           if (arrange?.rest === "trash") toTrash(c, id, "mill");
           else {
             moveTo(c, id, "deck", "bottom");
-            c.ev.push({ t: "toDeck", card: id, pos: "bottom" });
+            c.ev.push({ t: "toDeck", card: id, pos: "bottom", seenBy: frame.controller });
           }
         }
         if (card !== null && arrange?.keep === "hand") {

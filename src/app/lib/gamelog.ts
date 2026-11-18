@@ -95,7 +95,21 @@ export function describeStep(engine: Engine, step: LogStep, human: PlayerId): Lo
     if (text) add("info", text);
   }
 
+  /** Name of a card the human has seen (looked at), even if it is hidden again now. */
+  const seenName = (id: CardId) => {
+    const no = s.cards[id]?.no;
+    return no && engine.lib.has(no) ? engine.lib.get(no).name : name(id);
+  };
+  // Cards the human looked at and put under the deck: one line for all of them.
+  const under: CardId[] = [];
+  const flushUnder = () => {
+    if (!under.length) return;
+    add("info", `Unter dein Deck: ${under.map(seenName).join(", ")}.`);
+    under.length = 0;
+  };
+
   for (const e of step.events) {
+    if (!(e.t === "toDeck" && e.seenBy === human)) flushUnder();
     subject = eventSubject(e, s) ?? step.player;
     switch (e.t) {
       case "gameStart":
@@ -184,8 +198,19 @@ export function describeStep(engine: Engine, step: LogStep, human: PlayerId): Lo
         );
         break;
       case "toDeck":
-        add("info", `${name(e.card)} kommt ${e.pos === "top" ? "oben" : "unter"} das Deck.`);
+        if (e.seenBy === human && e.pos === "bottom") under.push(e.card);
+        else add("info", `${name(e.card)} kommt ${e.pos === "top" ? "oben" : "unter"} das Deck.`);
         break;
+      case "look": {
+        const n = e.cards.length === 1 ? "oberste Karte" : `obersten ${e.cards.length} Karten`;
+        add(
+          "info",
+          e.player === human
+            ? `Du siehst dir die ${n} deines Decks an: ${e.cards.map(seenName).join(", ")}.`
+            : `Die KI sieht sich die ${n} ihres Decks an.`,
+        );
+        break;
+      }
       case "token":
         add("info", `Token ${name(e.card)} erscheint.`);
         break;
@@ -205,6 +230,7 @@ export function describeStep(engine: Engine, step: LogStep, human: PlayerId): Lo
         break;
     }
   }
+  flushUnder();
   return lines;
 }
 

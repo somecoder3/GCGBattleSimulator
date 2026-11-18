@@ -281,8 +281,11 @@ export type GameEvent =
   | { t: "burst"; player: PlayerId; card: CardId; used: boolean }
   | { t: "ready"; card: CardId }
   | { t: "toHand"; card: CardId; from: Location }
-  | { t: "toDeck"; card: CardId; pos: "top" | "bottom" }
+  /** `seenBy`: the player who looked at the card before (a look effect), so it may be named for them. */
+  | { t: "toDeck"; card: CardId; pos: "top" | "bottom"; seenBy?: PlayerId }
   | { t: "token"; player: PlayerId; card: CardId }
   | { t: "exResource"; player: PlayerId; card: CardId }
   | { t: "reveal"; player: PlayerId; cards: CardId[] }
+  /** The player looks at the top cards of their deck (private: only they learn the cards). */
+  | { t: "look"; player: PlayerId; cards: CardId[] }
   | { t: "gameOver"; result: GameResult };

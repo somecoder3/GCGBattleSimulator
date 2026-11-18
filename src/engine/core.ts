@@ -1184,9 +1184,9 @@ export function flushTriggers(c: Ctx): void {
 }
 
 /** Places cards at the bottom of their owner's deck in random order (5-13). */
-export function shuffleIntoBottom(c: Ctx, ids: CardId[]): void {
+export function shuffleIntoBottom(c: Ctx, ids: CardId[], seenBy?: PlayerId): void {
   for (const id of shuffle(c.s.rng, [...ids])) {
     moveTo(c, id, "deck", "bottom");
-    c.ev.push({ t: "toDeck", card: id, pos: "bottom" });
+    c.ev.push({ t: "toDeck", card: id, pos: "bottom", ...(seenBy !== undefined ? { seenBy } : {}) });
   }
 }
