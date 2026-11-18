@@ -200,6 +200,13 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   (auch in v1/Suche). Standard jetzt `deck` + Link-Ausnahme (`DEFAULT_EX`): EX Resource erst, wenn die höchste
   Unit des Decks ohne sie erreichbar bleibt, außer für einen linkenden Piloten. Gegen die alte Regel (`ex-free`)
   v0 **55,8 %**, v1 **54,1 %** (9216 Spiele); hand+link und link-only gleich stark. Tabelle `docs/AI.md`.
+- **Selbst gegen die KI gespielt (18. Nov., Nutzerwunsch):** `npm run play` (Partie in einer JSON-Datei, jede
+  Entscheidung ein Aufruf, `undo`, `cards`). ST02 gegen „Sehr schwer“ mit ST01: **0:3**. v1 gegen v1: ST02
+  34 % gegen ST01 (2016 Spiele). Zweiter Versuch mit Rücksprüngen (`play -- history`/`back`, gleiche Karten):
+  fünf Abzweigungen, alle verloren; ST01 zieht über Bursts (Amuro, Suletta) und White-Base-Token nach.
+  Gefundener KI-Fehler: die Suche spielte ein wirkungsloses AP−3 am Ende des gegnerischen Zuges → `allowed()`
+  filtert solche Commands jetzt auch für v1/Suche (`searchIdleCommands` = alt), Messung in `docs/AI.md`.
+  Bewährt beim Spielen: zuerst mit einer Unit angreifen, die einen Konter-Command herauslockt.
 - Nutzerwunsch für später: **Kombos** (Turnierlisten bauen darauf) besser erkennen und nutzen, eigener Schritt.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.

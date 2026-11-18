@@ -30,6 +30,11 @@ export interface RuleOptions {
   lateDraw?: boolean;
   /** Choose AP-/AP+ targets by value only, not by the fights they change (before 18 Nov 2026). */
   plainApTargets?: boolean;
+  /**
+   * v1 and the search also consider Action Commands in an action step that can't change anything (before
+   * 18 Nov 2026; the search sometimes played one by chance, e.g. AP-3 at the end of the opponent's turn).
+   */
+  searchIdleCommands?: boolean;
   /** When the EX Resource may be used up (docs/AI.md "EX Resource"); default DEFAULT_EX. */
   ex?: ExRule;
   /** Exception to `ex`: a Pilot that links may always use it (part of the default; with `ex` set, only if given). */
@@ -74,14 +79,22 @@ export class HeuristicPolicy implements Policy {
   private readonly ex: ExRule;
   private readonly exLink: boolean;
 
-  /** The options the EX Resource rule allows (all, if it allows none). */
+  /**
+   * The options worth considering (also for v1 and the search): the EX Resource rule, and in an action
+   * step no Command that can't change anything now (`commandMatters`; passing keeps it for later).
+   * All options, if the rules allow none.
+   */
   allowed(view: GameState, decision: Decision): Action[] {
-    if (this.ex === "free" || (decision.kind !== "main" && decision.kind !== "action"))
-      return decision.options;
+    if (decision.kind !== "main" && decision.kind !== "action") return decision.options;
     const p = decision.player;
-    const kept = decision.options.filter(
-      (o) => !this.engine.spendsEx(view, p, o) || this.mayUseEx(view, p, o),
-    );
+    let kept = decision.options;
+    if (this.ex !== "free") {
+      kept = kept.filter((o) => !this.engine.spendsEx(view, p, o) || this.mayUseEx(view, p, o));
+    }
+    if (decision.kind === "action" && !this.options.eagerCommands && !this.options.searchIdleCommands) {
+      const ctx = new Ctx(this.engine, view, p, this.options);
+      kept = kept.filter((o) => o.type !== "playCommand" || ctx.commandMatters(o.card));
+    }
     return kept.length ? kept : decision.options;
   }
 
@@ -116,7 +129,7 @@ export class HeuristicPolicy implements Policy {
   }
 
   choose(view: GameState, decision: Decision): Action {
-    if (this.ex !== "free") decision = { ...decision, options: this.allowed(view, decision) };
+    decision = { ...decision, options: this.allowed(view, decision) };
     const options = decision.options;
     if (options.length === 1) return options[0]!;
     const ctx = new Ctx(this.engine, view, decision.player, this.options);
