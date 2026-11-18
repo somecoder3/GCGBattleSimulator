@@ -194,7 +194,8 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Dialog in `PlayScreen`, Wurf in `SessionSetup.start` und im Log. Die KI wählt immer zu beginnen
   (`src/ai/turnorder.ts`): gemessen mit `npm run first` gewinnt **jedes** von 30 Decks als Startspieler öfter
   (+9 bis +30 Punkte, gesamt 62 %), auch ohne Lv.-1-Karten (Vermutung des Nutzers widerlegt). Simulator bleibt
-  ausgeglichen.
+  ausgeglichen. Nachgemessen mit neuer EX-Regel: auch alle 15 besten Turnierlisten beginnen lieber (+7 bis +19
+  Punkte, `npm run first -- --list best --starters false`); Startspieler-Vorteil gesamt 62 % → 56 % (EX-Regel).
 - **EX Resource (18. Nov., Nutzerwunsch):** Regeln als `RuleOptions.ex` (`free`/`never`/`hand`/`deck`/`level`,
   Ausnahmen `exLink`, `exEmergency`), `Engine.spendsEx`/`resourceCost`, Filter `HeuristicPolicy.allowed`
   (auch in v1/Suche). Standard jetzt `deck` + Link-Ausnahme (`DEFAULT_EX`): EX Resource erst, wenn die höchste

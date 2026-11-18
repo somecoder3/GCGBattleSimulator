@@ -3,12 +3,13 @@
 // (docs/AI.md "Startspieler", src/ai/turnorder.ts).
 //
 //   npm run first -- --games 10880
+//   npm run first -- --list best --starters false --games 11520 --seed 7   best tournament list per archetype
 
 import { availableParallelism } from "node:os";
 import { parseArgs } from "node:util";
 import { parseAiName } from "../src/ai/registry";
 import { STARTER_DECKS } from "../src/data/decks";
-import { metaDecks } from "../src/meta/decks";
+import { metaDecks, type MetaList } from "../src/meta/decks";
 import { runPool } from "../src/sim/pool";
 import { fullRounds, type SimJob } from "../src/sim/runner";
 import { wilson } from "../src/sim/stats";
@@ -20,16 +21,23 @@ const { values: args } = parseArgs({
     ai: { type: "string", default: "v1" },
     games: { type: "string", default: "10880" },
     seed: { type: "string", default: "5" },
+    list: { type: "string", default: "consensus" },
+    starters: { type: "string", default: "true" },
   },
 });
 
 const lib = loadLib();
 const decks = [
-  ...metaDecks(loadSnapshot(), lib, 15).map((d) => ({ id: d.id, name: d.name, deck: d.deck })),
+  ...metaDecks(loadSnapshot(), lib, 15, args.list as MetaList).map((d) => ({
+    id: d.id,
+    name: d.name,
+    deck: d.deck,
+  })),
   ...STARTER_DECKS.map((d) => ({ id: d.id, name: d.name, deck: d.deck })),
 ];
 // Two jobs (meta among themselves, starters among themselves), like the measurement in docs/AI.md.
-const groups = [decks.filter((d) => d.id.startsWith("M")), decks.filter((d) => d.id.startsWith("ST"))];
+const groups = [decks.filter((d) => d.id.startsWith("M"))];
+if (args.starters !== "false") groups.push(decks.filter((d) => d.id.startsWith("ST")));
 const ai = parseAiName(args.ai);
 const workers = Array.from({ length: Math.max(1, availableParallelism() - 1) }, threadWorker);
 const tally = new Map<string, { first: number; firstN: number; second: number; secondN: number }>();

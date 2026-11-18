@@ -200,6 +200,17 @@ Kosten 1 lieber als Zweiter“ trifft nicht zu: M11 (keine solche Karte, Ø Lv. 
 ST11 (+14), ST09W (+16). Ein Zusammenhang mit billigen Units oder Ø-Level ist nicht zu erkennen. Darum
 wählt die KI immer zu beginnen. Gründe: Spieler 1 zieht schon im ersten Zug und greift zuerst an; die EX
 Resource von Spieler 2 gleicht das nicht aus. Mit anderer KI oder Regeln neu messen: `npm run first`.
+Nachmessung mit der neuen EX-Resource-Regel (18. Nov., 15 Archetypen untereinander, 11 520 Spiele, je Deck
+672 Spiele als Erster und als Zweiter, Seed 7, `npm run first -- --list best --starters false`):
+
+- **Beste Turnierlisten (M01B…M15B):** alle beginnen lieber, Vorteil +7,3 (M15B) bis +19,2 Punkte (M01B);
+  Startspieler gesamt 56,6 % (55,7–57,5 %). Die Spanne einer Differenz ist etwa ±5 Punkte, also auch der
+  kleinste Vorteil klar über 0.
+- **Konsenslisten zum Vergleich:** +6,8 (M06) bis +16,8 (M01), gesamt 56,1 %.
+- Der Vorteil ist von 62 % auf 56 % geschrumpft, bei Konsens- wie Turnierlisten gleich: Ursache ist die
+  EX-Resource-Regel (Spieler 2 nutzt seinen Level-Vorsprung jetzt länger), nicht die Liste. Am Ergebnis
+  „immer beginnen“ ändert das nichts.
+
 Im Simulator bleibt der Startspieler ausgeglichen (Blöcke à 8): Da die KI immer beginnen will, wäre Würfeln
 dort nur ein zufälliger Startspieler mit mehr Streuung.
 
