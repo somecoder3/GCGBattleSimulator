@@ -211,7 +211,8 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 - **Angesehene Karten (18. Nov., Nutzerwunsch):** „Look at the top N“-Effekte (Gundam Maxter …) melden
   ein Event `look` (nur der Schauende erfährt die Karten), Karten unter dem Deck tragen `toDeck.seenBy`.
   Log: „Du siehst dir die obersten 4 Karten deines Decks an: …“ und „Unter dein Deck: …“ (KI-Seite ohne
-  Namen); Spielfeld zeigt die Karten unter dem Deck 6 s wie aufgedeckte Schilde (Klick schließt).
+  Namen); Spielfeld zeigt die Karten unter dem Deck in der Mitte, bis der Mensch „Schließen“ drückt (Nutzerwunsch:
+  immer manuell schließen, auch ohne Auswahl); die KI wartet so lange.
 - **Selbst gegen die KI gespielt (18. Nov., Nutzerwunsch):** `npm run play` (Partie in einer JSON-Datei, jede
   Entscheidung ein Aufruf, `undo`, `cards`). ST02 gegen „Sehr schwer“ mit ST01: **0:3**. v1 gegen v1: ST02
   34 % gegen ST01 (2016 Spiele). Zweiter Versuch mit Rücksprüngen (`play -- history`/`back`, gleiche Karten):

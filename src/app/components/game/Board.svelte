@@ -206,32 +206,35 @@
 
   // Destroyed Shields are revealed to both players; they are shown for a moment in the middle of the
   // board. The card number comes from the full state, since the card may be hidden again by now
-  // (a Burst that goes to the AI's hand). Cards the human looked at and put under the deck (Gundam
-  // Maxter …) are shown the same way, so the human knows which cards are gone for now.
-  type Revealed = { id: CardId; card: CardDef; owner: PlayerId; under?: boolean };
+  // (a Burst that goes to the AI's hand).
+  type Revealed = { id: CardId; card: CardDef; owner: PlayerId };
   let revealed = $state.raw<Revealed[]>([]);
   let revealTimer: ReturnType<typeof setTimeout> | undefined;
+  // Cards the human looked at and put under the deck (Gundam Maxter …), also when none could be taken:
+  // shown until the human closes them (the AI waits), so the human knows which cards are gone for now.
+  let under = $state.raw<Revealed[]>([]);
 
   function reveal(step?: LogStep) {
-    const fresh = (step?.events ?? []).flatMap((e): Revealed[] => {
-      if (e.t === "shieldBreak") {
-        const card = pool.get(session.state.cards[e.card]!.no);
-        return card ? [{ id: e.card, card, owner: e.player }] : [];
-      }
-      if (e.t === "toDeck" && e.seenBy === human && e.pos === "bottom") {
-        const card = pool.get(session.state.cards[e.card]!.no);
-        return card ? [{ id: e.card, card, owner: human, under: true }] : [];
-      }
-      return [];
+    const card = (id: CardId) => pool.get(session.state.cards[id]!.no);
+    const events = step?.events ?? [];
+    const fresh = events.flatMap((e): Revealed[] => {
+      const c = e.t === "shieldBreak" ? card(e.card) : undefined;
+      return c && e.t === "shieldBreak" ? [{ id: e.card, card: c, owner: e.player }] : [];
     });
-    if (!step) revealed = [];
+    const seen = events.flatMap((e): Revealed[] => {
+      if (e.t !== "toDeck" || e.seenBy !== human || e.pos !== "bottom") return [];
+      const c = card(e.card);
+      return c ? [{ id: e.card, card: c, owner: human }] : [];
+    });
+    if (!step) {
+      revealed = [];
+      under = [];
+    }
+    if (seen.length) under = seen;
     if (!fresh.length) return;
-    // A new kind replaces the old one (Shields and cards under the deck have different titles).
-    const same = revealed.length && !!revealed[0]!.under === !!fresh[0]!.under;
-    revealed = [...(same ? revealed : []), ...fresh].slice(-5);
+    revealed = [...revealed, ...fresh].slice(-4);
     clearTimeout(revealTimer);
-    // Several cards under the deck take longer to read than a broken Shield; a click closes it earlier.
-    revealTimer = setTimeout(() => (revealed = []), fresh[0]!.under ? 6000 : 2800);
+    revealTimer = setTimeout(() => (revealed = []), 2800);
   }
 
   onDestroy(() => clearTimeout(revealTimer));
@@ -257,7 +260,7 @@
   $effect(() => {
     void view;
     void stops;
-    if (replay) return;
+    if (replay || under.length) return; // the human first closes the cards put under the deck
     if (skipActionStep()) {
       const timer = setTimeout(() => refresh(session.apply({ type: "pass" }, true)), Math.min(speed, 150));
       return () => clearTimeout(timer);
@@ -725,19 +728,28 @@
       {/key}
     {/if}
 
-    {#if revealed.length}
+    {#if under.length}
+      <div class="reveal" role="dialog" aria-label="Unter dein Deck" transition:fade={{ duration: 200 }}>
+        <span class="reveal-title">Unter dein Deck</span>
+        <span class="reveal-cards" style:--n={under.length}>
+          {#each under as r (r.id)}
+            <span class="reveal-card" in:fly={{ y: 30, duration: 300 }}>
+              <CardImage card={r.card} src={cardImageUrl(r.card, "full")} eager />
+              <small>{r.card.name}{r.card.text.includes("【Burst】") ? " · Burst" : ""}</small>
+            </span>
+          {/each}
+        </span>
+        <button class="btn primary" onclick={() => (under = [])}>Schließen</button>
+      </div>
+    {:else if revealed.length}
       <button class="reveal" transition:fade={{ duration: 200 }} onclick={() => (revealed = [])}>
         <span class="reveal-title">
-          {#if revealed[0]?.under}
-            Unter dein Deck
-          {:else}
-            Schild {revealed.every((r) => r.owner === human)
-              ? "von dir"
-              : revealed.every((r) => r.owner !== human)
-                ? "der KI"
-                : ""}
-            aufgedeckt
-          {/if}
+          Schild {revealed.every((r) => r.owner === human)
+            ? "von dir"
+            : revealed.every((r) => r.owner !== human)
+              ? "der KI"
+              : ""}
+          aufgedeckt
         </span>
         <span class="reveal-cards" style:--n={revealed.length}>
           {#each revealed as r (r.id)}
