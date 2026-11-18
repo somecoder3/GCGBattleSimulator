@@ -28,7 +28,8 @@
     "tune": "tsx tools/tune.ts",
     "mulligan": "tsx tools/mulligan.ts",
     "first": "tsx tools/first.ts",
-    "ab": "tsx tools/ab.ts"
+    "ab": "tsx tools/ab.ts",
+    "play": "tsx tools/play.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

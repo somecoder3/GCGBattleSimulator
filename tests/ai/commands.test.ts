@@ -117,3 +117,36 @@ describe("v0: Commands in the main phase", () => {
     expect(a.type === "playCommand" && s.cards[a.card]!.no === IRON_AND_BLOOD).toBe(true);
   });
 });
+
+describe("v1 and the search: no Command that can't change anything", () => {
+  const INCIDENT = "ST01-014"; // 【Main】/【Action】 Choose 1 enemy Unit. It gets AP-3 during this turn.
+  // The opponent's turn ends; AP-3 now would be wasted (found in a game against search-strong, 18 Nov 2026).
+  const endOfTurn = () => {
+    const s = scenario({
+      p0: { battle: [GELGOOG], resources: 4 },
+      p1: { battle: [GM], hand: [INCIDENT], resources: 4 },
+    });
+    engine.apply(s, { type: "endMain" });
+    return s;
+  };
+
+  it("leaves it out of the options it searches, unless asked to", () => {
+    const s = endOfTurn();
+    expect(s.pending?.player).toBe(1);
+    expect(s.pending?.options.some((o) => o.type === "playCommand")).toBe(true);
+    expect(v0.allowed(viewFor(s, 1), s.pending!).map((o) => o.type)).toEqual(["pass"]);
+    const old = new HeuristicPolicy(engine, { searchIdleCommands: true });
+    expect(old.allowed(viewFor(s, 1), s.pending!).some((o) => o.type === "playCommand")).toBe(true);
+  });
+
+  it("still plays it when it changes a battle", () => {
+    const s = scenario({
+      p0: { battle: [GELGOOG], resources: 4 },
+      p1: { battle: [{ no: GM, rested: true }], hand: [INCIDENT], resources: 4 },
+    });
+    engine.apply(s, { type: "attack", unit: s.players[0].battle[0]!, target: s.players[1].battle[0]! });
+    while (s.pending && s.pending.player === 0) engine.apply(s, { type: "pass" });
+    expect(s.pending?.player).toBe(1);
+    expect(v0.allowed(viewFor(s, 1), s.pending!).some((o) => o.type === "playCommand")).toBe(true);
+  });
+});

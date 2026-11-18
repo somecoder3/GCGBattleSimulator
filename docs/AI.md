@@ -154,6 +154,14 @@ beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (
 - **Blocken:** immer bei tödlichem Angriff; sonst wenn der Blocker überlebt oder einen wertvolleren Angreifer
   zerstört, oder um eine wertvollere eigene Unit zu schützen.
 - **Action Step:** nutzt Commands und Activate-Effekte, sobald es kann.
+- **Wirkungslose Commands auch nicht suchen (18. Nov.):** `allowed()` lässt im Action Step Commands weg, die
+  jetzt nichts ändern (`commandMatters`); das gilt damit auch für v1 und die Such-KI, die vorher jede Option
+  durchrechneten. Gefunden in einer eigenen Partie gegen „Sehr schwer“: Die Suche spielte Unforeseen Incident
+  (AP−3 „during this turn“) am Ende des gegnerischen Zuges, eine verschwendete Karte, weil die Stichproben
+  rauschten (nur `search-strong` mit dem Meta-Feld, v0/v1/search passten). Gemessen (Meta Top 8): v1 49,6 %
+  (48,6–50,6 %, 9216 Spiele), Suche 49,4 % (47,4–51,5 %, 2304 Spiele) gegen die alte Fassung
+  (`idle-commands`): kein messbarer Unterschied, der Fall ist selten. Behalten, weil er einen klaren Fehlzug
+  verhindert.
 - **AP-Ziele (18. Nov., gehäufte Effekte):** AP− auf gegnerische und AP+ auf eigene Units wählt v0 nach den
   Kämpfen, die sich ändern (`apChangeValue`): ausgehend vom aktuellen AP (enthält frühere Änderungen dieses
   Zuges) zählt jede eigene bzw. gegnerische Unit, die vorher zerstört würde und danach nicht mehr (bzw.

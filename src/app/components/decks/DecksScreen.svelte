@@ -15,7 +15,7 @@
   import { entryLabel } from "../../../meta/archetypes";
   import { banlistProblems } from "../../../meta/banlist";
   import type { MetaDeck } from "../../../meta/decks";
-  import { db, download, type UserDeck } from "../../lib/db";
+  import { db, type UserDeck } from "../../lib/db";
   import { cardLib, deckChoices, deckColors, preset, setUserDecks } from "../../lib/decks";
   import CardImage from "../CardImage.svelte";
   import HoverTip from "../HoverTip.svelte";
@@ -150,14 +150,49 @@
     await load();
   }
 
-  function exportList() {
+  // Export like the Scanner app: the list in a chosen format to the clipboard (GCGDB formatList). ExBurst
+  // CSV is left out: its "Owned" column registers a collection, not a deck.
+  const EXPORT_FORMATS = [
+    { id: "simple", label: "Einfach (2x GD06-004)" },
+    { id: "limitless", label: "Limitless (2 Name GD06-004)" },
+    { id: "names", label: "Nur Namen (2x Name)" },
+    { id: "msa", label: "MSA Shuffle Fixer (by captsetitoff)" },
+    { id: "tts", label: "Tabletop Simulator" },
+  ] as const;
+  const EXPORT_KEY = "gcg-battle-simulator.deck-export";
+  let exportFormat = $state<string>(readExportFormat());
+  function readExportFormat(): string {
+    try {
+      const f = localStorage.getItem(EXPORT_KEY);
+      if (f && EXPORT_FORMATS.some((x) => x.id === f)) return f;
+    } catch {
+      // Storage may be unavailable (private window).
+    }
+    return "simple";
+  }
+  function setExportFormat(f: string) {
+    exportFormat = f;
+    try {
+      localStorage.setItem(EXPORT_KEY, f);
+    } catch {
+      // Not remembered then.
+    }
+  }
+
+  async function copyExport() {
     if (!editing) return;
     const entries = Object.entries(editing.counts).map(([id, count]) => ({
       id,
       count,
       name: pool.get(id)?.name,
     }));
-    download(`${editing.name || "deck"}.txt`, formatList(entries, "simple") as string, "text/plain");
+    const format = EXPORT_FORMATS.find((f) => f.id === exportFormat) ?? EXPORT_FORMATS[0];
+    try {
+      await navigator.clipboard.writeText(formatList(entries, format.id) as string);
+      message = `Liste kopiert (${format.label.replace(/ \(.*$/, "")}).`;
+    } catch (e) {
+      message = `Kopieren fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
   async function useIn(where: "play" | "sim") {
@@ -314,7 +349,16 @@
           <button class="btn" onclick={() => useIn("sim")} disabled={problems.length > 0}
             >Gegen das Feld simulieren</button
           >
-          <button class="btn" onclick={exportList}>Exportieren</button>
+          <span class="export">
+            <select
+              value={exportFormat}
+              onchange={(e) => setExportFormat(e.currentTarget.value)}
+              aria-label="Format der Liste"
+            >
+              {#each EXPORT_FORMATS as f (f.id)}<option value={f.id}>{f.label}</option>{/each}
+            </select>
+            <button class="btn" onclick={copyExport}>Liste kopieren</button>
+          </span>
           <button class="btn danger" onclick={remove}>Löschen</button>
         </div>
       </header>
@@ -524,6 +568,15 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+  }
+  .export {
+    display: inline-flex;
+    gap: 6px;
+    min-width: 0;
+  }
+  .export select {
+    min-width: 0;
+    max-width: 220px;
   }
   .btn {
     min-height: 36px;

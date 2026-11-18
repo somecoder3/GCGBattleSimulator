@@ -21,6 +21,8 @@
     secondary,
   } from "../../lib/actions";
   import { cardName, describeStart, describeSteps, type LogLine } from "../../lib/gamelog";
+  import { gameFileName, gameLogText } from "../../lib/gameexport";
+  import { download } from "../../lib/db";
   import BoardCard from "./BoardCard.svelte";
   import CardInfo from "./CardInfo.svelte";
 
@@ -171,6 +173,23 @@
   }
 
   onDestroy(() => timers.forEach(clearTimeout));
+
+  // Export of the history: the log as text (clipboard), the game as JSON (can be loaded again).
+  let exportNote = $state<string>();
+  async function copyLog() {
+    try {
+      await navigator.clipboard.writeText(gameLogText(engine, session));
+      exportNote = "Verlauf kopiert.";
+    } catch (e) {
+      exportNote = `Kopieren fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    later(2500, () => (exportNote = undefined));
+  }
+  function saveGame() {
+    download(`${gameFileName(session)}.json`, JSON.stringify(session.save(), null, 1));
+    exportNote = "Partie gespeichert (im Spiel-Reiter wieder ladbar).";
+    later(3500, () => (exportNote = undefined));
+  }
 
   function refresh(step?: LogStep) {
     view = session.view();
@@ -725,6 +744,11 @@
             {#if canUndo}<button class="btn" onclick={undo}>Letzte Entscheidung zurück</button>{/if}
             <button class="btn primary" onclick={onnew}>Neues Spiel</button>
           </div>
+          <div class="buttons export">
+            <button class="btn" onclick={copyLog}>Verlauf kopieren</button>
+            <button class="btn" onclick={saveGame}>Partie speichern (.json)</button>
+          </div>
+          {#if exportNote}<p class="export-note" role="status">{exportNote}</p>{/if}
         </div>
       </div>
     {/if}
@@ -756,6 +780,15 @@
         </label>
       {/if}
       <button class="btn ghost" onclick={onnew}>{replay ? "Replay schließen" : "Neues Spiel"}</button>
+      {#if !replay}
+        <button class="btn ghost" onclick={copyLog} title="Den Verlauf als Text kopieren"
+          >Verlauf kopieren</button
+        >
+        <button class="btn ghost" onclick={saveGame} title="Seed, Decks und alle Entscheidungen als Datei"
+          >Partie speichern</button
+        >
+        {#if exportNote && !result}<span class="export-note" role="status">{exportNote}</span>{/if}
+      {/if}
     </div>
 
     <div class="detail">
@@ -1240,6 +1273,14 @@
   }
   .end-card h2.won {
     color: #7fe0a0;
+  }
+  .buttons.export {
+    margin-top: 10px;
+  }
+  .export-note {
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: var(--text-dim);
   }
   .side-panel {
     display: grid;

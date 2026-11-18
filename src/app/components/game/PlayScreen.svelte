@@ -7,6 +7,7 @@
   import { GameSession, type SavedSession } from "../../../sim/session";
   import { rollForStart, type StartRoll } from "../../../sim/start";
   import { aiWantsFirst } from "../../../ai/turnorder";
+  import { parseSavedGame } from "../../lib/gameexport";
   import Board from "./Board.svelte";
 
   let { pool }: { pool: CardPool } = $props();
@@ -97,6 +98,21 @@
     } catch (e) {
       console.error("saved game could not be restored", e);
       saved = undefined;
+    }
+  }
+
+  // A game saved with "Partie speichern" (JSON): continues where it was saved.
+  let loadError = $state<string>();
+  async function loadFile(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    loadError = undefined;
+    try {
+      session = GameSession.restore(engine, parseSavedGame(await file.text()));
+    } catch (err) {
+      loadError = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -205,12 +221,33 @@
             Partie fortsetzen ({saved.deckNames?.join(" gegen ") ?? "gespeichert"}, {saved.actions.length} Entscheidungen)
           </button>
         {/if}
+        <label class="btn file">
+          Partie laden …
+          <input type="file" accept=".json,application/json" onchange={loadFile} />
+        </label>
       </div>
+      {#if loadError}<p class="error" role="alert">{loadError}</p>{/if}
     {/if}
   </section>
 {/if}
 
 <style>
+  .file {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+  }
+  .file input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .error {
+    color: var(--danger);
+    font-size: 13px;
+  }
   .setup {
     max-width: 720px;
     margin: 6vh auto;

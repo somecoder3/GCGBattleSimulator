@@ -208,6 +208,22 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Rest-Commands (Main Phase und jetzt auch Action Step), Activate-Effekte und die Zielwahl; alt `plain-rest`.
   v0 51,1 %, v1 50,4 % (n. s.); nur 5 von 15 Archetypen haben Rest-Karten. `npm run ab -- --by-deck`.
 - Simulator: keine Decks vorausgewählt (Nutzerwunsch 18. Nov.; vorher Meta Top 8).
+- **Selbst gegen die KI gespielt (18. Nov., Nutzerwunsch):** `npm run play` (Partie in einer JSON-Datei, jede
+  Entscheidung ein Aufruf, `undo`, `cards`). ST02 gegen „Sehr schwer“ mit ST01: **0:3**. v1 gegen v1: ST02
+  34 % gegen ST01 (2016 Spiele). Zweiter Versuch mit Rücksprüngen (`play -- history`/`back`, gleiche Karten):
+  fünf Abzweigungen, alle verloren; ST01 zieht über Bursts (Amuro, Suletta) und White-Base-Token nach.
+  Gefundener KI-Fehler: die Suche spielte ein wirkungsloses AP−3 am Ende des gegnerischen Zuges → `allowed()`
+  filtert solche Commands jetzt auch für v1/Suche (`searchIdleCommands` = alt), Messung in `docs/AI.md`.
+  Bewährt beim Spielen: zuerst mit einer Unit angreifen, die einen Konter-Command herauslockt.
+- **Exporte (18. Nov., Nutzerwunsch):** Spiel: „Verlauf kopieren“ (Log als Text mit Kopf: Decks, KI, Seed,
+  Ergebnis) und „Partie speichern (.json)“ (= `SavedSession`) am Spielende und in der Seitenleiste; „Partie
+  laden …“ im Spiel-Reiter setzt eine gespeicherte Partie fort (`src/app/lib/gameexport.ts`). Dieselbe JSON-Datei
+  läuft mit `npm run play -- show <datei>` (Analyse von Partien des Nutzers). Decks: Format wählen und „Liste
+  kopieren“ wie in der Scanner-App (GCGDB `formatList`: Einfach, Limitless, Nur Namen, MSA, TTS; ExBurst-CSV
+  weggelassen, weil „Owned“ zum Registrieren gedacht ist), statt Datei-Download; Wahl in `localStorage`.
+- **Zusammengeführt am 18. Nov.** (Pull-Konflikte nur in `CLAUDE.md` und `tools/ab.ts`, beide Seiten behalten):
+  `allowed()` filtert jetzt EX-Regel und wirkungslose Action-Commands; `commandMatters` kennt dabei auch das
+  neue Resten (`restValue`), Rest-Commands im gegnerischen Zug bleiben also für v1/Suche erlaubt.
 - Nutzerwunsch für später: **Kombos** (Turnierlisten bauen darauf) besser erkennen und nutzen, eigener Schritt.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.

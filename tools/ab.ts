@@ -25,6 +25,7 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   "late-draw": { rules: { lateDraw: true } },
   "plain-ap-targets": { rules: { plainApTargets: true } },
   "plain-rest": { rules: { plainRest: true } },
+  "idle-commands": { rules: { searchIdleCommands: true } },
   /** Both Command rules as before 18 Nov 2026. */
   "old-commands": { rules: { eagerCommands: true, eagerMainCommands: true } },
   // EX Resource rules (docs/AI.md "EX Resource"; default: ex-deck+link). "ex-free": the rule before 18 Nov 2026;
