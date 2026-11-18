@@ -140,6 +140,9 @@ beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (
   - Ziehen und Sonstiges (Token, Ressourcen, Karte aus dem Trash, heilen): am Ende der Main Phase, wenn sonst
     nichts mehr sinnvoll ist, und nur, wenn danach genug aktive Ressourcen für jedes Action-Command auf der
     Hand bleiben (für den gegnerischen Zug); im Action Step am Ende des gegnerischen Zuges.
+  - **Dringendes Ziehen** (18. Nov., Nutzerwunsch): mit höchstens 3 weiteren Handkarten zuerst (vor dem
+    Einsetzen, damit gezogene Karten noch diesen Zug spielbar sind), ohne eigene Unit im Spiel und ohne
+    einsetzbare Unit/Base ebenfalls sofort und ohne Reserve für Action-Commands. Alte Regel: `late-draw`.
     Gemessen (Meta Top 8, `npm run ab`): nur Action-Regel: v0 49,9 % (36 864 Spiele), v1 50,7 % (50,0–51,4 %,
     18 432); nur Main-Phase-Regel: v0 50,6 % (50,1–51,1 %, 36 864); beide gegen die alten Regeln
     (`old-commands`): **v1 51,0 % (50,3–51,7 %, 18 432 Spiele)**. v1 entscheidet seine eigenen Züge per
@@ -151,6 +154,16 @@ beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (
 - **Blocken:** immer bei tödlichem Angriff; sonst wenn der Blocker überlebt oder einen wertvolleren Angreifer
   zerstört, oder um eine wertvollere eigene Unit zu schützen.
 - **Action Step:** nutzt Commands und Activate-Effekte, sobald es kann.
+- **AP-Ziele (18. Nov., gehäufte Effekte):** AP− auf gegnerische und AP+ auf eigene Units wählt v0 nach den
+  Kämpfen, die sich ändern (`apChangeValue`): ausgehend vom aktuellen AP (enthält frühere Änderungen dieses
+  Zuges) zählt jede eigene bzw. gegnerische Unit, die vorher zerstört würde und danach nicht mehr (bzw.
+  umgekehrt), dazu ein kleiner Teil des Werts und bei AP+ Schaden an der Base. Dadurch gehen mehrere AP−2
+  (z. B. GD04-066 Unicorn Awakened + GD05-121 Cyclone Punch + GD05-069 Maxter) auf dieselbe Unit, solange das
+  noch einen Kampf ändert, danach auf die nächste; AP 0 wird nicht weiter gesenkt. Vorher nur nach Wert
+  (`plain-ap-targets`).
+  Gemessen (Meta Top 8, je 9216 Spiele): Ziehen v0 50,0 %, v1 50,5 % (49,5–51,5 %); AP-Ziele v0 50,5 %, v1
+  50,2 %: kein messbarer Unterschied (die Fälle sind selten, v1 sieht Häufung ohnehin per Vorausschau).
+  Behalten, weil die Entscheidungen in den Prüfstellungen richtig sind und nichts schlechter wird.
 - **Effekt-Entscheidungen:** Burst und „you may“ immer ja; bei Zielen liest sie im übersetzten Programm, was
   mit dem Ziel geschieht (Schaden, Zerstörung, Ruhen … = schaden; AP+, Bereitmachen, Erholen … = helfen) und
   wählt danach gegnerische bzw. eigene Karten, bei Schaden bevorzugt solche, die dadurch zerstört werden.

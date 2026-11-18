@@ -26,6 +26,10 @@ export interface RuleOptions {
   eagerCommands?: boolean;
   /** Play every Command in the main phase as soon as possible (the rule before 18 Nov 2026). */
   eagerMainCommands?: boolean;
+  /** Draw only at the end of the main phase, also with few cards or no Units (before 18 Nov 2026). */
+  lateDraw?: boolean;
+  /** Choose AP-/AP+ targets by value only, not by the fights they change (before 18 Nov 2026). */
+  plainApTargets?: boolean;
 }
 
 export class HeuristicPolicy implements Policy {
@@ -320,8 +324,17 @@ class Ctx {
       }
     }
     if (best > 0) return best;
-    if (neutral && this.resourcesLeftForAction(id)) return END_MAIN + 1;
-    return -1;
+    if (!neutral) return -1;
+    // Drawing is urgent with a small hand (first, for more choices this turn), or with no Unit in play
+    // and none to deploy (to find one to defend with).
+    const draws = program.some((i) => i.op === "draw");
+    const me = this.s.players[this.me];
+    if (draws && !this.options.lateDraw) {
+      if (me.hand.length - 1 <= 3) return 150;
+      const canDeploy = this.mainOptions.some((o) => o.type === "deployUnit" || o.type === "deployBase");
+      if (me.battle.length === 0 && !canDeploy) return 150;
+    }
+    return this.resourcesLeftForAction(id) ? END_MAIN + 1 : -1;
   }
 
   /** Does a "during this turn" boost help an attack this turn? */
@@ -492,7 +505,7 @@ class Ctx {
     return scored[0]!.o;
   }
 
-  targetScore(o: Action, intent: { kind: Intent; damage: number }): number {
+  targetScore(o: Action, intent: { kind: Intent; damage: number; ap?: number }): number {
     if (o.type === "done") return 0; // stop choosing unless a target is worth it
     if (o.type !== "target") return -1;
     const card = this.s.cards[o.card]!;
@@ -501,6 +514,9 @@ class Ctx {
     const value = inPlay ? this.unitValue(o.card) : this.keepValue(o.card);
     if (intent.kind === "neutral") return friendly ? 1 + value : 0.5;
     const good = intent.kind === "harm" ? !friendly : friendly;
+    if (good && inPlay && intent.ap && !this.options.plainApTargets && this.known(o.card)) {
+      return 1 + this.apChangeValue(o.card, intent.ap) + value * 0.1;
+    }
     let score = good ? 1 + value : -100 - value;
     if (good && intent.kind === "harm" && intent.damage > 0 && inPlay && this.known(o.card)) {
       if (intent.damage >= this.hpLeft(o.card)) score += 20; // destroys it
@@ -508,8 +524,34 @@ class Ctx {
     return score;
   }
 
+  /**
+   * How much an AP change on a Unit changes the fights of this turn and the next. It starts from the
+   * current AP, which already includes earlier changes, so several AP-2 go to the same Unit while that
+   * still matters and to another one once it doesn't ("stacking").
+   * - AP- on an enemy Unit: friendly Units it would no longer destroy in a fight (protection), and a
+   *   friendly attacker that survives fighting it.
+   * - AP+ on a friendly Unit: enemy Units it can now destroy (rested ones it can attack, blockers), and
+   *   more damage to an enemy Base.
+   */
+  apChangeValue(unit: CardId, delta: number): number {
+    const before = this.ap(unit);
+    const after = Math.max(0, before + delta);
+    if (after === before) return 0; // AP is already 0: nothing left to reduce
+    const friendly = this.s.cards[unit]!.owner === this.me;
+    const others = this.s.players[friendly ? this.enemy : this.me].battle.filter((u) => this.known(u));
+    let v = 0;
+    for (const x of others) {
+      const hp = this.hpLeft(x);
+      const killsBefore = before >= hp;
+      const killsAfter = after >= hp;
+      if (killsBefore !== killsAfter) v += 2 + this.unitValue(x);
+    }
+    if (friendly && this.s.players[this.enemy].base.length) v += (after - before) * 0.5;
+    return v + Math.abs(after - before) * 0.2;
+  }
+
   /** What the running effect does to the cards it is choosing (from its compiled program). */
-  intent(): { kind: Intent; damage: number } {
+  intent(): { kind: Intent; damage: number; ap?: number } {
     const frame = this.s.frames[this.s.frames.length - 1];
     if (!frame) return { kind: "neutral", damage: 0 };
     const script = this.engine.lib.get(frame.ref.no).script;
@@ -535,11 +577,14 @@ function safe<T>(value: () => T, fallback: () => T): T {
   }
 }
 
-function classify(instr: Instr): { kind: Intent; damage: number } {
+function classify(instr: Instr): { kind: Intent; damage: number; ap?: number } {
   if (instr.op === "damage") return { kind: "harm", damage: instr.amount };
   if (HARMFUL.has(instr.op)) return { kind: "harm", damage: 0 };
   if (BENEFICIAL.has(instr.op)) return { kind: "help", damage: 0 };
-  if (instr.op === "mod") return { kind: (instr.ap ?? 0) + (instr.hp ?? 0) < 0 ? "harm" : "help", damage: 0 };
+  if (instr.op === "mod") {
+    const kind = (instr.ap ?? 0) + (instr.hp ?? 0) < 0 ? "harm" : "help";
+    return { kind, damage: 0, ...(instr.ap ? { ap: instr.ap } : {}) };
+  }
   if (instr.op === "flag") return { kind: HARMFUL_FLAGS.has(instr.flag) ? "harm" : "help", damage: 0 };
   return { kind: "neutral", damage: 0 };
 }

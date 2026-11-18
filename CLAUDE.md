@@ -184,6 +184,11 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   `eager-commands`/`eager-main-commands`/`old-commands`): v1 neu gegen alt **51,0 %** (50,3–51,7 %), v0 Main-
   Phase-Regel 50,6 %; die Action-Regel allein ändert nur 0,19 Entscheidungen pro Spiel. Optionen:
   `RuleOptions` (`SimJob.rules`, `makePolicy(…, rules)`), Details `docs/AI.md`.
+  - Nachtrag (Nutzerwunsch): Ziehen zuerst bei ≤ 3 weiteren Handkarten oder ohne Unit im Spiel und ohne
+    einsetzbare Unit/Base; AP−/AP+-Ziele nach geänderten Kämpfen ab aktuellem AP (gehäufte AP−2 gehen auf
+    dieselbe Unit, solange es etwas ändert; `apChangeValue`). Engine summiert AP-Änderungen korrekt (Q95).
+    Gemessen: kein messbarer Unterschied (v1 50,5 % / 50,2 %, je 9216 Spiele), behalten. Varianten
+    `late-draw`, `plain-ap-targets`.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles

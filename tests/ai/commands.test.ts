@@ -30,6 +30,29 @@ const plays = (s: GameState, no: string) => {
   return a.type === "playCommand" && s.cards[a.card]!.no === no;
 };
 
+describe("v0: AP changes by the fights they change", () => {
+  const UNICORN = "GD04-066"; // 4 AP
+  const target = (s: GameState) => {
+    engine.apply(s, { type: "playCommand", card: s.players[0].hand[0]! });
+    const pick = v0.choose(viewFor(s, 0), s.pending!);
+    return pick.type === "target" ? s.cards[pick.card]!.no : "";
+  };
+
+  it("reduces the Unit whose AP-2 saves a friendly Unit", () => {
+    // Cyclone Punch (AP-2) against a 4-AP Unicorn and a 2-AP GM; the friendly GM has 2 HP. Unicorn
+    // would still destroy it with 2 AP; the enemy GM would not with 0 AP.
+    const s = scenario({ p0: { battle: [GM], hand: ["GD05-121"] }, p1: { battle: [UNICORN, GM] } });
+    expect(target(s)).toBe(GM);
+  });
+
+  it("stacks: with AP-2 already on Unicorn, the next AP-2 goes there", () => {
+    const s = scenario({ p0: { battle: [GM], hand: ["GD05-121"] }, p1: { battle: [UNICORN, GM] } });
+    const unicorn = s.players[1].battle.find((u) => s.cards[u]!.no === UNICORN)!;
+    s.modifiers.push({ target: unicorn, ap: -2, hp: 0, until: "turn", source: unicorn });
+    expect(target(s)).toBe(UNICORN); // 2 → 0 AP saves the GM, and Unicorn is worth more
+  });
+});
+
 describe("v0: Commands in the main phase", () => {
   it("plays an AP boost for this turn only when it makes an attack kill", () => {
     const kill = scenario({
@@ -42,10 +65,25 @@ describe("v0: Commands in the main phase", () => {
   });
 
   it("draws at the end only if Resources stay for an Action Command in the hand", () => {
-    const room = scenario({ p0: { hand: [DRAW, ARMED], resources: 4 } });
+    // A full hand and a Unit in play: drawing is not urgent.
+    const BIG = "ST08-001"; // Lv.9: not playable
+    const hand = [DRAW, ARMED, BIG, BIG, BIG];
+    const room = scenario({ p0: { hand, battle: [{ no: GM, rested: true }], resources: 4 } });
     expect(plays(room, DRAW)).toBe(true);
-    const tight = scenario({ p0: { hand: [DRAW, ARMED], resources: 4, restedResources: 3 } });
+    const tight = scenario({
+      p0: { hand, battle: [{ no: GM, rested: true }], resources: 4, restedResources: 3 },
+    });
     expect(plays(tight, DRAW)).toBe(false); // paying 1 would leave nothing for Armed Intervention
+  });
+
+  it("draws first with 3 or fewer other cards, or with no Unit in play and none to deploy", () => {
+    const small = scenario({ p0: { battle: [GM], hand: [DRAW, ARMED, GELGOOG], resources: 4 } });
+    expect(plays(small, DRAW)).toBe(true); // before deploying the Gelgoog: more choices this turn
+    const BIG = "ST08-001"; // Lv.9: not playable
+    const empty = scenario({ p0: { hand: [DRAW, ARMED, BIG, BIG, BIG], resources: 4, restedResources: 3 } });
+    expect(plays(empty, DRAW)).toBe(true); // nothing to defend with: urgent, even without a Resource kept
+    const deployable = scenario({ p0: { hand: [DRAW, GELGOOG, BIG, BIG, BIG], resources: 4 } });
+    expect(plays(deployable, DRAW)).toBe(false); // deploy the Gelgoog first
   });
 
   it("the old rule plays every Command at once", () => {

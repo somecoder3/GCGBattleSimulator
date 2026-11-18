@@ -21,6 +21,8 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   default: {},
   "eager-commands": { rules: { eagerCommands: true } },
   "eager-main-commands": { rules: { eagerMainCommands: true } },
+  "late-draw": { rules: { lateDraw: true } },
+  "plain-ap-targets": { rules: { plainApTargets: true } },
   /** Both Command rules as before 18 Nov 2026. */
   "old-commands": { rules: { eagerCommands: true, eagerMainCommands: true } },
   "mulligan-basic": { mulligan: "basic" },
