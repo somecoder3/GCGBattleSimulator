@@ -78,7 +78,8 @@ function basePolicy(
     case "heuristic-v0":
       return new HeuristicPolicy(engine, rules);
     case "heuristic-v1":
-      return new LookaheadPolicy(engine, w, "turn", rules);
+      // "round" since 18 Nov 2026 (docs/AI.md "Vorausschau"): better with tournament lists.
+      return new LookaheadPolicy(engine, w, "round", rules);
     case "search":
       return new SearchPolicy(engine, knowledge, seed, { samples: 6, width: 6 }, w, rules);
     case "search-strong":

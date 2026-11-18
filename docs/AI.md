@@ -319,6 +319,27 @@ nur die Pilot-Regel: v0 setzt einen Piloten nicht in eine Unit, die er nicht lin
 linkt, auf der Hand liegt und spätestens nächsten Zug spielbar ist (Lv. ≤ Level + 1). `comboFuel` und
 `linkValue` bleiben als abschaltbare Versuche (`RuleOptions`, Varianten `fuel`, `links`, `combos`).
 
+## Vorausschau (`Horizon` in `src/ai/lookahead.ts`, 18. Nov. 2026, Nutzerwunsch)
+
+Nach den Kombo-Versuchen (oben) die zweite Idee: v1 länger vorausrechnen lassen, damit Pläne über den
+eigenen Zug hinaus sichtbar werden. `RuleOptions.horizon` (Varianten `turn`, `round`, `through` in `npm run ab`):
+
+| Horizont                                                      | beste Listen (12)              | Konsenslisten (12) |
+| ------------------------------------------------------------- | ------------------------------ | ------------------ |
+| `turn`: bis zur nächsten Main Phase (bisher)                  | –                              | –                  |
+| `round`: bis zur eigenen nächsten Main Phase (Gegnerzug ganz) | **52,2 %** (51,2–53,2 %, 9360) | 49,8 % (9360)      |
+| `through`: auch den eigenen nächsten Zug durchspielen         | 43,3 % (4992)                  | –                  |
+
+(Anteil gegen `turn`; erste Runde `round` 51,2 %, 4992 Spiele.) Bei den besten Listen gewinnen vor allem
+Nu Gundam (+13 Punkte), Char's Zaku Ⅱ (+12), Victory (+6), Blue White Control (+6); Shining Gundam +2.
+`through` ist viel schlechter: verdeckte Karten sind in der Simulation wirkungslose Platzhalter, der Gegner
+spielt in seinem Zug also nichts von der Hand, und die eigenen Angriffe im nächsten Zug sehen zu gut aus.
+`round` bewertet vor den eigenen Angriffen und hat das Problem kaum.
+
+**Standard für v1 (Normal) ist seit 18. Nov. `round`**; 1,4× Rechenzeit. Die Suche (Schwer) nutzt für ihre
+Vorauswahl weiter `turn` und gewinnt gegen das neue v1 noch 51,7 % (48,4–55,1 %, 864 Spiele Meta; gegen
+das alte v1 54,3 %).
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen

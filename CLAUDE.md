@@ -230,7 +230,12 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Zusatzwerte (Trash-Karten des Plans, gelinkte Units) machen v1 nicht stärker (49,2–49,5 %) → nur als
   Versuch `comboFuel`/`linkValue`. Übernommen: Pilot wartet auf eine Link-Unit auf der Hand (v0 50,8 %,
   v1 49,9 %; alt `pairAnyPilot`). `npm run ab -- --list best` misst mit Turnierlisten; `npm run game` kennt
-  `M01B`. Details `docs/AI.md` „Kombos“. Offen: die kurze Vorausschau von v1 sieht mehrzügige Pläne nicht.
+  `M01B`. Details `docs/AI.md` „Kombos“.
+- **Längere Vorausschau (18. Nov., Nutzerwunsch):** `RuleOptions.horizon` (`turn`/`round`/`through`).
+  v1 rechnet jetzt standardmäßig bis zur eigenen nächsten Main Phase (`round`): beste Listen **52,2 %**
+  gegen `turn`, Konsenslisten 49,8 %, 1,4× Rechenzeit. `through` (eigenen nächsten Zug mitspielen) 43,3 %,
+  weil der Gegner mit Platzhalter-Handkarten nichts spielt. Suche gegen neues v1 nur noch 51,7 %; ihre
+  Vorauswahl nutzt weiter `turn` (offen: Suche anpassen). Details `docs/AI.md` „Vorausschau“.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles

@@ -20,6 +20,15 @@ const FILLER = DEFAULT_RESOURCE;
 /** Safety limit for one simulation (decisions until the next main phase). */
 const MAX_ROLLOUT = 200;
 
+/**
+ * How far v1 simulates after an option (docs/AI.md "Vorausschau"):
+ * - battle: up to the next main decision;
+ * - turn: up to the next main phase of any player (the default; in the own turn: the opponent's next main);
+ * - round: up to the own next main phase (the opponent's whole turn is simulated);
+ * - through: up to the opponent's main phase after the own next turn (that turn is simulated too).
+ */
+export type Horizon = "battle" | "turn" | "round" | "through";
+
 const SEARCHED = new Set<Decision["kind"]>(["main", "block", "action", "effect"]);
 
 export class LookaheadPolicy implements Policy {
@@ -30,10 +39,11 @@ export class LookaheadPolicy implements Policy {
   constructor(
     private readonly engine: Engine,
     weights: Weights = DEFAULT_WEIGHTS,
-    /** "battle": up to the next main decision; "turn": up to the main phase of the next turn. */
-    private readonly horizon: "battle" | "turn" = "turn",
+    /** See Horizon; `rules.horizon` overrides it. */
+    private horizon: Horizon = "turn",
     rules: RuleOptions = {},
   ) {
+    if (rules.horizon) this.horizon = rules.horizon;
     this.rules = new HeuristicPolicy(engine, rules);
     this.evaluator = new Evaluator(engine, weights, comboKnowledge(engine, rules));
   }
@@ -62,11 +72,25 @@ export class LookaheadPolicy implements Policy {
   private score(base: GameState, option: Action, me: 0 | 1): number {
     const s = cloneState(base);
     const turn = base.turn;
-    const done = (st: GameState) =>
-      st.pending!.kind === "main" && (this.horizon === "battle" || st.turn > turn);
+    const done = (st: GameState) => {
+      const p = st.pending!;
+      if (p.kind !== "main") return false;
+      switch (this.horizon) {
+        case "battle":
+          return true;
+        case "turn":
+          return st.turn > turn;
+        case "round":
+          return st.turn > turn && p.player === me;
+        case "through":
+          return st.turn >= turn + 2 && p.player !== me;
+      }
+    };
+    const limit =
+      this.horizon === "through" ? 3 * MAX_ROLLOUT : this.horizon === "round" ? 2 * MAX_ROLLOUT : MAX_ROLLOUT;
     try {
       this.engine.apply(s, option);
-      for (let n = 0; s.pending && !done(s) && n < MAX_ROLLOUT; n++) {
+      for (let n = 0; s.pending && !done(s) && n < limit; n++) {
         this.engine.apply(s, this.rules.choose(s, s.pending));
       }
       return this.evaluator.evaluate(s, me);

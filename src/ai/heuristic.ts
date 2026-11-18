@@ -60,6 +60,8 @@ export interface RuleOptions {
   comboFuel?: boolean;
   /** Experiment (not better): v1/search value linked Units in the evaluation. */
   linkValue?: boolean;
+  /** v1/search preselection: how far it simulates (src/ai/lookahead.ts Horizon; v1 default "round"). */
+  horizon?: "battle" | "turn" | "round" | "through";
   /** Pair a Pilot with any Unit, even if a Unit it links is in the hand (before 18 Nov 2026). */
   pairAnyPilot?: boolean;
 }
