@@ -35,13 +35,8 @@
   let metaList = $state<MetaList>("consensus");
   const CHOICES = $derived([...deckChoices(pool, metaList), ...userDecks]);
 
-  // svelte-ignore state_referenced_locally
-  let selectedDecks = $state<string[]>(
-    deckChoices(pool)
-      .filter((d) => d.group === "meta")
-      .slice(0, 8)
-      .map((d) => d.id),
-  );
+  // Nothing is preselected (user's wish, 18 Nov 2026).
+  let selectedDecks = $state<string[]>([]);
 
   /** Switching the list keeps the chosen archetypes: M01 ↔ M01B, or both of them. */
   function setMetaList(next: MetaList) {
