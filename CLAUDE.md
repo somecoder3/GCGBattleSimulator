@@ -207,6 +207,12 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Gefundener KI-Fehler: die Suche spielte ein wirkungsloses AP−3 am Ende des gegnerischen Zuges → `allowed()`
   filtert solche Commands jetzt auch für v1/Suche (`searchIdleCommands` = alt), Messung in `docs/AI.md`.
   Bewährt beim Spielen: zuerst mit einer Unit angreifen, die einen Konter-Command herauslockt.
+- **Exporte (18. Nov., Nutzerwunsch):** Spiel: „Verlauf kopieren“ (Log als Text mit Kopf: Decks, KI, Seed,
+  Ergebnis) und „Partie speichern (.json)“ (= `SavedSession`) am Spielende und in der Seitenleiste; „Partie
+  laden …“ im Spiel-Reiter setzt eine gespeicherte Partie fort (`src/app/lib/gameexport.ts`). Dieselbe JSON-Datei
+  läuft mit `npm run play -- show <datei>` (Analyse von Partien des Nutzers). Decks: Format wählen und „Liste
+  kopieren“ wie in der Scanner-App (GCGDB `formatList`: Einfach, Limitless, Nur Namen, MSA, TTS; ExBurst-CSV
+  weggelassen, weil „Owned“ zum Registrieren gedacht ist), statt Datei-Download; Wahl in `localStorage`.
 - Nutzerwunsch für später: **Kombos** (Turnierlisten bauen darauf) besser erkennen und nutzen, eigener Schritt.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
