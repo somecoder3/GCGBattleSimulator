@@ -200,6 +200,9 @@ function finish(c: Ctx): void {
   const card = inst(c, frame.source);
   // Commands and revealed Shields go to the trash when their effect ends (3-4-4, 13-2-5-3).
   if (card.zone === "limbo") toTrash(c, frame.source, frame.origin === "burst" ? "shield" : "resolved");
+  // "During this battle" outside a battle (e.g. an 【Activate･Action】 in the end phase's action step) ends
+  // at once; otherwise it would last into the next battle (found 18 Nov 2026, ST12-006 Suppression).
+  if (!c.s.battle) c.s.modifiers = c.s.modifiers.filter((m) => m.until !== "battle");
 }
 
 function ask(

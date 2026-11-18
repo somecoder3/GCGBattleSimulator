@@ -115,7 +115,11 @@ export class HeuristicPolicy implements Policy {
     }
     if (decision.kind === "action" && !this.options.eagerCommands && !this.options.searchIdleCommands) {
       const ctx = new Ctx(this.engine, view, p, this.options);
-      kept = kept.filter((o) => o.type !== "playCommand" || ctx.commandMatters(o.card));
+      kept = kept.filter((o) =>
+        o.type === "playCommand"
+          ? ctx.commandMatters(o.card)
+          : o.type !== "activate" || !ctx.battleUseless(o),
+      );
     }
     return kept.length ? kept : decision.options;
   }
@@ -575,6 +579,21 @@ class Ctx {
     return !this.s.players[this.enemy].battle.some((u) => this.restValue(u) >= REST_WORTH);
   }
 
+  /**
+   * An activated effect that only lasts "during this battle" and can't change one: no battle now, or it
+   * only helps its own Unit, which isn't battling (ST12-006 <Suppression> in the end phase).
+   */
+  battleUseless(o: Action): boolean {
+    const program = this.engine.activatedProgram(this.s, o);
+    const lasting = (program ?? []).filter((i) => "until" in i);
+    if (!lasting.length || lasting.some((i) => "until" in i && i.until !== "battle")) return false;
+    const b = this.s.battle;
+    if (!b) return true;
+    const card = "card" in o ? o.card : -1;
+    const self = lasting.every((i) => "t" in i && i.t === "self");
+    return self && b.attacker !== card && b.target !== card;
+  }
+
   /** Would `attacker` destroy `defender` in battle, and would it survive? */
   fight(attacker: CardId, defender: CardId): { kills: boolean; survives: boolean } {
     const kills = this.ap(attacker) >= this.hpLeft(defender);
@@ -631,7 +650,7 @@ class Ctx {
       const play = this.options.eagerCommands || this.commandMatters(o.card);
       return play ? 50 + this.card(o.card).level : 0;
     }
-    if (o.type === "activate") return this.restUseless(o) ? 0 : 40;
+    if (o.type === "activate") return this.restUseless(o) || this.battleUseless(o) ? 0 : 40;
     return 0;
   }
 
