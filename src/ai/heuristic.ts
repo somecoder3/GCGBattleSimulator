@@ -34,6 +34,8 @@ export interface RuleOptions {
   ex?: ExRule;
   /** Exception to `ex`: a Pilot that links may always use it (part of the default; with `ex` set, only if given). */
   exLink?: boolean;
+  /** Exception to `ex`: a Command may use it from this level on (Resources incl. the EX Resource). */
+  exCommandLevel?: number;
   /** Exception to `ex`: may always use it while no own Unit is in play. */
   exEmergency?: boolean;
   /** For `ex: "level"`: the level that must remain after using it. */
@@ -88,6 +90,8 @@ export class HeuristicPolicy implements Policy {
   private mayUseEx(s: GameState, p: PlayerId, o: Action): boolean {
     const me = s.players[p];
     if (this.options.exEmergency && me.battle.length === 0) return true;
+    const cmdLevel = this.options.exCommandLevel;
+    if (cmdLevel !== undefined && o.type === "playCommand" && me.resources.length >= cmdLevel) return true;
     if (this.exLink && o.type === "pair" && links(this.engine, s, o.unit, o.card)) return true;
     const after = me.resources.length - 1; // the level once it is used up
     // Without the own deck list (tests, hand-built states) "deck" looks at the hand.

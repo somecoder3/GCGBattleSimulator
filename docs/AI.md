@@ -255,6 +255,19 @@ Direkt (v1, 18 432 Spiele): deck+link gegen link-only 49,9 %, gegen hand+link 49
 die KI sie spät noch nutzen. Bestätigt mit neuem Seed: v0 **55,8 %**, v1 **54,1 %** (53,1–55,1 %) gegen die
 alte Regel. Deutlich größter Gewinn aller bisherigen Regeländerungen. Ausnahme „ohne Unit immer“ schadet.
 
+**Commands mit der EX Resource** (Nutzerwunsch, 18. Nov.): Ausnahme `exCommandLevel` N – ein Command darf
+sie ab Level N (Ressourcen inkl. EX) nehmen, sonst gilt der Standard (deck + link). Varianten `ex-cmd3` …
+`ex-cmd9`, Seed 51, je 9216 Spiele, Anteil des **Standards** gegen die Ausnahme:
+
+| ab Level | 3      | 4      | 5      | 6      | 7      | 8      | 9      |
+| -------- | ------ | ------ | ------ | ------ | ------ | ------ | ------ |
+| v0       | 52,1 % | 51,6 % | 50,7 % | 50,2 % | 50,2 % | 50,2 % | 50,3 % |
+| v1       | 51,5 % | 51,2 % | 50,5 % | 50,5 % | 50,5 % | 50,5 % | 50,4 % |
+
+Früh (Lv. 3–4) schadet die Ausnahme messbar, ab Lv. 5 ist sie gleichauf (ab Lv. 5 greift sie selten: die KI
+spielt Commands nur, wenn sie etwas bewirken, und spät erlaubt die Deck-Regel die EX Resource meist ohnehin).
+Kein Level bringt einen Vorteil → Standard unverändert, die Option bleibt zum Messen.
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen

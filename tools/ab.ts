@@ -39,6 +39,14 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   "ex-level8": { rules: { ex: "level", exLevel: 8 } },
   "ex-level9": { rules: { ex: "level", exLevel: 9 } },
   "ex-link-only": { rules: { ex: "never", exLink: true } },
+  // Default plus: a Command may use it from level N on.
+  "ex-cmd3": { rules: { ex: "deck", exLink: true, exCommandLevel: 3 } },
+  "ex-cmd4": { rules: { ex: "deck", exLink: true, exCommandLevel: 4 } },
+  "ex-cmd5": { rules: { ex: "deck", exLink: true, exCommandLevel: 5 } },
+  "ex-cmd6": { rules: { ex: "deck", exLink: true, exCommandLevel: 6 } },
+  "ex-cmd7": { rules: { ex: "deck", exLink: true, exCommandLevel: 7 } },
+  "ex-cmd8": { rules: { ex: "deck", exLink: true, exCommandLevel: 8 } },
+  "ex-cmd9": { rules: { ex: "deck", exLink: true, exCommandLevel: 9 } },
   "mulligan-basic": { mulligan: "basic" },
   "mulligan-never": { mulligan: "never" },
 };

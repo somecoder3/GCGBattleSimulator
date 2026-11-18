@@ -65,6 +65,13 @@ describe("EX Resource rules", () => {
     expect(allows({ ex: "deck", ownDeck: deck(GUNDAM) }, s, "pair")).toBe(false);
   });
 
+  it("exCommandLevel: a Command may use it from that level on", () => {
+    const s = position(["GD01-118", BIG]); // Command Lv.2, cost 1 (【Main】 draw 2, discard 1)
+    expect(allows({}, s, "playCommand")).toBe(false); // Lv.9 in the hand
+    expect(allows({ ex: "deck", exLink: true, exCommandLevel: 4 }, s, "playCommand")).toBe(true); // level 4
+    expect(allows({ ex: "deck", exLink: true, exCommandLevel: 5 }, s, "playCommand")).toBe(false);
+  });
+
   it("v0 follows the rule: ends the main phase instead", () => {
     const s = position([AMURO, BIG]);
     const a = new HeuristicPolicy(engine, { ex: "never" }).choose(viewFor(s, 0), s.pending!);

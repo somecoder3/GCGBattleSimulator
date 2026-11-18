@@ -201,6 +201,8 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   (auch in v1/Suche). Standard jetzt `deck` + Link-Ausnahme (`DEFAULT_EX`): EX Resource erst, wenn die höchste
   Unit des Decks ohne sie erreichbar bleibt, außer für einen linkenden Piloten. Gegen die alte Regel (`ex-free`)
   v0 **55,8 %**, v1 **54,1 %** (9216 Spiele); hand+link und link-only gleich stark. Tabelle `docs/AI.md`.
+  Ausnahme für Commands ab Level N (`exCommandLevel`, `ex-cmd3…9`): bei Lv. 3–4 schlechter (Standard gewinnt
+  v1 51,5/51,2 %), ab Lv. 5 gleich → nicht übernommen.
 - Nutzerwunsch für später: **Kombos** (Turnierlisten bauen darauf) besser erkennen und nutzen, eigener Schritt.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
