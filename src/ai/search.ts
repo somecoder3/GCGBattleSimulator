@@ -26,7 +26,7 @@ import { cloneState } from "../engine/clone";
 import { seedRng, type RngState } from "../engine/rng";
 import type { Action, Decision, GameState, PlayerId } from "../engine/types";
 import { DEFAULT_WEIGHTS, Evaluator, type Weights } from "./evaluate";
-import { HeuristicPolicy } from "./heuristic";
+import { HeuristicPolicy, type RuleOptions } from "./heuristic";
 import { LookaheadPolicy } from "./lookahead";
 import { sampleState, type Knowledge } from "./opponent";
 import type { Policy } from "./types";
@@ -70,10 +70,11 @@ export class SearchPolicy implements Policy {
     seed = 1,
     private readonly options: SearchOptions = { samples: 6, width: 6 },
     weights: Weights = DEFAULT_WEIGHTS,
+    rules: RuleOptions = {},
   ) {
     this.name = `search-${options.samples}`;
-    this.rules = new HeuristicPolicy(engine);
-    this.lookahead = new LookaheadPolicy(engine, weights);
+    this.rules = new HeuristicPolicy(engine, rules);
+    this.lookahead = new LookaheadPolicy(engine, weights, "turn", rules);
     this.evaluator = new Evaluator(engine, weights);
     this.rng = seedRng(seed ^ 0x5ea7c4);
     this.lossBelow = -weights.win / 2;

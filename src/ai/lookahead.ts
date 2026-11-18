@@ -11,7 +11,7 @@ import { DEFAULT_RESOURCE } from "../engine/deck";
 import type { Action, Decision, GameState } from "../engine/types";
 import { HIDDEN } from "../engine/view";
 import { DEFAULT_WEIGHTS, Evaluator, type Weights } from "./evaluate";
-import { HeuristicPolicy } from "./heuristic";
+import { HeuristicPolicy, type RuleOptions } from "./heuristic";
 import type { Policy } from "./types";
 
 /** Stand-in for hidden cards: a Resource card can't be played from the hand and has no Burst. */
@@ -31,8 +31,9 @@ export class LookaheadPolicy implements Policy {
     weights: Weights = DEFAULT_WEIGHTS,
     /** "battle": up to the next main decision; "turn": up to the main phase of the next turn. */
     private readonly horizon: "battle" | "turn" = "turn",
+    rules: RuleOptions = {},
   ) {
-    this.rules = new HeuristicPolicy(engine);
+    this.rules = new HeuristicPolicy(engine, rules);
     this.evaluator = new Evaluator(engine, weights);
   }
 

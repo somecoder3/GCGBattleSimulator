@@ -129,11 +129,14 @@ beste positive gewinnt (sonst Main Phase beenden bzw. passen). Deterministisch (
 
 - **Wert einer Unit:** AP + verbleibende HP + Lv./2, Zuschläge für Keywords und Pilot.
 - **Mulligan:** siehe Abschnitt „Mulligan“ (gilt für alle KIs).
-- **Action-Commands** (seit 18. Nov. 2026, `commandMatters`, **nicht gemessen**): nur, wenn sie jetzt etwas
-  ändern: eine gegnerische Unit entfernen oder durch Schaden zerstören, den laufenden Kampf beeinflussen (AP,
-  Keywords, Schutz der eigenen kämpfenden Unit, neues Angriffsziel) oder eine beschädigte eigene Unit heilen;
-  sonstige Effekte (Ziehen …) am Ende des gegnerischen Zuges. Vorher spielte v0 jedes Action-Command sofort.
-  Wirkt auch auf v1 und die Suche, die mit v0 weiterspielen. In der Main Phase unverändert.
+- **Action-Commands** (seit 18. Nov. 2026, `commandMatters`): nur, wenn sie jetzt etwas ändern: eine
+  gegnerische Unit entfernen oder durch Schaden zerstören, den laufenden Kampf beeinflussen (AP, Keywords,
+  Schutz der eigenen kämpfenden Unit, neues Angriffsziel) oder eine beschädigte eigene Unit heilen; sonstige
+  Effekte (Ziehen …) am Ende des gegnerischen Zuges. Vorher spielte v0 jedes Action-Command sofort (als
+  Variante `eager-commands` in `npm run ab` erhalten). In der Main Phase unverändert. **Gemessen** (Meta Top 8,
+  `npm run ab`): v0 neu gegen alt 49,9 % (49,4–50,4 %, 36 864 Spiele), v1 50,7 % (50,0–51,4 %, 18 432 Spiele).
+  Kaum Wirkung, weil die Regel nur 0,19 Entscheidungen pro Spiel ändert: Fast alle Commands spielt die KI schon
+  in der eigenen Main Phase (3,9 pro Spiel); dort liegt der größere Hebel.
 - **Main Phase** (Reihenfolge ergibt sich aus den Punkten): tödlicher Angriff › Units einsetzen (höheres
   Lv. zuerst) › Pilot setzen (Link bevorzugt; Commands mit 【Pilot】 nur bei Link) › Base (siehe unten) › Commands › Activate-Effekte › Angriff auf eine geruhte Unit, die zerstört wird und die eigene
   überlebt › Spieler angreifen (außer ein aktiver <Blocker> würde die Unit ohne Verlust zerstören) ›
@@ -190,6 +193,9 @@ ausgeglichen): `units` gegen `basic` **51,4 %** (50,9–51,9 %, 36 864 Spiele); 
 Folge: Simulationsergebnisse vor und nach dem 17. Nov. sind nicht direkt vergleichbar. Grenzen: gemessen
 mit v1 und den Meta-Decks; Decks mit vielen teuren Units ziehen öfter neu, als ein Mensch es täte, ein
 Mulligan nach Deckliste (z. B. Schlüsselkarten) gibt es nicht.
+
+Allgemeiner Vergleich zweier Varianten derselben KI: `npm run ab -- --ai v1 --a default --b <Variante>`
+(Varianten in `tools/ab.ts`: `eager-commands`, `mulligan-basic`, `mulligan-never`).
 
 ```bash
 npm run mulligan -- --games 9216               # Studie: alle Hände behalten, Merkmale auswerten

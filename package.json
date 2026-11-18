@@ -26,7 +26,8 @@
     "game": "tsx tools/game-log.ts",
     "icons": "tsx tools/icons.ts",
     "tune": "tsx tools/tune.ts",
-    "mulligan": "tsx tools/mulligan.ts"
+    "mulligan": "tsx tools/mulligan.ts",
+    "ab": "tsx tools/ab.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

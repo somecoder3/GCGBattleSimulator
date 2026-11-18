@@ -2,6 +2,7 @@
 // game follows from the job and its index alone, so workers only need the job and a range of indices,
 // and any game can be replayed later from (job, index).
 
+import type { RuleOptions } from "../ai/heuristic";
 import type { MulliganRule } from "../ai/mulligan";
 import type { Weights } from "../ai/evaluate";
 import { makePolicy, type AiName } from "../ai/registry";
@@ -43,6 +44,8 @@ export interface SimJob {
   weights?: [Partial<Weights> | null, Partial<Weights> | null];
   /** Mulligan rule per AI of `ai` (comparison of rules; default: the AI's own). */
   mulligans?: [MulliganRule | null, MulliganRule | null];
+  /** Other v0 rules per AI of `ai` (comparison of rules). */
+  rules?: [RuleOptions | null, RuleOptions | null];
   games: number;
   seed: number;
   maxTurns?: number;
@@ -200,6 +203,7 @@ export function runGame(engine: Engine, job: SimJob, index: number): GameSummary
             field: job.decks.map((d) => ({ deck: d.deck, weight: 1 })),
           },
           job.mulligans?.[spec.slots[seat]!] ?? undefined,
+          job.rules?.[spec.slots[seat]!] ?? {},
         ),
       ) as [Policy, Policy],
       {
@@ -279,6 +283,7 @@ export function recordGame(
       job.weights?.[spec.slots[seat]!] ?? undefined,
       { deck: decks[seat], field: job.decks.map((d) => ({ deck: d.deck, weight: 1 })) },
       job.mulligans?.[spec.slots[seat]!] ?? undefined,
+      job.rules?.[spec.slots[seat]!] ?? {},
     ),
   ) as [Policy, Policy];
   const record = playMatch(engine, decks, options, policies);

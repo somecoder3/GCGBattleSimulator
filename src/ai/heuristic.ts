@@ -20,15 +20,24 @@ const HARMFUL_FLAGS = new Set(["cantAttack", "cantAttackPlayer", "cantBePaired",
 
 type Intent = "harm" | "help" | "neutral";
 
+/** Switches for the rules of v0 (also used by v1 and the search for their continuations). */
+export interface RuleOptions {
+  /** Play every Action Command at once (the rule before 18 Nov 2026), instead of `commandMatters`. */
+  eagerCommands?: boolean;
+}
+
 export class HeuristicPolicy implements Policy {
   readonly name = "heuristic-v0";
 
-  constructor(private readonly engine: Engine) {}
+  constructor(
+    private readonly engine: Engine,
+    private readonly options: RuleOptions = {},
+  ) {}
 
   choose(view: GameState, decision: Decision): Action {
     const options = decision.options;
     if (options.length === 1) return options[0]!;
-    const ctx = new Ctx(this.engine, view, decision.player);
+    const ctx = new Ctx(this.engine, view, decision.player, this.options);
     switch (decision.kind) {
       case "mulligan":
         return ctx.mulligan(options);
@@ -66,6 +75,7 @@ class Ctx {
     readonly engine: Engine,
     readonly s: GameState,
     readonly me: PlayerId,
+    readonly options: RuleOptions = {},
   ) {}
 
   get enemy(): PlayerId {
@@ -286,7 +296,10 @@ class Ctx {
 
   /** Uses Commands and activated effects whenever it can; passing is the fallback. */
   actionScore(o: Action): number {
-    if (o.type === "playCommand") return this.commandMatters(o.card) ? 50 + this.card(o.card).level : 0;
+    if (o.type === "playCommand") {
+      const play = this.options.eagerCommands || this.commandMatters(o.card);
+      return play ? 50 + this.card(o.card).level : 0;
+    }
     if (o.type === "activate") return 40;
     return 0;
   }
