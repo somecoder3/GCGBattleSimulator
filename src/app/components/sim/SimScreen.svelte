@@ -41,11 +41,25 @@
       (g) => g.decks.length || g.group === "user",
     ),
   );
-  let opened = $state<Record<DeckChoice["group"], boolean>>({
-    user: true,
-    meta: false,
-    starter: false,
-    test: false,
+  // Which groups are open, kept across reloads (user's wish, 19 Nov 2026).
+  const OPENED_KEY = "gcg-battle-simulator.sim-groups";
+  function loadOpened(): Record<DeckChoice["group"], boolean> {
+    const fallback = { user: true, meta: false, starter: false, test: false };
+    try {
+      const saved = JSON.parse(localStorage.getItem(OPENED_KEY) ?? "null") as unknown;
+      return saved && typeof saved === "object" ? { ...fallback, ...saved } : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  let opened = $state(loadOpened());
+  $effect(() => {
+    const value = JSON.stringify(opened);
+    try {
+      localStorage.setItem(OPENED_KEY, value);
+    } catch {
+      // Storage blocked: the groups just start in their default state next time.
+    }
   });
   /** Own decks by name only (their id is a hash), the others with their short id (M01, ST01 …). */
   const title = (d: DeckChoice) => (d.group === "user" ? d.name : `${d.id} ${d.name}`);
@@ -78,8 +92,9 @@
   let aiA = $state<AiName>("heuristic-v1");
   let aiB = $state<AiName>("heuristic-v1");
   let games = $state(1000);
-  let seed = $state(1);
   const randomSeed = () => Math.floor(Math.random() * 1_000_000_000);
+  // A fresh random seed on every visit (user's wish, 19 Nov 2026); ⟳ draws a new one.
+  let seed = $state(randomSeed());
 
   // Matchup matrix: deck names of the hovered cell (row and column) as a tooltip.
   let tip = $state<{ anchor: DOMRect; row: string; col?: string; text?: string } | null>(null);

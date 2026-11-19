@@ -210,7 +210,7 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
 - Simulator: keine Decks vorausgewählt (Nutzerwunsch 18. Nov.; vorher Meta Top 8).
   Deckauswahl in Gruppen zum Auf-/Zuklappen (`<details>`, Zustand in `opened`), Reihenfolge Eigene Decks
   (offen), Meta, Starter, Testdecks (zu); Kopf zeigt „N von M gewählt“ (Nutzerwunsch 19. Nov.). Eigene Decks
-  (Id `u-…`) erscheinen überall im Simulator nur mit Namen (`shortId`/`fullName`), auch in Matrix und Spieleliste.
+  (Id `u-…`) erscheinen überall im Simulator nur mit Namen (`shortId`/`fullName`), auch in Matrix und Spieleliste. Klappzustand in `localStorage` (`…sim-groups`); Seed bei jedem Öffnen zufällig (Nutzerwunsch, vorher 1).
 - **Angesehene Karten (18. Nov., Nutzerwunsch):** „Look at the top N“-Effekte (Gundam Maxter …) melden
   ein Event `look` (nur der Schauende erfährt die Karten), Karten unter dem Deck tragen `toDeck.seenBy`.
   Log: „Du siehst dir die obersten 4 Karten deines Decks an: …“ und „Unter dein Deck: …“ (KI-Seite ohne
