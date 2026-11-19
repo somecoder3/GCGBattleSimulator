@@ -208,6 +208,9 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Rest-Commands (Main Phase und jetzt auch Action Step), Activate-Effekte und die Zielwahl; alt `plain-rest`.
   v0 51,1 %, v1 50,4 % (n. s.); nur 5 von 15 Archetypen haben Rest-Karten. `npm run ab -- --by-deck`.
 - Simulator: keine Decks vorausgewählt (Nutzerwunsch 18. Nov.; vorher Meta Top 8).
+  Deckauswahl in Gruppen zum Auf-/Zuklappen (`<details>`, Zustand in `opened`), Reihenfolge Eigene Decks
+  (offen), Meta, Starter, Testdecks (zu); Kopf zeigt „N von M gewählt“ (Nutzerwunsch 19. Nov.). Eigene Decks
+  (Id `u-…`) erscheinen überall im Simulator nur mit Namen (`shortId`/`fullName`), auch in Matrix und Spieleliste.
 - **Angesehene Karten (18. Nov., Nutzerwunsch):** „Look at the top N“-Effekte (Gundam Maxter …) melden
   ein Event `look` (nur der Schauende erfährt die Karten), Karten unter dem Deck tragen `toDeck.seenBy`.
   Log: „Du siehst dir die obersten 4 Karten deines Decks an: …“ und „Unter dein Deck: …“ (KI-Seite ohne

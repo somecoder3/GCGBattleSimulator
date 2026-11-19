@@ -34,6 +34,21 @@
   // Meta decks as consensus lists, best placed real lists or both (Mxx / MxxB).
   let metaList = $state<MetaList>("consensus");
   const CHOICES = $derived([...deckChoices(pool, metaList), ...userDecks]);
+  // Collapsible groups, own decks first and open, the others closed (user's wish, 19 Nov 2026).
+  const GROUP_ORDER: DeckChoice["group"][] = ["user", "meta", "starter", "test"];
+  const grouped = $derived(
+    GROUP_ORDER.map((group) => ({ group, decks: CHOICES.filter((d) => d.group === group) })).filter(
+      (g) => g.decks.length || g.group === "user",
+    ),
+  );
+  let opened = $state<Record<DeckChoice["group"], boolean>>({
+    user: true,
+    meta: false,
+    starter: false,
+    test: false,
+  });
+  /** Own decks by name only (their id is a hash), the others with their short id (M01, ST01 …). */
+  const title = (d: DeckChoice) => (d.group === "user" ? d.name : `${d.id} ${d.name}`);
 
   // Nothing is preselected (user's wish, 18 Nov 2026).
   let selectedDecks = $state<string[]>([]);
@@ -108,6 +123,10 @@
   }
 
   const deckName = (id: string) => names[id] ?? CHOICES.find((d) => d.id === id)?.name ?? id;
+  /** Own decks (id "u-…") are shown by name only, the others by id and name. */
+  const own = (id: string) => id.startsWith("u-");
+  const shortId = (id: string) => (own(id) ? deckName(id) : id);
+  const fullName = (id: string) => (own(id) ? deckName(id) : `${id} ${deckName(id)}`);
   const pct = (x: number) => `${(x * 100).toFixed(1)} %`;
   const interval = (r: Rate) => `${pct(r.low)} – ${pct(r.high)}, ${r.games} Spiele`;
 
@@ -275,7 +294,7 @@
     return `rgb(${hue} / ${(0.12 + d * 0.6).toFixed(2)})`;
   }
   const outcome = (g: GameSummary) =>
-    g.error ? "Fehler" : g.winner === null ? "Unentschieden" : `${g.decks[g.winner]} gewinnt`;
+    g.error ? "Fehler" : g.winner === null ? "Unentschieden" : `${shortId(g.decks[g.winner]!)} gewinnt`;
   const groupLabel = (g: DeckChoice["group"]) =>
     g === "meta"
       ? `Meta${SNAPSHOT ? ` (bis ${SNAPSHOT.to})` : ""}`
@@ -318,7 +337,11 @@
             <label>
               Deck
               <select bind:value={focus}>
-                {#each CHOICES as d (d.id)}<option value={d.id}>{d.id} {d.name}</option>{/each}
+                {#each grouped.filter((g) => g.decks.length) as { group, decks } (group)}
+                  <optgroup label={groupLabel(group)}>
+                    {#each decks as d (d.id)}<option value={d.id}>{title(d)}</option>{/each}
+                  </optgroup>
+                {/each}
               </select>
             </label>
           {/if}
@@ -330,24 +353,33 @@
               <option value="both">Beide (Mxx und MxxB)</option>
             </select>
           </label>
-          {#each CHOICES as d, i (d.id)}
-            {#if i === 0 || CHOICES[i - 1]!.group !== d.group}
-              <span class="group">{groupLabel(d.group)}</span>
-            {/if}
-            <label class="check" class:partial={!d.supported}>
-              <input
-                type="checkbox"
-                checked={selectedDecks.includes(d.id)}
-                onchange={() => toggleDeck(d.id)}
-              />
-              <span>
-                {d.id}
-                {d.name}
-                {#if d.share !== undefined}<small>{pct(d.share)}</small>{/if}
-                {#if !d.supported}<small title="Nicht alle Kartentexte werden verstanden">unvollständig</small
-                  >{/if}
-              </span>
-            </label>
+          {#each grouped as { group, decks } (group)}
+            {@const chosen = decks.filter((d) => selectedDecks.includes(d.id)).length}
+            <details class="group" bind:open={opened[group]}>
+              <summary>
+                {groupLabel(group)}
+                <small>{chosen ? `${chosen} von ${decks.length} gewählt` : decks.length}</small>
+              </summary>
+              {#if !decks.length}<p class="hint">
+                  Noch keine. Eigene Decks legst du im Reiter „Decks“ an.
+                </p>{/if}
+              {#each decks as d (d.id)}
+                <label class="check" class:partial={!d.supported}>
+                  <input
+                    type="checkbox"
+                    checked={selectedDecks.includes(d.id)}
+                    onchange={() => toggleDeck(d.id)}
+                  />
+                  <span>
+                    {title(d)}
+                    {#if d.share !== undefined}<small>{pct(d.share)}</small>{/if}
+                    {#if !d.supported}<small title="Nicht alle Kartentexte werden verstanden"
+                        >unvollständig</small
+                      >{/if}
+                  </span>
+                </label>
+              {/each}
+            </details>
           {/each}
           <p class="hint">
             {mode === "gauntlet"
@@ -523,7 +555,7 @@
             <tbody>
               {#each Object.entries(stats.byDeck).sort((a, b) => b[1].rate - a[1].rate) as [deck, r] (deck)}
                 <tr>
-                  <td>{deck} {deckName(deck)}</td><td>{pct(r.rate)}</td><td>{interval(r)}</td>
+                  <td>{fullName(deck)}</td><td>{pct(r.rate)}</td><td>{interval(r)}</td>
                   {#if Object.keys(weighted).length}<td
                       >{weighted[deck] !== undefined ? pct(weighted[deck]) : "–"}</td
                     >{/if}
@@ -546,7 +578,7 @@
                       class:hot={tip?.col === b || (tip && !tip.col && tip.row === b)}
                       aria-label={deckName(b)}
                       onpointerenter={(e) => showTip(e, b)}
-                      onpointerleave={() => (tip = null)}>{b}</th
+                      onpointerleave={() => (tip = null)}>{shortId(b)}</th
                     >{/each}</tr
                 ></thead
               >
@@ -557,7 +589,7 @@
                       class:hot={tip?.row === a}
                       aria-label={deckName(a)}
                       onpointerenter={(e) => showTip(e, a)}
-                      onpointerleave={() => (tip = null)}>{a}</th
+                      onpointerleave={() => (tip = null)}>{shortId(a)}</th
                     >
                     {#each matrixDecks as b (b)}
                       {@const r = stats.matrix[a]?.[b]}
@@ -581,10 +613,14 @@
           </div>
           {#if tip}
             <HoverTip anchor={tip.anchor}>
-              <div class="tip-deck"><b>{tip.row}</b> {deckName(tip.row)}</div>
+              <div class="tip-deck">
+                {#if own(tip.row)}<b>{deckName(tip.row)}</b>{:else}<b>{tip.row}</b> {deckName(tip.row)}{/if}
+              </div>
               {#if tip.col}
                 <div class="tip-vs">gegen</div>
-                <div class="tip-deck"><b>{tip.col}</b> {deckName(tip.col)}</div>
+                <div class="tip-deck">
+                  {#if own(tip.col)}<b>{deckName(tip.col)}</b>{:else}<b>{tip.col}</b> {deckName(tip.col)}{/if}
+                </div>
                 <div class="tip-rate">{tip.text}</div>
               {/if}
             </HoverTip>
@@ -597,7 +633,7 @@
           <label>
             Deck
             <select bind:value={cardDeck}>
-              {#each deckIds as id (id)}<option value={id}>{id} {deckName(id)}</option>{/each}
+              {#each deckIds as id (id)}<option value={id}>{fullName(id)}</option>{/each}
             </select>
           </label>
           <label>
@@ -656,7 +692,7 @@
             Deck
             <select bind:value={gameFilter}>
               <option value="">alle</option>
-              {#each deckIds as id (id)}<option value={id}>{id} {deckName(id)}</option>{/each}
+              {#each deckIds as id (id)}<option value={id}>{fullName(id)}</option>{/each}
             </select>
           </label>
         </div>
@@ -672,9 +708,9 @@
               {#each shownGames as g (g.index)}
                 <tr>
                   <td>{g.index}</td>
-                  <td>{g.decks[0]} – {g.decks[1]}</td>
+                  <td>{shortId(g.decks[0]!)} – {shortId(g.decks[1]!)}</td>
                   <td>{g.ai[0] === g.ai[1] ? g.ai[0] : `${g.ai[0]} – ${g.ai[1]}`}</td>
-                  <td>{g.decks[g.firstPlayer]}</td>
+                  <td>{shortId(g.decks[g.firstPlayer]!)}</td>
                   <td>{outcome(g)}</td>
                   <td>{g.turns}</td>
                   <td>
@@ -775,12 +811,34 @@
     flex-direction: column;
     gap: 4px;
   }
-  .group {
+  details.group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  details.group[open] {
+    padding-bottom: 4px;
+  }
+  details.group > label.check {
+    margin: 2px 0 2px 4px;
+  }
+  details.group summary {
     margin-top: 4px;
+    padding: 2px 0;
+    cursor: pointer;
     font-size: 12px;
     color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+    user-select: none;
+  }
+  details.group summary:hover {
+    color: var(--text);
+  }
+  details.group summary small {
+    margin-left: 6px;
+    text-transform: none;
+    letter-spacing: 0;
   }
   .row {
     display: grid;
