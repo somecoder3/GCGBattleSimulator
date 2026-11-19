@@ -21,7 +21,16 @@
   import HoverTip from "../HoverTip.svelte";
   import CardDetail from "../CardDetail.svelte";
   import CardFilters from "../CardFilters.svelte";
-  import { cardMatcher, emptyFilter, sortCards, type CardFilter, type Ordering } from "../../lib/cardfilter";
+  import {
+    cardMatcher,
+    emptyFilter,
+    sortCards,
+    type CardFilter,
+    type Ordering,
+    type Selection,
+  } from "../../lib/cardfilter";
+  import { satisfiesLink } from "../../../engine/cardlib";
+  import DeckStats from "./DeckStats.svelte";
 
   // Own decks: import, build, check, save (IndexedDB), export, and use them in the game and simulator.
 
@@ -49,6 +58,8 @@
   let copyList = $state("consensus");
   let detail = $state<CardDef>();
   let message = $state<string>();
+  /** Left column of the editor: the list or its statistics. */
+  let view = $state<"list" | "stats">("list");
 
   // svelte-ignore state_referenced_locally
   const templates = deckChoices(pool).filter((d) => d.group !== "user");
@@ -283,6 +294,25 @@
     "(ExBurst, Limitless, TTS, Namen …)",
   ].join("\n");
 
+  const entries = $derived(grouped.flatMap((g) => g.cards.map((c) => ({ card: c.card, n: c.n }))));
+  const links = (unit: CardDef, pilot: CardDef) =>
+    lib.has(unit.no) && lib.has(pilot.no) && satisfiesLink(lib.get(unit.no), lib.get(pilot.no));
+  /** A column or tag of the statistics filters the card search; the same one again undoes it. */
+  function pick(p: Selection) {
+    const keys = Object.keys(p) as (keyof Selection)[];
+    const same = keys.every((k) => {
+      const a = filter.selection[k] ?? [];
+      const b = p[k] ?? [];
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    });
+    const selection = { ...filter.selection };
+    for (const k of keys) {
+      if (same) delete selection[k];
+      else selection[k] = p[k];
+    }
+    filter = { ...filter, selection };
+  }
+
   // Card shown large beside a hovered row of the deck list (mouse only; touch opens the detail).
   let hovered = $state<{ card: CardDef; anchor: DOMRect } | null>(null);
   function hover(e: PointerEvent, card: CardDef) {
@@ -408,44 +438,62 @@
 
       <div class="editor">
         <div class="deck">
-          {#each grouped as g (g.type)}
-            {#if g.cards.length}
-              <h3>{TYPE_NAMES[g.type]} <small>{g.cards.reduce((s, c) => s + c.n, 0)}</small></h3>
-              <ul>
-                {#each g.cards as c (c.no)}
-                  <li>
-                    <button class="minus" onclick={() => change(c.no, -1)} aria-label="Eine weniger">−</button
-                    >
-                    <span class="n">{c.n}</span>
-                    <button
-                      class="plus"
-                      onclick={() => change(c.no, 1)}
-                      aria-label="Eine mehr"
-                      disabled={c.n >= MAX_COPIES}>+</button
-                    >
-                    <button
-                      class="cardname"
-                      onclick={() => (detail = c.card)}
-                      onpointerenter={(e) => hover(e, c.card)}
-                      onpointerleave={() => (hovered = null)}
-                    >
-                      <span class="thumb" data-color={c.card.color?.toLowerCase() ?? "none"}>
-                        <img
-                          src={cardImageUrl(c.card, "small")}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
-                        />
-                      </span>
-                      <span class="lv">Lv.{c.card.level ?? "–"}</span>
-                      <span class="title">{c.card.name} <small>{c.no}</small></span>
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-          {/each}
+          <div class="tabs" role="tablist" aria-label="Ansicht des Decks">
+            <button role="tab" aria-selected={view === "list"} onclick={() => (view = "list")}>Liste</button>
+            <button role="tab" aria-selected={view === "stats"} onclick={() => (view = "stats")}
+              >Statistik</button
+            >
+          </div>
+          {#if view === "stats"}
+            <DeckStats
+              {entries}
+              {links}
+              selection={filter.selection}
+              onpick={pick}
+              ondetail={(c) => (detail = c)}
+            />
+          {:else}
+            {#each grouped as g (g.type)}
+              {#if g.cards.length}
+                <h3>{TYPE_NAMES[g.type]} <small>{g.cards.reduce((s, c) => s + c.n, 0)}</small></h3>
+                <ul>
+                  {#each g.cards as c (c.no)}
+                    <li>
+                      <button class="minus" onclick={() => change(c.no, -1)} aria-label="Eine weniger"
+                        >−</button
+                      >
+                      <span class="n">{c.n}</span>
+                      <button
+                        class="plus"
+                        onclick={() => change(c.no, 1)}
+                        aria-label="Eine mehr"
+                        disabled={c.n >= MAX_COPIES}>+</button
+                      >
+                      <button
+                        class="cardname"
+                        onclick={() => (detail = c.card)}
+                        onpointerenter={(e) => hover(e, c.card)}
+                        onpointerleave={() => (hovered = null)}
+                      >
+                        <span class="thumb" data-color={c.card.color?.toLowerCase() ?? "none"}>
+                          <img
+                            src={cardImageUrl(c.card, "small")}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            onerror={(e) =>
+                              ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
+                          />
+                        </span>
+                        <span class="lv">Lv.{c.card.level ?? "–"}</span>
+                        <span class="title">{c.card.name} <small>{c.no}</small></span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            {/each}
+          {/if}
           {#if hovered}
             <HoverTip anchor={hovered.anchor} place="side">
               <div class="preview">
@@ -663,6 +711,24 @@
     display: grid;
     grid-template-columns: minmax(260px, 380px) minmax(0, 1fr);
     gap: 16px;
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tabs button {
+    padding: 6px 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-dim);
+  }
+  .tabs button[aria-selected="true"] {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+    font-weight: 600;
   }
   .deck ul {
     margin: 0;

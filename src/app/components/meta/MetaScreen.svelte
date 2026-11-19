@@ -12,6 +12,8 @@
   import { BUNDLED_SNAPSHOT, SNAPSHOT, cardLib, pickDeck, preset, setSnapshot } from "../../lib/decks";
   import CardImage from "../CardImage.svelte";
   import CardDetail from "../CardDetail.svelte";
+  import DeckStats from "../decks/DeckStats.svelte";
+  import { satisfiesLink } from "../../../engine/cardlib";
 
   // Meta: archetypes of the active snapshot with share, lists and support; consensus and best list;
   // reloading from Limitless in the browser; the banlist.
@@ -26,6 +28,8 @@
   /** Shown list: the consensus list or a real list (index into the archetype's entries, best first). */
   let shown = $state<"consensus" | number>("consensus");
   let detail = $state<ReturnType<CardPool["get"]>>();
+  /** The shown list as card images or as statistics (like the deck builder's). */
+  let view = $state<"cards" | "stats">("cards");
 
   let weeks = $state(8);
   let minPlayers = $state(8);
@@ -40,6 +44,10 @@
     selected ? (entry ? toDeckList(entry.cards) : selected.archetype.consensus) : undefined,
   );
   const entryCount = $derived(entry ? Object.values(entry.cards).reduce((a, b) => a + b, 0) : 0);
+  const groups = $derived(list ? grouped(list) : []);
+  const statEntries = $derived(groups.flatMap((g) => g.cards.map((c) => ({ card: c.card, n: c.n }))));
+  const links = (unit: { no: string }, pilot: { no: string }) =>
+    lib.has(unit.no) && lib.has(pilot.no) && satisfiesLink(lib.get(unit.no), lib.get(pilot.no));
   function choose(id: string) {
     selectedId = id;
     shown = "consensus";
@@ -307,22 +315,33 @@
           keines).
         </p>
       {/if}
-      {#each grouped(list) as g (g.type)}
-        <h3>{TYPE_NAMES[g.type]} <small>{g.cards.reduce((s, c) => s + c.n, 0)}</small></h3>
-        <div class="cards">
-          {#each g.cards as c (c.no)}
-            <button
-              class="card"
-              class:partial={c.partial}
-              onclick={() => (detail = c.card)}
-              title="{c.no} {c.card.name}"
-            >
-              <CardImage card={c.card} src={cardImageUrl(c.card, "small")} />
-              <span class="count">{c.n}×</span>
-            </button>
-          {/each}
+      <div class="view" role="tablist" aria-label="Ansicht der Liste">
+        <button role="tab" aria-selected={view === "cards"} onclick={() => (view = "cards")}>Karten</button>
+        <button role="tab" aria-selected={view === "stats"} onclick={() => (view = "stats")}>Statistik</button
+        >
+      </div>
+      {#if view === "stats"}
+        <div class="stats">
+          <DeckStats entries={statEntries} {links} ondetail={(c) => (detail = c)} />
         </div>
-      {/each}
+      {:else}
+        {#each groups as g (g.type)}
+          <h3>{TYPE_NAMES[g.type]} <small>{g.cards.reduce((s, c) => s + c.n, 0)}</small></h3>
+          <div class="cards">
+            {#each g.cards as c (c.no)}
+              <button
+                class="card"
+                class:partial={c.partial}
+                onclick={() => (detail = c.card)}
+                title="{c.no} {c.card.name}"
+              >
+                <CardImage card={c.card} src={cardImageUrl(c.card, "small")} />
+                <span class="count">{c.n}×</span>
+              </button>
+            {/each}
+          </div>
+        {/each}
+      {/if}
     {:else}
       <p class="hint">Kein Meta-Snapshot vorhanden.</p>
     {/if}
@@ -516,6 +535,28 @@
     color: var(--text);
     border-color: var(--line);
     background: var(--bg-sunken);
+  }
+  .stats {
+    --chart-min: 210px;
+    max-width: 1100px;
+  }
+  .view {
+    display: flex;
+    gap: 4px;
+    margin: 6px 0 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .view button {
+    padding: 6px 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-dim);
+  }
+  .view button[aria-selected="true"] {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+    font-weight: 600;
   }
   .entries {
     max-height: 260px;

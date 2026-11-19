@@ -255,6 +255,18 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Liste mit Checkboxen (Mehrfachauswahl, Eintippen filtert, Pfeiltasten + Enter; Gewählte stehen beim Öffnen oben
   und springen beim Anhaken nicht). Deckbau zeigt jetzt immer Treffer (je 120, „Weitere anzeigen“), Häkchen
   „Nur Farben des Decks“. Nicht übernommen: Preise, Sammlung, Alt-Art-Einzelansicht, „Block“, Vorlagen (Presets).
+- **Deck-Statistik wie bei ExBurst (19. Nov., Nutzerwunsch):** Deckbau hat Reiter „Liste | Statistik“
+  (`src/app/components/decks/DeckStats.svelte`, Logik `src/app/lib/deckstats.ts`): Kosten-/Level-Kurve, Units
+  (HP, AP, Kosten, Level), Farbe, Kartentypen, Traits/Link-Bedingungen/Keywords, Link-Paare (Unit ← passende
+  Piloten inkl. Commands mit 【Pilot】, per `satisfiesLink`; fehlende gelb), Starthand-Chancen und Probehand
+  (`SampleHand.svelte`: Mulligan, Schilde, Ziehen, Abwerfen). Klick auf Balken/Tag filtert die Kartensuche,
+  nochmal hebt es auf. Unterschiede zu ExBurst (Werte für ST01 sonst gleich, Test): HP/AP nur über Units
+  (ExBurst zählt dort mehr Karten mit); Starthand-Chancen **exakt nach unseren Regeln** (Lv. _und_ Kosten ≤ Zug,
+  als Zweiter +1 durch EX Resource, Ziehen auch im ersten Zug, Mulligan = Hand unter das Deck, 5 ziehen, mischen),
+  Zug 1–4, Unit und beliebige Karte. ExBursts „≤1-cost unit“ ignoriert das Level. Nicht übernommen: Preise,
+  Sammlung, Kommentare, Match-Log (W/L%), „Considering“, Versionen.
+  - Auch im **Meta-Reiter** (Nutzerwunsch): Umschalter „Karten | Statistik“ für Konsens- und Turnierlisten;
+    dort ohne Kartensuche, darum ohne Klick-Filter (`onpick` optional), Diagramme breiter (`--chart-min`).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
