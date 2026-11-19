@@ -3,7 +3,8 @@
 //   npm run sim -- --games 10000                          random decks, random AI
 //   npm run sim -- --ai v1,random --decks starters        AI comparison with the starter decks
 //   npm run sim -- --ai v1 --decks starters --games 4000  deck matrix (both sides the same AI)
-//   npm run sim -- --decks ST01,ST03                      only these decks
+//   npm run sim -- --decks ST01,ST03                      only these decks (each pair, no mirrors)
+//   npm run sim -- --decks starters --mirrors             also each deck against itself
 //   npm run sim -- --games 100000 --check                 invariants after every step (fuzzing)
 //   npm run sim -- --workers 0                            in this process (for profiling)
 //   npm run sim -- --json out.json                        write all game summaries
@@ -40,6 +41,7 @@ const { values: args } = parseArgs({
     workers: { type: "string" },
     "max-turns": { type: "string" },
     json: { type: "string" },
+    mirrors: { type: "boolean", default: false },
   },
 });
 
@@ -78,8 +80,9 @@ const jobDecks = decks(args.decks);
 const job: SimJob = {
   decks: jobDecks,
   ai: [ai[0]!, ai[1]!],
-  // Every pairing equally often (src/sim/runner.ts fullRounds).
-  games: fullRounds({ decks: jobDecks }, Number(args.games)),
+  // Every pairing equally often (src/sim/runner.ts fullRounds); mirrors only with --mirrors.
+  mirrors: args.mirrors,
+  games: fullRounds({ decks: jobDecks, mirrors: args.mirrors }, Number(args.games)),
   seed: Number(args.seed),
   ...(args["max-turns"] ? { maxTurns: Number(args["max-turns"]) } : {}),
   ...(args.check ? { check: true } : {}),

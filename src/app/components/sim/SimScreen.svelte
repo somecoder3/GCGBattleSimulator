@@ -55,6 +55,8 @@
   let randomDecks = $state(false);
   // A deck chosen in the Meta or Decks tab ("simulate against the field").
   let mode = $state<"pairs" | "gauntlet">(preset.gauntlet ? "gauntlet" : "pairs");
+  /** Each deck also against itself (only "Jeder gegen jeden"; the deck win rates leave mirrors out). */
+  let mirrors = $state(false);
   // svelte-ignore state_referenced_locally
   let focus = $state(preset.gauntlet ?? deckChoices(pool)[0]?.id ?? "");
   preset.gauntlet = null;
@@ -122,7 +124,12 @@
       ? []
       : CHOICES.filter((d) => selectedDecks.includes(d.id) || (gauntlet && d.id === focus));
     const decks: DeckEntry[] = chosen.map((d) => ({ id: d.id, name: d.name, deck: d.deck }));
-    return { gauntlet, chosen, decks, ...(gauntlet ? { mode: "gauntlet" as const, focus } : {}) };
+    return {
+      gauntlet,
+      chosen,
+      decks,
+      ...(gauntlet ? { mode: "gauntlet" as const, focus } : { mirrors }),
+    };
   }
 
   // Games are rounded up to full rounds, so every pairing is played equally often.
@@ -141,12 +148,14 @@
       seed: Math.floor(seed) >>> 0,
       cardStats: true,
       shares,
-      ...(gauntlet ? { mode: "gauntlet" as const, focus } : {}),
+      ...(gauntlet ? { mode: "gauntlet" as const, focus } : { mirrors }),
     };
-    if (!randomDecks && decks.length < (gauntlet ? 2 : 1)) {
+    if (!randomDecks && decks.length < (gauntlet || !mirrors ? 2 : 1)) {
       error = gauntlet
         ? "Für Gauntlet mindestens ein Gegner-Deck auswählen."
-        : "Mindestens ein Deck auswählen.";
+        : mirrors
+          ? "Mindestens ein Deck auswählen."
+          : "Mindestens zwei Decks auswählen (oder Spiegelspiele einschalten).";
       return;
     }
     error = undefined;
@@ -297,6 +306,14 @@
               ><input type="radio" bind:group={mode} value="gauntlet" /> Gauntlet: ein Deck gegen das Feld</label
             >
           </div>
+          {#if mode === "pairs"}
+            <label
+              class="check"
+              title="Jedes Deck auch gegen sich selbst. Die Siegquoten der Decks lassen Spiegelspiele ohnehin weg."
+            >
+              <input type="checkbox" bind:checked={mirrors} /> Spiegelspiele (Deck gegen sich selbst)
+            </label>
+          {/if}
           {#if mode === "gauntlet"}
             <label>
               Deck
@@ -335,7 +352,9 @@
           <p class="hint">
             {mode === "gauntlet"
               ? "Das gewählte Deck spielt gegen jedes angehakte Deck."
-              : "Jedes Paar einmal, auch Spiegelspiele."}
+              : mirrors
+                ? "Jedes Paar gleich oft, auch Spiegelspiele."
+                : "Jedes Paar verschiedener Decks gleich oft."}
           </p>
         {/if}
       </fieldset>

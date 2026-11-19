@@ -29,8 +29,13 @@ export interface DeckEntry {
 }
 
 export interface SimJob {
-  /** Decks to pair with each other (every pair once, mirrors included). Empty: random legal decks. */
+  /** Decks to pair with each other (every pair once). Empty: random legal decks. */
   decks: DeckEntry[];
+  /**
+   * Also play each deck against itself (default true; the simulator screen and `npm run sim` leave them
+   * out: the deck win rates ignore mirrors anyway). Rule comparisons (`npm run ab`, `tune`) keep them.
+   */
+  mirrors?: boolean;
   /** "gauntlet": only the deck `focus` against every other deck (no mirror). Default: every pair. */
   mode?: "pairs" | "gauntlet";
   focus?: string;
@@ -86,14 +91,14 @@ export interface SeatCards {
   played: string[];
 }
 
-/** Unordered pairs of deck indices, mirrors included: (0,0), (0,1), …, (1,1), … */
-export function deckPairs(n: number): [number, number][] {
+/** Unordered pairs of deck indices: (0,0), (0,1), …, (1,1), … (without (i,i) if `mirrors` is false). */
+export function deckPairs(n: number, mirrors = true): [number, number][] {
   const pairs: [number, number][] = [];
-  for (let i = 0; i < n; i++) for (let j = i; j < n; j++) pairs.push([i, j]);
+  for (let i = 0; i < n; i++) for (let j = mirrors ? i : i + 1; j < n; j++) pairs.push([i, j]);
   return pairs;
 }
 
-type PairingSpec = Pick<SimJob, "decks" | "mode" | "focus">;
+type PairingSpec = Pick<SimJob, "decks" | "mode" | "focus" | "mirrors">;
 
 /** The pairings of a job (indices into job.decks). */
 export function jobPairs(job: PairingSpec): [number, number][] {
@@ -104,7 +109,8 @@ export function jobPairs(job: PairingSpec): [number, number][] {
     );
     return job.decks.flatMap((_, i): [number, number][] => (i === focus ? [] : [[focus, i]]));
   }
-  return deckPairs(job.decks.length);
+  // A single deck can only play itself.
+  return deckPairs(job.decks.length, job.mirrors !== false || job.decks.length < 2);
 }
 
 /** Games in one round: a block of 8 for every pairing (8 with random decks). */

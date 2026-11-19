@@ -208,6 +208,11 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Rest-Commands (Main Phase und jetzt auch Action Step), Activate-Effekte und die Zielwahl; alt `plain-rest`.
   v0 51,1 %, v1 50,4 % (n. s.); nur 5 von 15 Archetypen haben Rest-Karten. `npm run ab -- --by-deck`.
 - Simulator: keine Decks vorausgewählt (Nutzerwunsch 18. Nov.; vorher Meta Top 8).
+- **Keine Spiegelspiele mehr im Simulator (19. Nov., Nutzerwunsch):** „Jeder gegen jeden“ spielt nur Paare
+  verschiedener Decks (Häkchen „Spiegelspiele“, `npm run sim -- --mirrors`; `SimJob.mirrors`, Standard im
+  Runner weiter `true`, damit `npm run ab`/`tune` Regeln auch im Spiegel vergleichen). Siegquoten ließen
+  Spiegel schon immer weg, kosteten aber z. B. bei 8 Decks 8 von 36 Paarungen; die Kartenleistung
+  (`cardStats`) lässt sie jetzt auch weg. Jede Paarung bekommt gleich viele Achterblöcke (`fullRounds`).
 - **Selbst gegen die KI gespielt (18. Nov., Nutzerwunsch):** `npm run play` (Partie in einer JSON-Datei, jede
   Entscheidung ein Aufruf, `undo`, `cards`). ST02 gegen „Sehr schwer“ mit ST01: **0:3**. v1 gegen v1: ST02
   34 % gegen ST01 (2016 Spiele). Zweiter Versuch mit Rücksprüngen (`play -- history`/`back`, gleiche Karten):
