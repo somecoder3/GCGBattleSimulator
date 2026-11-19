@@ -238,6 +238,18 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Kosten nie. v0 **50,7 %** (36 960 Spiele, ST12-Decks), v1/Suche/Meta gleich; alt `plain-fights`; `npm run
 ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× The Final Victor und 2× Destiny, `TEST_DECKS` in `src/data/decks.ts`, in Spiel
   und Simulator unter „Testdecks“, auch in `npm run sim`/`play`/`game`/`combos`). Details `docs/AI.md`.
+- **Kartenfilter wie bei ExBurst (19. Nov., Nutzerwunsch):** gemeinsame Komponente
+  `src/app/components/CardFilters.svelte` für Karten-Reiter und Deckbau, Logik in `src/app/lib/cardfilter.ts`.
+  Abschnitte Farbe, Typ, Set, Seltenheit (alle Drucke), Level, Kosten, Trait, Link, Pilot (auch 【Pilot】[Name]
+  von Commands), HP, AP, Keywords (【…】 und <…>, Zusätze wie „･(Zeon) Pilot“ abgeschnitten), Link-Art, Zonen,
+  Serie; innerhalb eines Abschnitts „eines davon“, Abschnitte zusammen „alle“. Schnellfilter-Leiste (★, Standard
+  wie ExBurst: Typ, Seltenheit, Level, Trait, Set), 🔒 hält einen Abschnitt beim Zurücksetzen und Neuladen fest
+  (`localStorage` `…card-filters`), Sortierung pro Liste (`…card-sort.<id>`). Suche mit Feldern wie ExBurst
+  (`trait:zeon`, `name="…"`, `kw<>blocker`, `OR`, Klammern) plus `-wort` und Vergleichen (`ap>=4`), deutsche
+  Kurzformen (`farbe`, `kosten`, …). Abschnitte mit vielen Werten (Trait, Link, Pilot, Keywords, Set, Serie) öffnen beim Hineinklicken eine scrollbare
+  Liste mit Checkboxen (Mehrfachauswahl, Eintippen filtert, Pfeiltasten + Enter; Gewählte stehen beim Öffnen oben
+  und springen beim Anhaken nicht). Deckbau zeigt jetzt immer Treffer (je 120, „Weitere anzeigen“), Häkchen
+  „Nur Farben des Decks“. Nicht übernommen: Preise, Sammlung, Alt-Art-Einzelansicht, „Block“, Vorlagen (Presets).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles

@@ -20,6 +20,8 @@
   import CardImage from "../CardImage.svelte";
   import HoverTip from "../HoverTip.svelte";
   import CardDetail from "../CardDetail.svelte";
+  import CardFilters from "../CardFilters.svelte";
+  import { cardMatcher, emptyFilter, sortCards, type CardFilter, type Ordering } from "../../lib/cardfilter";
 
   // Own decks: import, build, check, save (IndexedDB), export, and use them in the game and simulator.
 
@@ -28,11 +30,18 @@
   // svelte-ignore state_referenced_locally
   const lib = cardLib(pool);
   const MAIN_TYPES = new Set(["UNIT", "PILOT", "COMMAND", "BASE"]);
+  const SHOW_STEP = 120;
+  // svelte-ignore state_referenced_locally
+  const deckCards = pool.cards.filter((c) => MAIN_TYPES.has(c.type) && !c.token);
 
   let decks = $state.raw<UserDeck[]>([]);
   let editing = $state<{ id: string; name: string; counts: Record<string, number> } | null>(null);
   let dirty = $state(false);
-  let query = $state("");
+  let filter = $state<CardFilter>(emptyFilter());
+  let ordering = $state<Ordering>({ key: "level", desc: false });
+  /** Only cards in the colours already in the deck (and colourless ones). */
+  let deckColorsOnly = $state(false);
+  let shown = $state(SHOW_STEP);
   let importText = $state("");
   let importInfo = $state<string>();
   let copyFrom = $state("");
@@ -238,16 +247,28 @@
       cards: entries.filter((e) => e.card.type === type),
     }));
   });
+  const colorsInDeck = $derived(
+    new Set(
+      Object.keys(editing?.counts ?? {}).flatMap((no) => {
+        const color = pool.get(no)?.color;
+        return color ? [color] : [];
+      }),
+    ),
+  );
   const results = $derived.by(() => {
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!words.length) return [];
-    return pool.cards
-      .filter((c) => MAIN_TYPES.has(c.type) && !c.token)
-      .filter((c) => {
-        const hay = `${c.no} ${c.name} ${c.traits.join(" ")} ${c.color ?? ""} ${c.text}`.toLowerCase();
-        return words.every((w) => hay.includes(w));
-      })
-      .slice(0, 60);
+    const match = cardMatcher(filter);
+    const colors = colorsInDeck;
+    return sortCards(
+      deckCards.filter(
+        (c) => match(c) && (!deckColorsOnly || !colors.size || !c.color || colors.has(c.color)),
+      ),
+      ordering,
+    );
+  });
+  // Back to the first cards when the filter changes.
+  $effect(() => {
+    void [filter.query, filter.selection, ordering, deckColorsOnly];
+    shown = SHOW_STEP;
   });
   const TYPE_NAMES: Record<string, string> = {
     UNIT: "Units",
@@ -434,14 +455,13 @@
           {/if}
         </div>
         <div class="search">
-          <input
-            type="search"
-            bind:value={query}
-            placeholder="Karte suchen: Name, Nummer, Trait, Farbe, Text …"
-            aria-label="Karte suchen"
-          />
+          <CardFilters cards={deckCards} bind:filter bind:ordering count={results.length} id="deck" />
+          <label class="only">
+            <input type="checkbox" bind:checked={deckColorsOnly} />
+            Nur Farben des Decks{colorsInDeck.size ? ` (${[...colorsInDeck].join("/")})` : ""}
+          </label>
           <div class="results">
-            {#each results as c (c.no)}
+            {#each results.slice(0, shown) as c (c.no)}
               <div class="result">
                 <button class="img" onclick={() => (detail = c)} title={c.name}>
                   <CardImage card={c} src={cardImageUrl(c, "small")} />
@@ -455,11 +475,14 @@
                 </button>
               </div>
             {:else}
-              {#if query}<p class="hint">Keine Treffer.</p>{:else}<p class="hint">
-                  Suchbegriff eingeben, um Karten hinzuzufügen.
-                </p>{/if}
+              <p class="hint">Keine Treffer.</p>
             {/each}
           </div>
+          {#if results.length > shown}
+            <button class="more" onclick={() => (shown += SHOW_STEP)}>
+              Weitere anzeigen ({results.length - shown})
+            </button>
+          {/if}
         </div>
       </div>
     {:else}
@@ -726,8 +749,20 @@
     color: var(--text-dim);
     font-size: 12px;
   }
-  .search input {
+  .only {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .more {
+    margin-top: 10px;
     width: 100%;
+    min-height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-raised);
   }
   .results {
     display: grid;
