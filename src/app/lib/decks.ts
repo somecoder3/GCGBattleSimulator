@@ -1,8 +1,8 @@
 // Decks the app offers: the meta archetypes of the active snapshot (bundled from data/meta, or a newer
-// one loaded in the Meta tab and kept in IndexedDB), the starter decks and the user's own decks.
+// one loaded in the Meta tab and kept in IndexedDB), the starter decks, test lists and the user's own decks.
 
 import type { CardPool } from "../../data/cards";
-import { STARTER_DECKS, type NamedDeck } from "../../data/decks";
+import { STARTER_DECKS, TEST_DECKS, type NamedDeck } from "../../data/decks";
 import { CardLib } from "../../engine/cardlib";
 import { metaDecks, newestSnapshot, type MetaDeck, type MetaList } from "../../meta/decks";
 import type { MetaSnapshot } from "../../meta/types";
@@ -48,7 +48,7 @@ export function cardLib(pool: CardPool): CardLib {
 }
 
 export interface DeckChoice extends NamedDeck {
-  group: "meta" | "starter" | "user";
+  group: "meta" | "starter" | "test" | "user";
   /** Meta share (0–1) for meta decks. */
   share?: number;
   supported: boolean;
@@ -61,6 +61,7 @@ export function deckChoices(pool: CardPool, list: MetaList = "consensus"): DeckC
     ? metaDecks(SNAPSHOT, lib, Infinity, list).map((d: MetaDeck) => ({ ...d, group: "meta" as const }))
     : [];
   const starters: DeckChoice[] = STARTER_DECKS.map((d) => ({ ...d, group: "starter", supported: true }));
+  const tests: DeckChoice[] = TEST_DECKS.map((d) => ({ ...d, group: "test", supported: true }));
   const own: DeckChoice[] = USER_DECKS.map((d) => ({
     id: d.id,
     name: d.name,
@@ -69,7 +70,7 @@ export function deckChoices(pool: CardPool, list: MetaList = "consensus"): DeckC
     group: "user",
     supported: d.deck.main.every((no) => lib.has(no) && lib.get(no).script.status !== "partial"),
   }));
-  return [...meta, ...PICKED, ...starters, ...own];
+  return [...meta, ...PICKED, ...starters, ...tests, ...own];
 }
 
 export function deckColors(lib: CardLib, nos: readonly string[]): string {

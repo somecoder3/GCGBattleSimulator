@@ -4,12 +4,14 @@
 //   npm run ab -- --ai v0 --a default --b eager-commands --games 9216
 //   npm run ab -- --ai v1 --a default --b mulligan-basic
 //   npm run ab -- --ai v0 --a default --b plain-rest --by-deck   also the share of A per deck of A
+//   npm run ab -- --ai v1 --b plain-fights --decks ST12,ST12X,ST01,ST02   starter decks and test lists
 
 import { availableParallelism } from "node:os";
 import { parseArgs } from "node:util";
 import type { RuleOptions } from "../src/ai/heuristic";
 import type { MulliganRule } from "../src/ai/mulligan";
 import { parseAiName } from "../src/ai/registry";
+import { STARTER_DECKS, TEST_DECKS, type NamedDeck } from "../src/data/decks";
 import { metaDecks, type MetaList } from "../src/meta/decks";
 import { runPool } from "../src/sim/pool";
 import { fullRounds, type SimJob } from "../src/sim/runner";
@@ -57,6 +59,7 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   "ex-cmd7": { rules: { ex: "deck", exLink: true, exCommandLevel: 7 } },
   "ex-cmd8": { rules: { ex: "deck", exLink: true, exCommandLevel: 8 } },
   "ex-cmd9": { rules: { ex: "deck", exLink: true, exCommandLevel: 9 } },
+  "plain-fights": { rules: { plainFights: true } },
   "mulligan-basic": { mulligan: "basic" },
   "mulligan-never": { mulligan: "never" },
 };
@@ -78,11 +81,21 @@ const b = args.b ? VARIANTS[args.b] : undefined;
 if (!a || !b) throw new Error(`--a/--b: one of ${Object.keys(VARIANTS).join(", ")}`);
 
 const ai = parseAiName(args.ai);
-const decks = metaDecks(loadSnapshot(), loadLib(), Number(args.decks), args.list as MetaList).map((d) => ({
-  id: d.id,
-  name: d.name,
-  deck: d.deck,
-}));
+const meta = metaDecks(loadSnapshot(), loadLib(), Infinity, args.list as MetaList);
+const pick = (ids: string[]): NamedDeck[] =>
+  ids.map((id) => {
+    const d = [...meta, ...STARTER_DECKS, ...TEST_DECKS].find((x) => x.id === id.toUpperCase());
+    if (!d) throw new Error(`unknown deck ${id}`);
+    return d;
+  });
+// --decks 8 (the 8 most played archetypes), starters (ST01–ST04) or ids (ST12,ST12X,ST01 …).
+const decks = (
+  /^\d+$/.test(args.decks)
+    ? meta.slice(0, Number(args.decks))
+    : args.decks === "starters"
+      ? STARTER_DECKS.slice(0, 4)
+      : pick(args.decks.split(","))
+).map((d) => ({ id: d.id, name: d.name, deck: d.deck }));
 const job: SimJob = {
   decks,
   ai: [ai, ai],

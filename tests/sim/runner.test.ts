@@ -41,6 +41,28 @@ describe("match runner", () => {
     ]);
   });
 
+  it("leaves mirrors out on request, every other pairing equally often", () => {
+    expect(deckPairs(3, false)).toEqual([
+      [0, 1],
+      [0, 2],
+      [1, 2],
+    ]);
+    // 4 decks: 6 pairings, 48 games per round; each deck plays each other deck 8 times per round.
+    expect(roundSize({ decks, mirrors: false })).toBe(48);
+    const job: SimJob = { decks, mirrors: false, ai: ["random", "random"], games: 96, seed: 1 };
+    const perPairing = new Map<string, number>();
+    for (let i = 0; i < job.games; i++) {
+      const [a, b] = gameSpec(job, i).decks;
+      expect(a).not.toBe(b);
+      const key = [a, b].sort().join("-");
+      perPairing.set(key, (perPairing.get(key) ?? 0) + 1);
+    }
+    expect(perPairing.size).toBe(6);
+    expect(new Set(perPairing.values())).toEqual(new Set([16]));
+    // A single deck can only play itself.
+    expect(roundSize({ decks: decks.slice(0, 1), mirrors: false })).toBe(8);
+  });
+
   it("balances first player, AI seats and deck seats within each block of 8 games", () => {
     const job: SimJob = { decks, ai: ["heuristic-v1", "random"], games: 80, seed: 3 };
     const block = Array.from({ length: 8 }, (_, i) => gameSpec(job, 8 + i));

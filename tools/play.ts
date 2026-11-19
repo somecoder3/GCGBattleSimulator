@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { makePolicy, parseAiName, type AiName } from "../src/ai/registry";
 import { actionLabel, decisionText, primaryCard, secondary } from "../src/app/lib/actions";
 import { cardName, describeSteps } from "../src/app/lib/gamelog";
-import { STARTER_DECKS } from "../src/data/decks";
+import { STARTER_DECKS, TEST_DECKS } from "../src/data/decks";
 import { Engine } from "../src/engine/engine";
 import type { CardId, GameState, PlayerId } from "../src/engine/types";
 import { metaDecks } from "../src/meta/decks";
@@ -22,7 +22,7 @@ const pool = loadPool();
 const lib = loadLib();
 const engine = new Engine(lib);
 const meta = metaDecks(loadSnapshot(), lib);
-const all = [...meta, ...STARTER_DECKS];
+const all = [...meta, ...STARTER_DECKS, ...TEST_DECKS];
 const find = (id: string) => {
   const d = all.find((x) => x.id === id.toUpperCase());
   if (!d) throw new Error(`unknown deck ${id}`);

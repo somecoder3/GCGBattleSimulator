@@ -20,6 +20,17 @@
   import CardImage from "../CardImage.svelte";
   import HoverTip from "../HoverTip.svelte";
   import CardDetail from "../CardDetail.svelte";
+  import CardFilters from "../CardFilters.svelte";
+  import {
+    cardMatcher,
+    emptyFilter,
+    sortCards,
+    type CardFilter,
+    type Ordering,
+    type Selection,
+  } from "../../lib/cardfilter";
+  import { satisfiesLink } from "../../../engine/cardlib";
+  import DeckStats from "./DeckStats.svelte";
 
   // Own decks: import, build, check, save (IndexedDB), export, and use them in the game and simulator.
 
@@ -28,11 +39,18 @@
   // svelte-ignore state_referenced_locally
   const lib = cardLib(pool);
   const MAIN_TYPES = new Set(["UNIT", "PILOT", "COMMAND", "BASE"]);
+  const SHOW_STEP = 120;
+  // svelte-ignore state_referenced_locally
+  const deckCards = pool.cards.filter((c) => MAIN_TYPES.has(c.type) && !c.token);
 
   let decks = $state.raw<UserDeck[]>([]);
   let editing = $state<{ id: string; name: string; counts: Record<string, number> } | null>(null);
   let dirty = $state(false);
-  let query = $state("");
+  let filter = $state<CardFilter>(emptyFilter());
+  let ordering = $state<Ordering>({ key: "level", desc: false });
+  /** Only cards in the colours already in the deck (and colourless ones). */
+  let deckColorsOnly = $state(false);
+  let shown = $state(SHOW_STEP);
   let importText = $state("");
   let importInfo = $state<string>();
   let copyFrom = $state("");
@@ -40,11 +58,14 @@
   let copyList = $state("consensus");
   let detail = $state<CardDef>();
   let message = $state<string>();
+  /** Left column of the editor: the list or its statistics. */
+  let view = $state<"list" | "stats">("list");
 
   // svelte-ignore state_referenced_locally
   const templates = deckChoices(pool).filter((d) => d.group !== "user");
   const metaTemplates = templates.filter((d) => d.group === "meta");
-  const otherTemplates = templates.filter((d) => d.group !== "meta");
+  const starterTemplates = templates.filter((d) => d.group === "starter");
+  const testTemplates = templates.filter((d) => d.group === "test");
   const archetype = $derived(
     (metaTemplates.find((d) => d.id === copyFrom) as (MetaDeck & { group: "meta" }) | undefined)?.archetype,
   );
@@ -237,16 +258,28 @@
       cards: entries.filter((e) => e.card.type === type),
     }));
   });
+  const colorsInDeck = $derived(
+    new Set(
+      Object.keys(editing?.counts ?? {}).flatMap((no) => {
+        const color = pool.get(no)?.color;
+        return color ? [color] : [];
+      }),
+    ),
+  );
   const results = $derived.by(() => {
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!words.length) return [];
-    return pool.cards
-      .filter((c) => MAIN_TYPES.has(c.type) && !c.token)
-      .filter((c) => {
-        const hay = `${c.no} ${c.name} ${c.traits.join(" ")} ${c.color ?? ""} ${c.text}`.toLowerCase();
-        return words.every((w) => hay.includes(w));
-      })
-      .slice(0, 60);
+    const match = cardMatcher(filter);
+    const colors = colorsInDeck;
+    return sortCards(
+      deckCards.filter(
+        (c) => match(c) && (!deckColorsOnly || !colors.size || !c.color || colors.has(c.color)),
+      ),
+      ordering,
+    );
+  });
+  // Back to the first cards when the filter changes.
+  $effect(() => {
+    void [filter.query, filter.selection, ordering, deckColorsOnly];
+    shown = SHOW_STEP;
   });
   const TYPE_NAMES: Record<string, string> = {
     UNIT: "Units",
@@ -260,6 +293,25 @@
     "…",
     "(ExBurst, Limitless, TTS, Namen …)",
   ].join("\n");
+
+  const entries = $derived(grouped.flatMap((g) => g.cards.map((c) => ({ card: c.card, n: c.n }))));
+  const links = (unit: CardDef, pilot: CardDef) =>
+    lib.has(unit.no) && lib.has(pilot.no) && satisfiesLink(lib.get(unit.no), lib.get(pilot.no));
+  /** A column or tag of the statistics filters the card search; the same one again undoes it. */
+  function pick(p: Selection) {
+    const keys = Object.keys(p) as (keyof Selection)[];
+    const same = keys.every((k) => {
+      const a = filter.selection[k] ?? [];
+      const b = p[k] ?? [];
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    });
+    const selection = { ...filter.selection };
+    for (const k of keys) {
+      if (same) delete selection[k];
+      else selection[k] = p[k];
+    }
+    filter = { ...filter, selection };
+  }
 
   // Card shown large beside a hovered row of the deck list (mouse only; touch opens the detail).
   let hovered = $state<{ card: CardDef; anchor: DOMRect } | null>(null);
@@ -308,7 +360,10 @@
             </optgroup>
           {/if}
           <optgroup label="Starter-Decks">
-            {#each otherTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
+            {#each starterTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
+          </optgroup>
+          <optgroup label="Testdecks">
+            {#each testTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
           </optgroup>
         </select>
         {#if archetype}
@@ -383,44 +438,62 @@
 
       <div class="editor">
         <div class="deck">
-          {#each grouped as g (g.type)}
-            {#if g.cards.length}
-              <h3>{TYPE_NAMES[g.type]} <small>{g.cards.reduce((s, c) => s + c.n, 0)}</small></h3>
-              <ul>
-                {#each g.cards as c (c.no)}
-                  <li>
-                    <button class="minus" onclick={() => change(c.no, -1)} aria-label="Eine weniger">−</button
-                    >
-                    <span class="n">{c.n}</span>
-                    <button
-                      class="plus"
-                      onclick={() => change(c.no, 1)}
-                      aria-label="Eine mehr"
-                      disabled={c.n >= MAX_COPIES}>+</button
-                    >
-                    <button
-                      class="cardname"
-                      onclick={() => (detail = c.card)}
-                      onpointerenter={(e) => hover(e, c.card)}
-                      onpointerleave={() => (hovered = null)}
-                    >
-                      <span class="thumb" data-color={c.card.color?.toLowerCase() ?? "none"}>
-                        <img
-                          src={cardImageUrl(c.card, "small")}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
-                        />
-                      </span>
-                      <span class="lv">Lv.{c.card.level ?? "–"}</span>
-                      <span class="title">{c.card.name} <small>{c.no}</small></span>
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-          {/each}
+          <div class="tabs" role="tablist" aria-label="Ansicht des Decks">
+            <button role="tab" aria-selected={view === "list"} onclick={() => (view = "list")}>Liste</button>
+            <button role="tab" aria-selected={view === "stats"} onclick={() => (view = "stats")}
+              >Statistik</button
+            >
+          </div>
+          {#if view === "stats"}
+            <DeckStats
+              {entries}
+              {links}
+              selection={filter.selection}
+              onpick={pick}
+              ondetail={(c) => (detail = c)}
+            />
+          {:else}
+            {#each grouped as g (g.type)}
+              {#if g.cards.length}
+                <h3>{TYPE_NAMES[g.type]} <small>{g.cards.reduce((s, c) => s + c.n, 0)}</small></h3>
+                <ul>
+                  {#each g.cards as c (c.no)}
+                    <li>
+                      <button class="minus" onclick={() => change(c.no, -1)} aria-label="Eine weniger"
+                        >−</button
+                      >
+                      <span class="n">{c.n}</span>
+                      <button
+                        class="plus"
+                        onclick={() => change(c.no, 1)}
+                        aria-label="Eine mehr"
+                        disabled={c.n >= MAX_COPIES}>+</button
+                      >
+                      <button
+                        class="cardname"
+                        onclick={() => (detail = c.card)}
+                        onpointerenter={(e) => hover(e, c.card)}
+                        onpointerleave={() => (hovered = null)}
+                      >
+                        <span class="thumb" data-color={c.card.color?.toLowerCase() ?? "none"}>
+                          <img
+                            src={cardImageUrl(c.card, "small")}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            onerror={(e) =>
+                              ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
+                          />
+                        </span>
+                        <span class="lv">Lv.{c.card.level ?? "–"}</span>
+                        <span class="title">{c.card.name} <small>{c.no}</small></span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            {/each}
+          {/if}
           {#if hovered}
             <HoverTip anchor={hovered.anchor} place="side">
               <div class="preview">
@@ -430,14 +503,13 @@
           {/if}
         </div>
         <div class="search">
-          <input
-            type="search"
-            bind:value={query}
-            placeholder="Karte suchen: Name, Nummer, Trait, Farbe, Text …"
-            aria-label="Karte suchen"
-          />
+          <CardFilters cards={deckCards} bind:filter bind:ordering count={results.length} id="deck" />
+          <label class="only">
+            <input type="checkbox" bind:checked={deckColorsOnly} />
+            Nur Farben des Decks{colorsInDeck.size ? ` (${[...colorsInDeck].join("/")})` : ""}
+          </label>
           <div class="results">
-            {#each results as c (c.no)}
+            {#each results.slice(0, shown) as c (c.no)}
               <div class="result">
                 <button class="img" onclick={() => (detail = c)} title={c.name}>
                   <CardImage card={c} src={cardImageUrl(c, "small")} />
@@ -451,11 +523,14 @@
                 </button>
               </div>
             {:else}
-              {#if query}<p class="hint">Keine Treffer.</p>{:else}<p class="hint">
-                  Suchbegriff eingeben, um Karten hinzuzufügen.
-                </p>{/if}
+              <p class="hint">Keine Treffer.</p>
             {/each}
           </div>
+          {#if results.length > shown}
+            <button class="more" onclick={() => (shown += SHOW_STEP)}>
+              Weitere anzeigen ({results.length - shown})
+            </button>
+          {/if}
         </div>
       </div>
     {:else}
@@ -637,6 +712,24 @@
     grid-template-columns: minmax(260px, 380px) minmax(0, 1fr);
     gap: 16px;
   }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tabs button {
+    padding: 6px 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-dim);
+  }
+  .tabs button[aria-selected="true"] {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+    font-weight: 600;
+  }
   .deck ul {
     margin: 0;
     padding: 0;
@@ -722,8 +815,20 @@
     color: var(--text-dim);
     font-size: 12px;
   }
-  .search input {
+  .only {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .more {
+    margin-top: 10px;
     width: 100%;
+    min-height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-raised);
   }
   .results {
     display: grid;

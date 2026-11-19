@@ -18,6 +18,8 @@ const MIN_BASE_GAIN = 0.5;
 
 /** Resting an enemy Unit is worth a Command or an activated effect from this rest value on. */
 const REST_WORTH = 2;
+/** A battle Command (The Final Victor) is played when its worst case gains at least this (unit values). */
+const FIGHT_WORTH = 2;
 const HARMFUL = new Set(["rest", "damage", "destroy", "bounce", "toDeck", "exile"]);
 const BENEFICIAL = new Set(["ready", "recover", "grant", "toHand"]);
 const HARMFUL_FLAGS = new Set(["cantAttack", "cantAttackPlayer", "cantBePaired", "stayRested"]);
@@ -39,6 +41,12 @@ export interface RuleOptions {
    * 18 Nov 2026; the search sometimes played one by chance, e.g. AP-3 at the end of the opponent's turn).
    */
   searchIdleCommands?: boolean;
+  /**
+   * The rules before 19 Nov 2026 for battles started by effects (The Final Victor, ST12-013) and for
+   * activated keywords: never play such a Command in the main phase, the opponent answers with its most
+   * valuable Unit, First Strike/Suppression are activated whenever possible.
+   */
+  plainFights?: boolean;
   /** When the EX Resource may be used up (docs/AI.md "EX Resource"); default DEFAULT_EX. */
   ex?: ExRule;
   /** Exception to `ex`: a Pilot that links may always use it (part of the default; with `ex` set, only if given). */
@@ -342,8 +350,20 @@ class Ctx {
       case "playCommand":
         if (this.options.eagerMainCommands) return 80 + this.card(o.card).level * 5;
         return this.mainCommandScore(o.card);
-      case "activate":
-        return this.restUseless(o) ? -1 : 60;
+      case "activate": {
+        if (this.restUseless(o)) return -1;
+        const grant = this.options.plainFights ? undefined : this.grantedKeyword(o);
+        if (grant === "firstStrike") return this.firstStrikeGain(o.card) > 0 ? 115 : -1;
+        if (grant === "suppression") return -1; // only in its own attack (action step)
+        if (!this.options.plainFights) {
+          // A battle started by an activated effect (Qubeley ST13-001: a token against an enemy Unit).
+          const program = this.engine.activatedProgram(this.s, o);
+          if (program?.some((i) => i.op === "fight")) {
+            return this.fightCommandValue(program, undefined, o.card) > 0 ? 60 : -1;
+          }
+        }
+        return 60;
+      }
       case "attack":
         return this.attackScore(o.unit, o.target);
       case "support": {
@@ -421,6 +441,11 @@ class Ctx {
       (e) => e.effect.kind === "command" && e.effect.timing.includes("main"),
     )?.program;
     if (!program) return -1;
+    if (!this.options.plainFights && program.some((i) => i.op === "fight")) {
+      // A battle between two chosen Units (The Final Victor): worth it when the worst answer still pays.
+      const value = this.fightCommandValue(program);
+      return value >= FIGHT_WORTH ? 80 + card.level * 5 : -1;
+    }
     const attackers = new Set(this.mainOptions.flatMap((o) => (o.type === "attack" ? [o.unit] : [])));
     const enemies = this.s.players[this.enemy].battle.filter((u) => this.known(u));
     // The side a choice is made from (by its variable).
@@ -650,8 +675,139 @@ class Ctx {
       const play = this.options.eagerCommands || this.commandMatters(o.card);
       return play ? 50 + this.card(o.card).level : 0;
     }
-    if (o.type === "activate") return this.restUseless(o) || this.battleUseless(o) ? 0 : 40;
+    if (o.type === "activate") {
+      if (this.restUseless(o) || this.battleUseless(o)) return 0;
+      const grant = this.options.plainFights ? undefined : this.grantedKeyword(o);
+      if (grant === "suppression") return this.suppressionHelps(o.card) ? 40 : 0;
+      if (grant === "firstStrike") return this.firstStrikeSavesBattle(o.card) ? 40 : 0;
+      return 40;
+    }
     return 0;
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Battles started by effects (The Final Victor) and activated First Strike / Suppression
+
+  /** Damage `id` takes from `amount` enemy battle damage (Destiny Gundam GD05-055 reduces it by 2). */
+  battleDamageTo(id: CardId, amount: number): number {
+    let reduce = 0;
+    for (const { effect } of this.card(id).script.compiled) {
+      if (effect.kind === "static" && "flag" in effect && effect.flag === "reduceEnemyBattleDamage")
+        reduce += effect.amount ?? 0;
+    }
+    return Math.max(0, amount - reduce);
+  }
+
+  /**
+   * A battle with only the damage step, `a` as the attacker (FAQ Q345/Q346): its <First Strike> counts
+   * (`firstStrike` overrides it for "what if it gained First Strike").
+   */
+  fightResult(
+    a: CardId,
+    b: CardId,
+    firstStrike = this.keywords(a).firstStrike,
+  ): { aDies: boolean; bDies: boolean } {
+    const bDies = this.battleDamageTo(b, this.ap(a)) >= this.hpLeft(b);
+    const aDies = !(firstStrike && bDies) && this.battleDamageTo(a, this.ap(b)) >= this.hpLeft(a);
+    return { aDies, bDies };
+  }
+
+  /** Worth of a battle for the side of `a`: the enemy Unit's value if it falls, minus its own. */
+  fightGain(a: CardId, b: CardId, firstStrike?: CardId): number {
+    const r = this.fightResult(a, b, firstStrike === a ? true : undefined);
+    return (r.bDies ? this.unitValue(b) : 0) - (r.aDies ? this.unitValue(a) : 0);
+  }
+
+  /** The fight instruction of a program and who chooses its sides. */
+  fightSides(program: readonly Instr[]): { a: string; b: string; bByOpponent: boolean } | undefined {
+    const fight = program.find((i) => i.op === "fight");
+    if (!fight || fight.op !== "fight") return undefined;
+    const choice = program.find((i) => i.op === "choose" && i.as === fight.b);
+    const bByOpponent = !!choice && choice.op === "choose" && choice.by === "opponent";
+    return { a: String(fight.a), b: String(fight.b), bByOpponent };
+  }
+
+  /**
+   * What a Command starting a battle is worth: the best own Unit against the opponent's best answer (when
+   * the opponent chooses), or the best pair (when the own side chooses both). `firstStrike`: a Unit that
+   * would have <First Strike> (activated before).
+   */
+  fightCommandValue(program: readonly Instr[], firstStrike?: CardId, self?: CardId): number {
+    const sides = this.fightSides(program);
+    if (!sides) return -Infinity;
+    const choice = program.find((i) => i.op === "choose" && i.as === sides.a);
+    const mine =
+      sides.a === "self"
+        ? self === undefined
+          ? []
+          : [self]
+        : this.s.players[this.me].battle.filter(
+            (u) =>
+              this.known(u) && (choice?.op !== "choose" || !choice.filter.token || this.s.cards[u]!.token),
+          );
+    const theirs = this.s.players[this.enemy].battle.filter((u) => this.known(u));
+    if (!mine.length || !theirs.length) return -Infinity;
+    let top = -Infinity;
+    for (const a of mine) {
+      const gains = theirs.map((b) => this.fightGain(a, b, firstStrike));
+      top = Math.max(top, sides.bByOpponent ? Math.min(...gains) : Math.max(...gains));
+    }
+    return top;
+  }
+
+  /** The keyword an activated effect gives its own Unit (First Strike, Suppression …), if that is all it does. */
+  grantedKeyword(o: Action): string | undefined {
+    if (o.type !== "activate") return undefined;
+    const program = this.engine.activatedProgram(this.s, o);
+    if (!program) return undefined;
+    const grants = program.filter((i) => i.op === "grant" && i.t === "self");
+    const other = program.some((i) => "t" in i && i.op !== "grant" && i.op !== "exile");
+    const g = grants[0];
+    return grants.length === 1 && !other && g?.op === "grant" ? g.keyword : undefined;
+  }
+
+  /**
+   * What activating <First Strike> on `unit` would bring this turn: an attack on a rested enemy Unit it
+   * then survives, or a battle Command in the hand (The Final Victor) that only pays with it.
+   */
+  firstStrikeGain(unit: CardId): number {
+    if (this.keywords(unit).firstStrike) return 0;
+    let gain = 0;
+    for (const o of this.mainOptions) {
+      if (o.type === "attack" && o.unit === unit && o.target !== "player" && this.known(o.target)) {
+        const without = Math.max(0, this.fightGain(unit, o.target));
+        const withIt = this.fightGain(unit, o.target, unit);
+        if (withIt > without) gain = Math.max(gain, withIt - without);
+      }
+      if (o.type === "playCommand") {
+        const program = this.card(o.card).script.compiled.find(
+          (e) => e.effect.kind === "command" && e.effect.timing.includes("main"),
+        )?.program;
+        if (!program?.some((i) => i.op === "fight")) continue;
+        const without = Math.max(0, this.fightCommandValue(program));
+        const withIt = this.fightCommandValue(program, unit);
+        if (withIt >= FIGHT_WORTH && withIt > without) gain = Math.max(gain, withIt - without);
+      }
+    }
+    return gain;
+  }
+
+  /** <Suppression> pays in an attack of this Unit on the player, with no Base and at least 2 Shields. */
+  suppressionHelps(unit: CardId): boolean {
+    const b = this.s.battle;
+    const enemy = this.s.players[this.enemy];
+    return (
+      !!b && b.attacker === unit && b.target === "player" && !enemy.base.length && enemy.shields.length >= 2
+    );
+  }
+
+  /** <First Strike> during the own Unit's attack on a Unit: it then survives a fight it wins. */
+  firstStrikeSavesBattle(unit: CardId): boolean {
+    const b = this.s.battle;
+    if (!b || b.attacker !== unit || b.target === "player" || !this.known(b.target)) return false;
+    if (this.keywords(unit).firstStrike) return false;
+    const r = this.fightResult(unit, b.target, true);
+    return r.bDies && !r.aDies && this.fightResult(unit, b.target).aDies;
   }
 
   /**
@@ -729,6 +885,11 @@ class Ctx {
 
   /** Picks a target by what the effect does to it: harm enemies, help friends. */
   target(decision: Decision): Action {
+    const fight = this.options.plainFights ? undefined : this.fightChoice();
+    if (fight) {
+      const pick = best(decision.options, (o) => (o.type === "target" ? 1000 + fight(o.card) : 0));
+      return pick ?? decision.options[0]!;
+    }
     const intent = this.intent();
     const scored = decision.options.map((o) => ({ o, score: this.targetScore(o, intent) }));
     scored.sort((a, b) => b.score - a.score);
@@ -784,6 +945,51 @@ class Ctx {
   }
 
   /** What the running effect does to the cards it is choosing (from its compiled program). */
+  /**
+   * For a choice of a Unit for a battle started by an effect: how good each candidate is for the chooser.
+   * The own fighter of The Final Victor is the one whose worst answer is best; the opponent answers with a
+   * Unit that destroys it and survives, else the cheapest that destroys it, else one that survives, else
+   * the cheapest.
+   */
+  fightChoice(): ((id: CardId) => number) | undefined {
+    const frame = this.s.frames[this.s.frames.length - 1];
+    if (!frame) return undefined;
+    const script = this.engine.lib.get(frame.ref.no).script;
+    const program = (frame.ref.granted ? script.compiledGranted : script.compiled)[frame.ref.idx]?.program;
+    const instr = program?.[frame.pc];
+    if (!program || !instr || instr.op !== "choose" || !instr.as) return undefined;
+    const sides = this.fightSides(program);
+    if (!sides) return undefined;
+    const theirs = this.s.players[this.enemy].battle.filter((u) => this.known(u));
+    if (instr.as !== sides.a && instr.as !== sides.b) {
+      // A cost before the battle (Nu Gundam GD05-017: exile 3 cards from the trash): pay it when the battle
+      // pays, cheapest cards first; otherwise stop ("done").
+      if (instr.filter.side !== "friendly" || instr.filter.zone !== "trash") return undefined;
+      const worth = this.fightCommandValue(program, undefined, frame.source) >= FIGHT_WORTH;
+      return (id) => (worth ? 100 - this.keepValue(id) : -2000);
+    }
+    if (instr.as === sides.a) {
+      return (a) => {
+        if (!this.known(a)) return 0;
+        const gains = theirs.map((b) => this.fightGain(a, b));
+        if (!gains.length) return this.unitValue(a);
+        return sides.bByOpponent ? Math.min(...gains) : Math.max(...gains);
+      };
+    }
+    if (instr.as === sides.b) {
+      const a = sides.a === "self" ? frame.source : frame.vars[sides.a]?.[0];
+      if (a === undefined || !this.known(a)) return undefined;
+      if (this.s.cards[a]!.owner === this.me) return (b) => (this.known(b) ? this.fightGain(a, b) : 0);
+      // The opponent's battle: `a` attacks one of my Units.
+      return (b) => {
+        if (!this.known(b)) return 0;
+        const r = this.fightResult(a, b);
+        return (r.aDies ? 100 : 0) + (r.bDies ? -this.unitValue(b) : 50);
+      };
+    }
+    return undefined;
+  }
+
   intent(): { kind: Intent; damage: number; ap?: number; rest?: boolean } {
     const frame = this.s.frames[this.s.frames.length - 1];
     if (!frame) return { kind: "neutral", damage: 0 };

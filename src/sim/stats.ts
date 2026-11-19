@@ -169,7 +169,8 @@ export interface CardStat {
 
 /**
  * Card performance per deck (like 17lands): how often the deck won when a card was drawn, played or in
- * the opening hand, and when it was never drawn. Needs games recorded with `cardStats`.
+ * the opening hand, and when it was never drawn. Needs games recorded with `cardStats`. Mirror games are
+ * left out.
  */
 export function cardStats(games: readonly GameSummary[], deck: string): CardStat[] {
   const counters = new Map<
@@ -197,7 +198,8 @@ export function cardStats(games: readonly GameSummary[], deck: string): CardStat
     opening: Set<string>;
   }[] = [];
   for (const g of games) {
-    if (g.error || !g.cards) continue;
+    // Mirror games: one seat wins, the other loses, whatever the cards (as in the deck win rates).
+    if (g.error || !g.cards || g.decks[0] === g.decks[1]) continue;
     for (const seat of [0, 1] as const) {
       if (g.decks[seat] !== deck) continue;
       const result = g.winner === null ? "draw" : g.winner === seat ? "win" : "loss";

@@ -219,6 +219,11 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   (`finish` in `interpret.ts`), und die KI löst solche Fähigkeiten nicht aus, wenn sie keinen Kampf ändern
   (`battleUseless`, auch in `allowed()`). Test `tests/cards/battleonly.test.ts`. Alte Replays laufen mit
   der neuen Engine anders weiter (Replays werden neu berechnet).
+- **Keine Spiegelspiele mehr im Simulator (19. Nov., Nutzerwunsch):** „Jeder gegen jeden“ spielt nur Paare
+  verschiedener Decks (Häkchen „Spiegelspiele“, `npm run sim -- --mirrors`; `SimJob.mirrors`, Standard im
+  Runner weiter `true`, damit `npm run ab`/`tune` Regeln auch im Spiegel vergleichen). Siegquoten ließen
+  Spiegel schon immer weg, kosteten aber z. B. bei 8 Decks 8 von 36 Paarungen; die Kartenleistung
+  (`cardStats`) lässt sie jetzt auch weg. Jede Paarung bekommt gleich viele Achterblöcke (`fullRounds`).
 - **Selbst gegen die KI gespielt (18. Nov., Nutzerwunsch):** `npm run play` (Partie in einer JSON-Datei, jede
   Entscheidung ein Aufruf, `undo`, `cards`). ST02 gegen „Sehr schwer“ mit ST01: **0:3**. v1 gegen v1: ST02
   34 % gegen ST01 (2016 Spiele). Zweiter Versuch mit Rücksprüngen (`play -- history`/`back`, gleiche Karten):
@@ -232,6 +237,10 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   läuft mit `npm run play -- show <datei>` (Analyse von Partien des Nutzers). Decks: Format wählen und „Liste
   kopieren“ wie in der Scanner-App (GCGDB `formatList`: Einfach, Limitless, Nur Namen, MSA, TTS; ExBurst-CSV
   weggelassen, weil „Owned“ zum Registrieren gedacht ist), statt Datei-Download; Wahl in `localStorage`.
+- **Zusammengeführt am 19. Nov.** (Konflikte in `CLAUDE.md`, `docs/AI.md`, `src/ai/heuristic.ts`): v0 bewertet
+  Activate-Effekte jetzt mit beidem, erst `restUseless`/`battleUseless` (hier), dann die Kampf-Regeln
+  vom Arbeitsrechner (`suppressionHelps`, `firstStrikeSavesBattle`). Deren Messungen liefen noch ohne die
+  Korrektur „während dieses Kampfs“.
 - **Zusammengeführt am 18. Nov.** (Pull-Konflikte nur in `CLAUDE.md` und `tools/ab.ts`, beide Seiten behalten):
   `allowed()` filtert jetzt EX-Regel und wirkungslose Action-Commands; `commandMatters` kennt dabei auch das
   neue Resten (`restValue`), Rest-Commands im gegnerischen Zug bleiben also für v1/Suche erlaubt.
@@ -247,6 +256,37 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   gegen `turn`, Konsenslisten 49,8 %, 1,7–1,9× Rechenzeit (0,10 → 0,19 s pro Spiel, 1,5 ms pro Entscheidung). `through` (eigenen nächsten Zug mitspielen) 43,3 %,
   weil der Gegner mit Platzhalter-Handkarten nichts spielt. Suche gegen neues v1 nur noch 51,7 %; Suche mit
   `round`-Vorauswahl gemessen: 49,4 %/49,5 % (kein Gewinn, +10 % Zeit) → nicht übernommen, Nutzer entscheidet. Details `docs/AI.md` „Vorausschau“.
+- **Kämpfe durch Effekte (19. Nov., Nutzerwunsch):** v0 bewertet The Final Victor (ST12-013) und andere
+  „fight“-Effekte (Nu Gundam, Qubeley) mit First Strike, Schadensminderung und bester Antwort des Gegners
+  (`fightCommandValue`, `fightChoice`), antwortet selbst sinnvoll und aktiviert First Strike/Suppression nur mit
+  Nutzen (Banshee ST12-006 → dann The Final Victor). Vorher spielte v0 die Karte nie und zahlte Nu Gundams
+  Kosten nie. v0 **50,7 %** (36 960 Spiele, ST12-Decks), v1/Suche/Meta gleich; alt `plain-fights`; `npm run
+ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× The Final Victor und 2× Destiny, `TEST_DECKS` in `src/data/decks.ts`, in Spiel
+  und Simulator unter „Testdecks“, auch in `npm run sim`/`play`/`game`/`combos`). Details `docs/AI.md`.
+- **Kartenfilter wie bei ExBurst (19. Nov., Nutzerwunsch):** gemeinsame Komponente
+  `src/app/components/CardFilters.svelte` für Karten-Reiter und Deckbau, Logik in `src/app/lib/cardfilter.ts`.
+  Abschnitte Farbe, Typ, Set, Seltenheit (alle Drucke), Level, Kosten, Trait, Link, Pilot (auch 【Pilot】[Name]
+  von Commands), HP, AP, Keywords (【…】 und <…>, Zusätze wie „･(Zeon) Pilot“ abgeschnitten), Link-Art, Zonen,
+  Serie; innerhalb eines Abschnitts „eines davon“, Abschnitte zusammen „alle“. Schnellfilter-Leiste (★, Standard
+  wie ExBurst: Typ, Seltenheit, Level, Trait, Set), 🔒 hält einen Abschnitt beim Zurücksetzen und Neuladen fest
+  (`localStorage` `…card-filters`), Sortierung pro Liste (`…card-sort.<id>`). Suche mit Feldern wie ExBurst
+  (`trait:zeon`, `name="…"`, `kw<>blocker`, `OR`, Klammern) plus `-wort` und Vergleichen (`ap>=4`), deutsche
+  Kurzformen (`farbe`, `kosten`, …). Abschnitte mit vielen Werten (Trait, Link, Pilot, Keywords, Set, Serie) öffnen beim Hineinklicken eine scrollbare
+  Liste mit Checkboxen (Mehrfachauswahl, Eintippen filtert, Pfeiltasten + Enter; Gewählte stehen beim Öffnen oben
+  und springen beim Anhaken nicht). Deckbau zeigt jetzt immer Treffer (je 120, „Weitere anzeigen“), Häkchen
+  „Nur Farben des Decks“. Nicht übernommen: Preise, Sammlung, Alt-Art-Einzelansicht, „Block“, Vorlagen (Presets).
+- **Deck-Statistik wie bei ExBurst (19. Nov., Nutzerwunsch):** Deckbau hat Reiter „Liste | Statistik“
+  (`src/app/components/decks/DeckStats.svelte`, Logik `src/app/lib/deckstats.ts`): Kosten-/Level-Kurve, Units
+  (HP, AP, Kosten, Level), Farbe, Kartentypen, Traits/Link-Bedingungen/Keywords, Link-Paare (Unit ← passende
+  Piloten inkl. Commands mit 【Pilot】, per `satisfiesLink`; fehlende gelb), Starthand-Chancen und Probehand
+  (`SampleHand.svelte`: Mulligan, Schilde, Ziehen, Abwerfen). Klick auf Balken/Tag filtert die Kartensuche,
+  nochmal hebt es auf. Unterschiede zu ExBurst (Werte für ST01 sonst gleich, Test): HP/AP nur über Units
+  (ExBurst zählt dort mehr Karten mit); Starthand-Chancen **exakt nach unseren Regeln** (Lv. _und_ Kosten ≤ Zug,
+  als Zweiter +1 durch EX Resource, Ziehen auch im ersten Zug, Mulligan = Hand unter das Deck, 5 ziehen, mischen),
+  Zug 1–4, Unit und beliebige Karte. ExBursts „≤1-cost unit“ ignoriert das Level. Nicht übernommen: Preise,
+  Sammlung, Kommentare, Match-Log (W/L%), „Considering“, Versionen.
+  - Auch im **Meta-Reiter** (Nutzerwunsch): Umschalter „Karten | Statistik“ für Konsens- und Turnierlisten;
+    dort ohne Kartensuche, darum ohne Klick-Filter (`onpick` optional), Diagramme breiter (`--chart-min`).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles

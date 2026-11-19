@@ -20,6 +20,7 @@
   const groups = [
     { key: "meta", label: SNAPSHOT ? `Meta (Turniere bis ${SNAPSHOT.to})` : "Meta" },
     { key: "starter", label: "Starter-Decks" },
+    { key: "test", label: "Testdecks" },
     { key: "user", label: "Eigene Decks" },
   ] as const;
 
