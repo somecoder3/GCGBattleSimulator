@@ -44,7 +44,8 @@
   // svelte-ignore state_referenced_locally
   const templates = deckChoices(pool).filter((d) => d.group !== "user");
   const metaTemplates = templates.filter((d) => d.group === "meta");
-  const otherTemplates = templates.filter((d) => d.group !== "meta");
+  const starterTemplates = templates.filter((d) => d.group === "starter");
+  const testTemplates = templates.filter((d) => d.group === "test");
   const archetype = $derived(
     (metaTemplates.find((d) => d.id === copyFrom) as (MetaDeck & { group: "meta" }) | undefined)?.archetype,
   );
@@ -308,7 +309,10 @@
             </optgroup>
           {/if}
           <optgroup label="Starter-Decks">
-            {#each otherTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
+            {#each starterTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
+          </optgroup>
+          <optgroup label="Testdecks">
+            {#each testTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
           </optgroup>
         </select>
         {#if archetype}

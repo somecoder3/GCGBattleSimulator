@@ -4,13 +4,13 @@
 import { makePolicy } from "../src/ai/registry";
 import { describeSteps } from "../src/app/lib/gamelog";
 import { Engine } from "../src/engine/engine";
-import { STARTER_DECKS } from "../src/data/decks";
+import { STARTER_DECKS, TEST_DECKS } from "../src/data/decks";
 import { metaDecks } from "../src/meta/decks";
 import { GameSession } from "../src/sim/session";
 import { loadLib, loadSnapshot } from "./lib";
 const lib = loadLib();
 const engine = new Engine(lib);
-const decks = [...metaDecks(loadSnapshot(), lib, 99, "both"), ...STARTER_DECKS];
+const decks = [...metaDecks(loadSnapshot(), lib, 99, "both"), ...STARTER_DECKS, ...TEST_DECKS];
 const [a, b, seed] = [process.argv[2] ?? "M01", process.argv[3] ?? "M02", Number(process.argv[4] ?? 1)];
 const find = (id: string) => {
   const deck = decks.find((d) => d.id === id.toUpperCase());

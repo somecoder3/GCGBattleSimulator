@@ -272,7 +272,9 @@
       ? `Meta${SNAPSHOT ? ` (bis ${SNAPSHOT.to})` : ""}`
       : g === "user"
         ? "Eigene Decks"
-        : "Starter-Decks";
+        : g === "test"
+          ? "Testdecks"
+          : "Starter-Decks";
 </script>
 
 <section class="sim">

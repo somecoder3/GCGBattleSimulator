@@ -11,7 +11,7 @@ import {
   entryLabel,
   similarity,
 } from "../../src/meta/archetypes";
-import { STARTER_DECKS } from "../../src/data/decks";
+import { STARTER_DECKS, TEST_DECKS } from "../../src/data/decks";
 import { banlistProblems } from "../../src/meta/banlist";
 import { metaBaseId, metaDecks, newestSnapshot } from "../../src/meta/decks";
 import { fetchSnapshot, toMetaDeck } from "../../src/meta/limitless";
@@ -52,6 +52,16 @@ describe("banlist", () => {
     expect(banlistProblems({ ...st02, "ST02-001": st02["ST02-001"]! - 1, "ST01-005": 1 }, get)).toHaveLength(
       1,
     );
+    // Test lists (changed starters, ST12X) follow the normal rules and are legal 50-card decks.
+    for (const d of TEST_DECKS) {
+      expect(banlistProblems(counts(d.deck.main), get), d.id).toEqual([]);
+      expect(d.deck.main).toHaveLength(50);
+      expect(Math.max(...Object.values(counts(d.deck.main))), d.id).toBeLessThanOrEqual(4);
+      expect(
+        d.deck.main.every((no) => lib.get(no).script.status !== "partial"),
+        d.id,
+      ).toBe(true);
+    }
   });
 });
 

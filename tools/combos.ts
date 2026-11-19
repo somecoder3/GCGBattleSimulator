@@ -3,12 +3,12 @@
 //   npm run combos -- M01B          one deck (meta ids, M01B best list, ST01 …)
 //   npm run combos -- meta          the most played archetypes
 import { deckPlan } from "../src/ai/synergy";
-import { STARTER_DECKS } from "../src/data/decks";
+import { STARTER_DECKS, TEST_DECKS } from "../src/data/decks";
 import { metaDecks } from "../src/meta/decks";
 import { loadLib, loadSnapshot } from "./lib";
 
 const lib = loadLib();
-const all = [...metaDecks(loadSnapshot(), lib, 99, "both"), ...STARTER_DECKS];
+const all = [...metaDecks(loadSnapshot(), lib, 99, "both"), ...STARTER_DECKS, ...TEST_DECKS];
 const ids = process.argv.slice(2);
 const chosen =
   ids.length === 0 || ids[0] === "meta"

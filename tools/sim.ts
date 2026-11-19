@@ -19,7 +19,7 @@ import { writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { parseArgs } from "node:util";
 import { parseAiName } from "../src/ai/registry";
-import { STARTER_DECKS } from "../src/data/decks";
+import { STARTER_DECKS, TEST_DECKS } from "../src/data/decks";
 import { Engine } from "../src/engine/engine";
 import { runPool } from "../src/sim/pool";
 import { fullRounds, runRange, type DeckEntry, type GameSummary, type SimJob } from "../src/sim/runner";
@@ -64,7 +64,8 @@ function decks(spec: string): DeckEntry[] {
     const ids = new Set(metaOf(Number(metaMatch[1] ?? 8)).map((d) => d.id));
     return meta.filter((d) => ids.has(d.id));
   }
-  const all = [...starters, ...meta];
+  const tests = TEST_DECKS.map((d) => ({ id: d.id, name: `${d.id} ${d.name}`, deck: d.deck }));
+  const all = [...starters, ...tests, ...meta];
   return spec.split(",").map((id) => {
     const deck = all.find((d) => d.id === id.trim().toUpperCase());
     if (!deck)

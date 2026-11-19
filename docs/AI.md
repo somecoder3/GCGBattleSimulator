@@ -319,6 +319,49 @@ nur die Pilot-Regel: v0 setzt einen Piloten nicht in eine Unit, die er nicht lin
 linkt, auf der Hand liegt und spätestens nächsten Zug spielbar ist (Lv. ≤ Level + 1). `comboFuel` und
 `linkValue` bleiben als abschaltbare Versuche (`RuleOptions`, Varianten `fuel`, `links`, `combos`).
 
+## Kämpfe durch Effekte und aktiviertes First Strike (19. Nov. 2026, Nutzerwunsch)
+
+The Final Victor (ST12-013: beide Spieler wählen je eine eigene Unit, nur der Schadensschritt) kannte v0
+nicht: Ein Kampf („fight“) passte zu keiner Command-Regel, v0 spielte die Karte nie; antworten musste sie mit
+ihrer wertvollsten Unit. Die Engine rechnet den Kampf richtig (eigene Unit = Angreifer, First Strike wirkt,
+Q345/Q346/Q447). Kombos des Nutzers: Destiny Gundam (GD05-055, First Strike, −2 Kampfschaden) und die lila
+Banshee (ST12-006, gepaart: 4 Trash-Karten → First Strike für den Zug, 4 weitere → Suppression im Kampf).
+
+- **Kampf-Commands** (`fightCommandValue`): für jede eigene Unit die beste Antwort des Gegners (wählt der
+  Gegner, zählt der schlechteste Fall; wählt man selbst, der beste), Gewinn = Wert der zerstörten gegnerischen
+  Unit − Wert der eigenen, mit First Strike und Schadensminderung (`fightResult`, `battleDamageTo`). Gespielt
+  ab Gewinn 2 (`FIGHT_WORTH`), dann wie Entfernen (80 + 5 × Lv.).
+- **Zielwahl** (`fightChoice`): eigene Unit mit dem besten schlechtesten Fall; als Gegner eine Unit, die den
+  Angreifer zerstört und überlebt, sonst die billigste, die ihn zerstört, sonst eine, die überlebt, sonst die
+  billigste. Gilt auch für Nu Gundam (GD05-017, „this Unit“ gegen eine gewählte Unit) und Qubeley (ST13-001,
+  Token gegen Unit, aktiviert nur, wenn es sich lohnt). Nu Gundams Kosten (3 Londo-Bell-Karten aus dem Trash
+  verbannen) zahlte v0 bisher nie, weil eigene Karten verbannen als Schaden galt; jetzt, wenn der Kampf sich
+  lohnt.
+- **Aktiviertes First Strike** (`firstStrikeGain`): nur, wenn es diesen Zug einen Angriff auf eine geruhte
+  Unit überlebbar macht oder ein Kampf-Command erst damit lohnt (dann vor dem Command, Punkte 115). Vorher
+  aktivierte v0 es bei jeder Gelegenheit und verbrauchte die Trash-Karten. **Suppression** nur im eigenen
+  Angriff auf den Spieler ohne Base mit mindestens 2 Schilden (`suppressionHelps`).
+- Weil v1 und die Suche v0 als Fortsetzung nutzen, sehen sie jetzt auch „First Strike aktivieren, dann The
+  Final Victor“ und rechnen mit einer realistischen Antwort.
+- Gezählt (ST12 gegen die anderen Starter, je 200 Spiele): v0 spielte The Final Victor vorher nie, jetzt
+  11-mal (11 gegnerische Units zerstört, 3 eigene verloren); v1 unverändert 31-mal (v1 entscheidet seine
+  eigenen Züge per Vorausschau).
+- Gemessen (`npm run ab -- --b plain-fights`, alte Regeln = `plainFights`; Testliste `ST12X` = ST12 mit 4×
+  The Final Victor und 2× Destiny statt Epyon, `TEST_DECKS` in `src/data/decks.ts`, in der App unter „Testdecks“):
+
+  | KI, Decks                    | neu gegen alt                           | ST12 | ST12X |
+  | ---------------------------- | --------------------------------------- | ---- | ----- |
+  | v0, ST12/ST12X/ST01–ST04     | **50,7 %** (50,1–51,2 %, 36 960 Spiele) | +1,9 | +2,3  |
+  | v1, ebenso                   | 50,3 % (49,8–50,9 %, 36 960)            | +1,4 | +1,9  |
+  | Suche, ebenso                | 50,5 % (48,5–52,5 %, 2352)              |      |       |
+  | v0, Meta Top 8               | 50,0 % (49,2–50,7 %, 18 432)            |      |       |
+  | v1, Meta Top 8 (Seeds 21/22) | 49,6 % / 50,3 % (je 18 432)             |      |       |
+
+  In der Meta enthalten nur M03 (Nu Gundam ×4) und M08 (The Final Victor ×1) solche Karten; beide liegen in
+  beiden v1-Läufen im Plus (M03 +0,3/+1,5, M08 +0,7/+2,8), die Ausschläge anderer Decks wechseln das Vorzeichen
+  (Rauschen). Behalten: v0 messbar besser, sonst gleich, und die Entscheidungen sind in den Prüfstellungen
+  (`tests/ai/fights.test.ts`) richtig.
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen

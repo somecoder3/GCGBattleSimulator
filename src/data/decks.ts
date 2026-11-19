@@ -150,3 +150,21 @@ export const STARTER_DECKS: NamedDeck[] = [
     deck: list(starter("ST14", [2, 3, 3, 4, 2, 2, 4, 3, 4, 3, 4, 4, 3, 3, 2, 4])),
   },
 ];
+
+/** A starter deck with some cards swapped (a test list: not an official deck, legal under the normal rules). */
+function swapped(id: string, base: string, swap: Record<string, string>, name: string): NamedDeck {
+  const from = STARTER_DECKS.find((d) => d.id === base)!;
+  const main = from.deck.main.map((no) => swap[no] ?? no);
+  return { id, name, colors: from.colors, deck: { ...from.deck, main } };
+}
+
+/** Test lists for measuring AI rules (docs/AI.md); offered in the app as "Testdecks". */
+export const TEST_DECKS: NamedDeck[] = [
+  // The Final Victor ×4 (instead of Two Unicorns ST12-015) and Destiny Gundam GD05-055 ×2 (instead of Epyon).
+  swapped(
+    "ST12X",
+    "ST12",
+    { "ST12-015": "ST12-013", "ST12-001": "GD05-055" },
+    "Raging Onslaught + Final Victor ×4 + Destiny ×2",
+  ),
+];

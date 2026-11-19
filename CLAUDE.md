@@ -231,6 +231,13 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   Versuch `comboFuel`/`linkValue`. Übernommen: Pilot wartet auf eine Link-Unit auf der Hand (v0 50,8 %,
   v1 49,9 %; alt `pairAnyPilot`). `npm run ab -- --list best` misst mit Turnierlisten; `npm run game` kennt
   `M01B`. Details `docs/AI.md` „Kombos“. Offen: die kurze Vorausschau von v1 sieht mehrzügige Pläne nicht.
+- **Kämpfe durch Effekte (19. Nov., Nutzerwunsch):** v0 bewertet The Final Victor (ST12-013) und andere
+  „fight“-Effekte (Nu Gundam, Qubeley) mit First Strike, Schadensminderung und bester Antwort des Gegners
+  (`fightCommandValue`, `fightChoice`), antwortet selbst sinnvoll und aktiviert First Strike/Suppression nur mit
+  Nutzen (Banshee ST12-006 → dann The Final Victor). Vorher spielte v0 die Karte nie und zahlte Nu Gundams
+  Kosten nie. v0 **50,7 %** (36 960 Spiele, ST12-Decks), v1/Suche/Meta gleich; alt `plain-fights`; `npm run
+ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× The Final Victor und 2× Destiny, `TEST_DECKS` in `src/data/decks.ts`, in Spiel
+  und Simulator unter „Testdecks“, auch in `npm run sim`/`play`/`game`/`combos`). Details `docs/AI.md`.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
