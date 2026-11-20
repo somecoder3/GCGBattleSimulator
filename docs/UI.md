@@ -35,13 +35,16 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
     (`booms`-Map aus `animate()`, Zahl im `{#key}` startet die Animation neu) und Wackeln (`shaking`).
   - Battle Area „x/6“, `data-drop="field"`, Units mit `data-card` (für Pfeile und Ziehen & Ablegen).
   - Ressourcen als echte Karten (`.res-card`, geruht grau, EX gold), „Lv N“ und „a/n aktiv“.
-  - Stapel: Deckrücken und oberste Trash-Karte mit Zahl; Klick auf Trash zeigt ihn im Detail (`showTrash`).
+  - Stapel: Deckrücken und oberste Trash-Karte mit Zahl; Klick auf Trash öffnet ihn als Dialog über dem
+    Spielfeld (`showTrash`, `.trash-layer`; Esc, ✕ oder Klick daneben schließt; Überfahren zeigt die Karte im Detail,
+    Klick hält sie fest). Vorher stand der Trash im Detail und verschwand beim Überfahren einer seiner Karten (Nutzer).
 - **Namensschild der KI**: Schwierigkeit aus `DIFFICULTIES`, Handkarten als kleine Rücken.
 - **Mittelleiste** (drei Spalten): Zug + Phasenleiste `PHASES` (Start/Draw/Resource/Main/End, `phaseIndex`) +
   Unterschritt; Aufforderung/Kampfinfo/Optionen ohne Karte; Knöpfe. `@container (max-width: 860px)`: zweizeilig.
 - **Hand** als Fächer (`--k`/`--ak`), Überfahren hebt die Karte.
 - **Aktionsmenü** schwebt an der gewählten Karte (`menuAt`, berechnet in `placeArrows`): Hand darüber, Feld
-  daneben (damit Ziele sichtbar bleiben).
+  daneben (damit Ziele sichtbar bleiben). Die gewählte Handkarte bleibt angehoben (`.hand-card.raised`), sonst sank sie
+  beim Wechsel der Maus ins Menü und das Menü rutschte mit (Nutzer, 20. Nov.).
 - **Pfeile** (SVG-Overlay, `arrowPath` = quadratische Kurve): orange für den laufenden Kampf (`view.battle`),
   gelb beim Zielen (gewählte Karte → überfahrene Karte, `drag.over` oder Schilde über `aimPlayer`). Neu berechnet
   bei Änderung von View/Auswahl, nach 360 ms (Animationen) und per ResizeObserver.
@@ -70,8 +73,8 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
 
 ## Seitenleiste
 
-- **Detail** zeigt mit Vorrang `peek` (Name im Log überfahren), sonst die überfahrene/gewählte Karte, den Trash
-  oder eine kurze Hilfe. **Feste Höhe** (`clamp(180px, 42vh, 440px)`, Handy `34dvh`): Bei `auto`-Höhe wuchs das
+- **Detail** zeigt mit Vorrang `peek` (Name im Log überfahren), sonst die überfahrene/gewählte/festgehaltene
+  Karte oder eine kurze Hilfe. **Feste Höhe** (`clamp(180px, 42vh, 440px)`, Handy `34dvh`): Bei `auto`-Höhe wuchs das
   Detail beim Überfahren eines Log-Namens, schob das Log nach unten, der Zeiger verließ den Namen, das Detail
   schrumpfte – das Log sprang/flackerte (vom Nutzer gefunden, 20. Nov.). Nie wieder inhaltsabhängig machen.
 - **Log**: Reiter `LOG_FILTERS` (Alle/Kämpfe/Effekte), Symbole `LogIcon`, klebende Zugüberschriften (blau du, rot

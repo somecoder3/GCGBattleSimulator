@@ -322,6 +322,8 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
     `KeywordIcon.svelte` lädt sie per `import.meta.glob(…, ?raw)` und nimmt die Rahmenfarbe aus der Datei;
     `docs/keyword-icons.html` zeigt dieselben Dateien per `<img>` (Doppelklick genügt, Beispiele wie Zustände und Karten; neues Symbol: Eintrag mit Rahmenfarbe in
     `KEYS`, `tests/app/keywordicons.test.ts` prüft Dateien, App und `KEYS` gegeneinander).
+  - Nach Testspiel des Nutzers: gewählte Handkarte bleibt bei offenem Menü angehoben (Menü rutschte vorher mit);
+    Trash als Dialog über dem Spielfeld statt im Detail (dort verschwand er beim Überfahren seiner Karten).
   - Log flackerte beim Überfahren von Kartennamen (Nutzer): das Detail darüber wuchs mit dem Text und schob das
     Log weg. Detail hat jetzt eine feste Höhe (`clamp(180px, 42vh, 440px)`, Handy `34dvh`).
   - WebGPU o. Ä. war nicht nötig (CSS/SVG reichen). Geprüft bei 1440×900, 1024×640, 375×812 und im Replay.

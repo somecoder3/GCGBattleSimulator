@@ -657,6 +657,8 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
       e.preventDefault();
       undo();
+    } else if (e.key === "Escape" && showTrash !== null) {
+      showTrash = null;
     } else if (e.key === "Escape") {
       selected = null;
       pinned = null;
@@ -944,6 +946,7 @@
         <div
           class="hand-card draggable"
           class:dragging={drag?.id === id}
+          class:raised={selected === id}
           style="--k: {i - (me.hand.length - 1) / 2}; --ak: {Math.abs(i - (me.hand.length - 1) / 2)}"
           data-card={id}
           onpointerdown={(e) => onpointerdown(e, id)}
@@ -1096,6 +1099,39 @@
       </button>
     {/if}
 
+    <!-- The trash in its own dialog over the field, so the detail panel stays free for the hovered card. -->
+    {#if showTrash !== null}
+      {@const trash = [...view.players[showTrash].trash].reverse()}
+      <div class="trash-layer" transition:fade={{ duration: 150 }}>
+        <button class="trash-backdrop" aria-label="Trash schließen" onclick={() => (showTrash = null)}
+        ></button>
+        <div class="trash-dialog" role="dialog" aria-label="Trash">
+          <div class="trash-head">
+            <h3>
+              Trash {showTrash === human ? "(du)" : "(KI)"} · {trash.length}
+              {trash.length === 1 ? "Karte" : "Karten"}
+            </h3>
+            <span class="hint">neueste zuerst · Überfahren zeigt das Detail, Klick hält es fest</span>
+            <button class="btn ghost small" onclick={() => (showTrash = null)} aria-label="Schließen"
+              >✕</button
+            >
+          </div>
+          <div class="trash">
+            {#each trash as id (id)}
+              <BoardCard
+                card={def(id)}
+                state={pinned === id ? "selected" : ""}
+                onclick={() => (pinned = pinned === id ? null : id)}
+                onhover={(on) => (hovered = on ? id : null)}
+              />
+            {:else}
+              <p class="hint">Leer.</p>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
+
     {#if result && summary && endHidden}
       <button class="show-end" onclick={() => (endHidden = false)}>Statistik der Partie</button>
     {:else if result && summary}
@@ -1173,15 +1209,6 @@
             ? undefined
             : def(view.cards[detailId]!.pairedTo!)}
         />
-      {:else if showTrash !== null}
-        <h3>Trash {showTrash === human ? "(du)" : "(KI)"}</h3>
-        <div class="trash">
-          {#each [...view.players[showTrash].trash].reverse() as id (id)}
-            <BoardCard card={def(id)} onhover={(on) => (hovered = on ? id : null)} />
-          {:else}
-            <p class="hint">Leer.</p>
-          {/each}
-        </div>
       {:else}
         <ul class="help">
           <li><b>Überfahren</b> zeigt eine Karte hier im Detail (auch Namen im Log).</li>
@@ -1943,7 +1970,9 @@
   .hand-card + .hand-card {
     margin-left: min(-4px, calc((100% - var(--n) * (var(--hcw) + 6px)) / (var(--n) - 1)));
   }
-  .hand-card:hover {
+  /* The selected card stays up while its menu is open (the menu sits on top of it). */
+  .hand-card:hover,
+  .hand-card.raised {
     z-index: 3;
     transform: translateY(-22%) scale(1.08);
   }
@@ -2187,15 +2216,57 @@
     padding: 2px 10px;
     font-size: 12px;
   }
-  .detail h3 {
-    margin: 0 0 8px;
-    font-size: 15px;
+  .trash-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+  }
+  .trash-backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    background: rgb(3 5 10 / 70%);
+    backdrop-filter: blur(2px);
+    cursor: default;
+  }
+  .trash-dialog {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(900px, 100%);
+    max-height: 100%;
+    padding: 14px 16px 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgb(10 14 22 / 96%);
+    box-shadow: var(--shadow);
+  }
+  .trash-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .trash-head h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+  .trash-head .btn {
+    margin-left: auto;
   }
   .trash {
-    --cw: 64px;
+    --cw: clamp(64px, 8vw, 104px);
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 10px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px;
   }
   .help {
     margin: 0;
