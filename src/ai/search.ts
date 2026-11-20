@@ -63,6 +63,8 @@ export class SearchPolicy implements Policy {
   private readonly rng: RngState;
   /** Scores at or below this are lost games (the evaluation gives -win + turn). */
   private readonly lossBelow: number;
+  /** RuleOptions.forcedFiller: simulations as before 20 Nov 2026. */
+  private readonly forcedFiller: boolean;
 
   constructor(
     private readonly engine: Engine,
@@ -78,6 +80,7 @@ export class SearchPolicy implements Policy {
     this.evaluator = new Evaluator(engine, weights, comboKnowledge(engine, rules));
     this.rng = seedRng(seed ^ 0x5ea7c4);
     this.lossBelow = -weights.win / 2;
+    this.forcedFiller = !!rules.forcedFiller;
   }
 
   choose(view: GameState, decision: Decision): Action {
@@ -161,20 +164,39 @@ export class SearchPolicy implements Policy {
    * `rounds` 2 until the own main phase after that.
    */
   private rollout(base: GameState, option: Action, me: PlayerId, rounds = 1): number {
+    // Like v1: an optional end-of-main-phase Command of v0 in this turn is also tried without it.
+    const first = this.simulate(base, option, me, rounds, false);
+    if (!first.optional || this.forcedFiller) return first.value;
+    return Math.max(first.value, this.simulate(base, option, me, rounds, true).value);
+  }
+
+  private simulate(
+    base: GameState,
+    option: Action,
+    me: PlayerId,
+    rounds: number,
+    skipOptional: boolean,
+  ): { value: number; optional: boolean } {
     const s = cloneState(base);
     const start = base.turn;
     const until = this.options.horizon === "turn" ? start + 1 : start + 2 * rounds;
+    let optional = false;
     try {
       this.engine.apply(s, option);
       for (let n = 0; s.pending && n < MAX_ROLLOUT * rounds; n++) {
         const p = s.pending;
         if (p.kind === "main" && s.turn >= until && (p.player === me || this.options.horizon === "turn"))
           break;
-        this.engine.apply(s, this.rules.choose(s, p));
+        let action = this.rules.choose(s, p);
+        if (s.turn === start && p.player === me && this.rules.optionalPlay(s, p, action)) {
+          optional = true;
+          if (skipOptional) action = this.rules.chooseWithoutOptional(s, p);
+        }
+        this.engine.apply(s, action);
       }
-      return this.evaluator.evaluate(s, me);
+      return { value: this.evaluator.evaluate(s, me), optional };
     } catch {
-      return -Infinity;
+      return { value: -Infinity, optional: false };
     }
   }
 }

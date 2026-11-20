@@ -33,6 +33,7 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   turn: { rules: { horizon: "turn" } },
   through: { rules: { horizon: "through" } },
   "pair-any-pilot": { rules: { pairAnyPilot: true } },
+  "forced-filler": { rules: { forcedFiller: true } },
   combos: { rules: { comboFuel: true, linkValue: true } },
   "idle-commands": { rules: { searchIdleCommands: true } },
   /** Both Command rules as before 18 Nov 2026. */

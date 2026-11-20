@@ -72,6 +72,11 @@ export interface RuleOptions {
   horizon?: "battle" | "turn" | "round" | "through";
   /** Pair a Pilot with any Unit, even if a Unit it links is in the hand (before 18 Nov 2026). */
   pairAnyPilot?: boolean;
+  /**
+   * v1/search simulations as before 20 Nov 2026: an end-of-main-phase Command that v0 plays in the
+   * simulation counts even when the turn is better without it (see optionalPlay, docs/AI.md "Vorausschau").
+   */
+  forcedFiller?: boolean;
 }
 
 /** keepValue points less for a card the own deck wants in the trash (per DeckPlan.trashFuel, at most 1). */
@@ -164,6 +169,29 @@ export class HeuristicPolicy implements Policy {
     return c.type === "UNIT" ? c.level : 0;
   }
 
+  /**
+   * Is this v0 choice in the main phase optional: a Command that only draws, looks at the top of the
+   * deck … (no removal, no boost)? The simulations of v1/search also try the turn without such cards
+   * (simulator game of 20 Nov 2026: v0 would play Turning Point of History after an attack, which the
+   * evaluation counts as a lost hand card, so v1 didn't attack at all; docs/AI.md "Vorausschau").
+   */
+  optionalPlay(view: GameState, decision: Decision, action: Action): boolean {
+    if (decision.kind !== "main" || action.type !== "playCommand") return false;
+    const ctx = new Ctx(this.engine, view, decision.player, this.options);
+    ctx.mainOptions = this.allowed(view, decision);
+    return ctx.mainScore(action) > 0 && ctx.neutralCommand;
+  }
+
+  /** v0's choice without optional Commands (optionalPlay); the main phase goes on as v0 would play it. */
+  chooseWithoutOptional(view: GameState, decision: Decision): Action {
+    let options = decision.options;
+    for (;;) {
+      const action = this.choose(view, { ...decision, options });
+      if (!this.optionalPlay(view, decision, action)) return action;
+      options = options.filter((o) => o !== action);
+    }
+  }
+
   choose(view: GameState, decision: Decision): Action {
     decision = { ...decision, options: this.allowed(view, decision) };
     const options = decision.options;
@@ -224,6 +252,8 @@ class Ctx {
 
   /** The options of the current main decision (to see which Units can still attack this turn). */
   mainOptions: Action[] = [];
+  /** Set by mainCommandScore: the Command only draws, looks at the deck … (no removal, no boost). */
+  neutralCommand = false;
 
   get enemy(): PlayerId {
     return this.me === 0 ? 1 : 0;
@@ -502,8 +532,10 @@ class Ctx {
         neutral = true;
       }
     }
+    this.neutralCommand = false;
     if (best > 0) return best;
     if (!neutral) return -1;
+    this.neutralCommand = true;
     // Drawing is urgent with a small hand (first, for more choices this turn), or with no Unit in play
     // and none to deploy (to find one to defend with).
     const draws = program.some((i) => i.op === "draw");

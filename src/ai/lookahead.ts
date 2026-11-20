@@ -35,6 +35,7 @@ export class LookaheadPolicy implements Policy {
   readonly name = "heuristic-v1";
   private readonly rules: HeuristicPolicy;
   private readonly evaluator: Evaluator;
+  private readonly options: RuleOptions;
 
   constructor(
     private readonly engine: Engine,
@@ -44,6 +45,7 @@ export class LookaheadPolicy implements Policy {
     rules: RuleOptions = {},
   ) {
     if (rules.horizon) this.horizon = rules.horizon;
+    this.options = rules;
     this.rules = new HeuristicPolicy(engine, rules);
     this.evaluator = new Evaluator(engine, weights, comboKnowledge(engine, rules));
   }
@@ -68,8 +70,24 @@ export class LookaheadPolicy implements Policy {
     return scored.map((x) => x.option);
   }
 
-  /** Value of the position after `option` and the v0 continuation up to the next main decision. */
+  /**
+   * Value of the position after `option` and the v0 continuation up to the horizon. When v0 plays an
+   * optional Command of its own in this turn (HeuristicPolicy.optionalPlay: draw, look at the top …),
+   * the turn is also simulated without it and the better result counts: such a card shouldn't make the
+   * option before it look worse (docs/AI.md "Vorausschau").
+   */
   private score(base: GameState, option: Action, me: 0 | 1): number {
+    const first = this.simulate(base, option, me, false);
+    if (!first.optional || this.options.forcedFiller) return first.value;
+    return Math.max(first.value, this.simulate(base, option, me, true).value);
+  }
+
+  private simulate(
+    base: GameState,
+    option: Action,
+    me: 0 | 1,
+    skipOptional: boolean,
+  ): { value: number; optional: boolean } {
     const s = cloneState(base);
     const turn = base.turn;
     const done = (st: GameState) => {
@@ -88,14 +106,21 @@ export class LookaheadPolicy implements Policy {
     };
     const limit =
       this.horizon === "through" ? 3 * MAX_ROLLOUT : this.horizon === "round" ? 2 * MAX_ROLLOUT : MAX_ROLLOUT;
+    let optional = false;
     try {
       this.engine.apply(s, option);
       for (let n = 0; s.pending && !done(s) && n < limit; n++) {
-        this.engine.apply(s, this.rules.choose(s, s.pending));
+        const decision = s.pending;
+        let action = this.rules.choose(s, decision);
+        if (s.turn === turn && decision.player === me && this.rules.optionalPlay(s, decision, action)) {
+          optional = true;
+          if (skipOptional) action = this.rules.chooseWithoutOptional(s, decision);
+        }
+        this.engine.apply(s, action);
       }
-      return this.evaluator.evaluate(s, me);
+      return { value: this.evaluator.evaluate(s, me), optional };
     } catch {
-      return -Infinity; // the simulation needed something the stand-ins can't provide
+      return { value: -Infinity, optional: false }; // the simulation needed something the stand-ins can't provide
     }
   }
 }

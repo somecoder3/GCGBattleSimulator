@@ -347,6 +347,29 @@ Die Suche (Schwer) gewinnt gegen das neue v1 noch 51,7 % (48,4–55,1 %, 864 Spi
 Stichproben laufen schon über eine Runde. Kosten +10 % pro Spiel (1,75 → 1,92 s, 40 Spiele), +3 % pro
 Entscheidung (14,1 → 14,5 ms). Nicht übernommen (Nutzer entscheidet); „Sehr schwer“ braucht ~3,5 s pro Spiel.
 
+### Optionale Such-Karten in der Simulation (20. Nov. 2026, vom Nutzer im Replay gefunden)
+
+Simulator-Spiel (Marida ♥️ gegen (Caber-)Newtype, beide v1): Im Zug 8 griff White Gundam nicht an, obwohl die
+gegnerische Base nur noch 2 HP hatte und der Gegner keine Units. Grund: Nach dem Angriff blieb die Main Phase
+in der Simulation offen, und v0 spielte dort noch Turning Point of History (sieht nur Karten an, zieht ohne
+(Newtype)-Pilot nicht). Die Bewertung zählt das als verlorene Handkarte (−2), mehr als die zerstörte Base
+(+1,6); „Main Phase beenden“ hatte diesen Nachteil nicht und gewann knapp (23,17 gegen 22,77).
+
+Erster Versuch (verworfen, Nutzer: falscher Umbau): in Simulationen solche Karten nie spielen
+(`quietRollouts`, 50,0 % / 50,5 %). Übernommen: **Spielt v0 in der Simulation im eigenen Zug eine Karte, die
+nur zieht oder das Deck ansieht** (`HeuristicPolicy.optionalPlay`: Command ohne Removal/Verstärkung,
+`Ctx.neutralCommand`), **wird der Zug zusätzlich ohne sie gerechnet** (`chooseWithoutOptional`: v0 nimmt dann
+die nächstbeste Option) **und das bessere Ergebnis zählt.** So kann eine Such-Karte eine Option nur besser
+machen; ob sie selbst gespielt wird, entscheidet ihre eigene Bewertung. Gilt für v1 und die Suche; alt als
+`forcedFiller` (`npm run ab -- --b forced-filler`). Test `tests/ai/optionalplay.test.ts`.
+
+Messung (neu gegen alt, `npm run ab -- --b forced-filler`): v1 Konsenslisten 50,2 % (49,2–51,2 %), beste
+Listen 50,6 % (49,6–51,6 %), je 9216 Spiele; Suche 48,9 % und 50,4 % (zwei Seeds, je 2304, zusammen 49,7 %).
+Also gleich stark, aber ohne den offensichtlichen Fehler. Rechenzeit v1 etwa +5 % (264 statt ~250 s für
+9216 Spiele; die zweite Simulation läuft nur, wenn eine solche Karte vorkommt). Die erste Fassung (nur Karten,
+die v0 am Ende der Main Phase spielt; beim Weglassen „Main Phase beenden“) war ebenso stark (49,9 % / 50,5 %),
+übersah aber Zieh-Karten, die v0 bei kleiner Hand schon vor den Angriffen spielt.
+
 ## Kämpfe durch Effekte und aktiviertes First Strike (19. Nov. 2026, Nutzerwunsch)
 
 The Final Victor (ST12-013: beide Spieler wählen je eine eigene Unit, nur der Schadensschritt) kannte v0

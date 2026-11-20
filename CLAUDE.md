@@ -334,6 +334,12 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   nichts gespeichert), sichtbar im Endbildschirm, in der Replay-Leiste und der Spieleliste, Suche „Replay suchen“
   im Simulator. Warnung, wenn ein Replay heute anders endet als im Lauf. Details `docs/UI.md`. Tests
   `tests/sim/gamehash.test.ts`.
+- **Such-Karten in der Simulation (20. Nov., vom Nutzer im Replay gefunden):** v1 griff mit White Gundam
+  nicht an, weil v0 in der Simulation danach Turning Point of History spielte (zählt als verlorene Handkarte).
+  Jetzt rechnen v1/Suche den Zug zusätzlich ohne solche reinen Zieh-/Such-Commands und nehmen das bessere
+  Ergebnis (`optionalPlay`/`chooseWithoutOptional` in `src/ai/heuristic.ts`, alt `forcedFiller`). Gleich stark
+  (v1 50,2/50,6 %, Suche 49,7 %), +5 % Zeit; Nutzer-Entscheidung: übernehmen. Ein erster Versuch, solche
+  Karten in Simulationen nie zu spielen, wurde verworfen. Details `docs/AI.md` „Vorausschau“.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
