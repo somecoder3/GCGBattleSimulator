@@ -18,6 +18,7 @@
   import { metaBaseId, type MetaList } from "../../../meta/decks";
   import { createWorkers, defaultWorkerCount, type BrowserWorker } from "../../lib/simworkers";
   import HoverTip from "../HoverTip.svelte";
+  import { findGame, jobHasher } from "../../../sim/gamehash";
 
   // Simulator: many AI games in Web Workers, live statistics, saved runs, card performance, replays.
 
@@ -28,7 +29,7 @@
   }: {
     pool: CardPool;
     userDecks?: DeckChoice[];
-    onreplay: (job: SimJob, index: number, names: Record<string, string>) => void;
+    onreplay: (job: SimJob, index: number, names: Record<string, string>, expected?: GameSummary) => void;
   } = $props();
 
   // Meta decks as consensus lists, best placed real lists or both (Mxx / MxxB).
@@ -269,6 +270,27 @@
     view = "overview";
   }
 
+  // Every simulated game has a hash (src/sim/gamehash.ts); searching it opens the replay.
+  const hashOf = $derived(job ? jobHasher(job) : null);
+  let hashQuery = $state("");
+  let hashNote = $state<string>();
+  function searchHash() {
+    const current = job ? [{ job, games: results, deckNames: names }] : [];
+    const found = findGame([...current, ...runs], hashQuery);
+    if (!found) {
+      hashNote = "Kein Spiel mit diesem Hash im aktuellen oder in den gespeicherten Läufen.";
+      return;
+    }
+    hashNote = undefined;
+    const { run, index } = found;
+    onreplay(
+      run.job,
+      index,
+      run.deckNames,
+      run.games.find((g) => g.index === index),
+    );
+  }
+
   async function deleteRun(r: SavedRun) {
     if (r.id === undefined) return;
     await db.runs.delete(r.id);
@@ -452,6 +474,27 @@
         {/if}
       </div>
       {#if error}<p class="error">{error}</p>{/if}
+    </div>
+
+    <div class="panel runs">
+      <h2>Replay suchen</h2>
+      <form
+        class="hash-search"
+        onsubmit={(e) => {
+          e.preventDefault();
+          searchHash();
+        }}
+      >
+        <input
+          type="search"
+          placeholder="Spiel-Hash, z. B. 0k3f9x2ab1"
+          bind:value={hashQuery}
+          aria-label="Spiel-Hash"
+          spellcheck="false"
+        />
+        <button class="btn" disabled={!hashQuery.trim()}>Öffnen</button>
+      </form>
+      {#if hashNote}<p class="hint">{hashNote}</p>{/if}
     </div>
 
     {#if runs.length}
@@ -715,21 +758,22 @@
           <table class="games">
             <thead
               ><tr
-                ><th>#</th><th>Decks</th><th>KI</th><th>Beginnt</th><th>Ergebnis</th><th>Züge</th><th
-                ></th></tr
+                ><th>#</th><th>Hash</th><th>Decks</th><th>KI</th><th>Beginnt</th><th>Ergebnis</th><th>Züge</th
+                ><th></th></tr
               ></thead
             >
             <tbody>
               {#each shownGames as g (g.index)}
                 <tr>
                   <td>{g.index}</td>
+                  <td><code class="hash">{hashOf?.(g.index) ?? ""}</code></td>
                   <td>{shortId(g.decks[0]!)} – {shortId(g.decks[1]!)}</td>
                   <td>{g.ai[0] === g.ai[1] ? g.ai[0] : `${g.ai[0]} – ${g.ai[1]}`}</td>
                   <td>{shortId(g.decks[g.firstPlayer]!)}</td>
                   <td>{outcome(g)}</td>
                   <td>{g.turns}</td>
                   <td>
-                    {#if job}<button class="btn small" onclick={() => onreplay(job!, g.index, names)}
+                    {#if job}<button class="btn small" onclick={() => onreplay(job!, g.index, names, g)}
                         >Replay</button
                       >{/if}
                   </td>
@@ -820,6 +864,26 @@
   }
   label.check.partial {
     opacity: 0.7;
+  }
+  .hash-search {
+    display: flex;
+    gap: 8px;
+  }
+  .hash-search input {
+    flex: 1;
+    min-width: 0;
+    min-height: 34px;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-raised);
+    color: var(--text);
+    font-family: ui-monospace, monospace;
+  }
+  code.hash {
+    font-size: 12px;
+    color: var(--text-dim);
+    user-select: all;
   }
   .modes {
     display: flex;

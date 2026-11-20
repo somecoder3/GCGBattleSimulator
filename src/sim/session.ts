@@ -59,7 +59,14 @@ export class GameSession {
   }
 
   static restore(engine: Engine, saved: SavedSession): GameSession {
-    const { version: _version, actions, auto, ...setup } = saved;
+    // `match` holds the extras of an exported game (gameexport.ts); it isn't part of the setup.
+    const {
+      version: _version,
+      actions,
+      auto,
+      match: _match,
+      ...setup
+    } = saved as SavedSession & { match?: unknown };
     return new GameSession(engine, setup, actions, auto);
   }
 

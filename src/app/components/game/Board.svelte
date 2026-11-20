@@ -29,7 +29,7 @@
     segments,
     type LogLine,
   } from "../../lib/gamelog";
-  import { gameFileName, gameLogText } from "../../lib/gameexport";
+  import { gameFileName, gameLogText, matchExport, type MatchInfo } from "../../lib/gameexport";
   import { download } from "../../lib/db";
   import BoardCard from "./BoardCard.svelte";
   import CardInfo from "./CardInfo.svelte";
@@ -46,6 +46,8 @@
     onnew,
     opponentField = [],
     replay = false,
+    revealHands = false,
+    match,
   }: {
     engine: Engine;
     pool: CardPool;
@@ -56,6 +58,10 @@
     opponentField?: FieldDeck[];
     /** Watching a recorded game: no decisions, no AI turns, no undo. */
     replay?: boolean;
+    /** Replay: show the opponent's hand (face up, with details on hover). */
+    revealHands?: boolean;
+    /** A simulated game: hash, job and AIs for the export. */
+    match?: MatchInfo;
   } = $props();
 
   // The AI knows its own list and the field, never the human's actual deck.
@@ -210,7 +216,7 @@
   let exportNote = $state<string>();
   async function copyLog() {
     try {
-      await navigator.clipboard.writeText(gameLogText(engine, session));
+      await navigator.clipboard.writeText(gameLogText(engine, session, new Date(), match));
       exportNote = "Verlauf kopiert.";
     } catch (e) {
       exportNote = `Kopieren fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`;
@@ -218,8 +224,11 @@
     later(2500, () => (exportNote = undefined));
   }
   function saveGame() {
-    download(`${gameFileName(session)}.json`, JSON.stringify(session.save(), null, 1));
-    exportNote = "Partie gespeichert (im Spiel-Reiter wieder ladbar).";
+    const file = match ? `replay-${match.hash}` : gameFileName(session);
+    download(`${file}.json`, JSON.stringify(matchExport(engine, pool, session, match), null, 1));
+    exportNote = match
+      ? "Exportiert: Decks, alle Entscheidungen, Ergebnis und Verlauf."
+      : "Partie gespeichert (im Spiel-Reiter wieder ladbar).";
     later(3500, () => (exportNote = undefined));
   }
 
@@ -443,7 +452,9 @@
   });
 
   function def(id: CardId): CardDef | undefined {
-    const no = view.cards[id]!.no;
+    let no = view.cards[id]!.no;
+    // Replay with open hands: the opponent's hand cards come from the full state.
+    if (no === HIDDEN && revealHands && view.cards[id]!.zone === "hand") no = session.state.cards[id]!.no;
     return no === HIDDEN ? undefined : pool.get(no);
   }
 
@@ -878,9 +889,28 @@
       <span class="avatar" aria-hidden="true">KI</span>
       <span class="pname">KI <small>{aiLabel}</small></span>
       <div class="opp-hand" aria-label="Hand der KI: {opp.hand.length} Karten">
-        {#each opp.hand as id (id)}
-          <span class="mini-back" animate:flip={{ duration: 250 }} in:fly={{ y: -12, duration: 250 }}></span>
-        {/each}
+        {#if revealHands}
+          {#each opp.hand as id (id)}
+            {@const open = def(id)}
+            {#if open}
+              <button
+                class="mini-face"
+                class:hot={hovered === id}
+                title={open.name}
+                onpointerenter={() => (hovered = id)}
+                onpointerleave={() => (hovered = null)}
+                onclick={() => (pinned = pinned === id ? null : id)}
+              >
+                <CardImage card={open} src={cardImageUrl(open, "small")} eager />
+              </button>
+            {/if}
+          {/each}
+        {:else}
+          {#each opp.hand as id (id)}
+            <span class="mini-back" animate:flip={{ duration: 250 }} in:fly={{ y: -12, duration: 250 }}
+            ></span>
+          {/each}
+        {/if}
       </div>
       <span class="plate-info">Hand <strong>{opp.hand.length}</strong></span>
     </div>
@@ -1141,6 +1171,7 @@
         {pool}
         canUndo={canUndo && !replay}
         {replay}
+        hash={match?.hash}
         {exportNote}
         onundo={undo}
         {onnew}
@@ -1347,6 +1378,26 @@
   .opp-hand {
     display: flex;
     padding-left: 4px;
+  }
+  .mini-face {
+    width: 40px;
+    margin-left: -8px;
+    padding: 0;
+    border: 1px solid #36507a;
+    border-radius: 3px;
+    overflow: hidden;
+    background: none;
+    box-shadow: -1px 0 2px rgb(0 0 0 / 50%);
+    transition: transform 0.12s;
+  }
+  .mini-face:first-child {
+    margin-left: 0;
+  }
+  .mini-face.hot,
+  .mini-face:hover {
+    transform: translateY(3px) scale(1.08);
+    z-index: 1;
+    border-color: var(--accent, #4fc3ff);
   }
   .mini-back {
     width: 15px;

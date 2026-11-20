@@ -97,8 +97,23 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
   (Schildbrüche je Zug mit Angreifern, Base zerstört). Zuordnung über `attack`/`block`, zurückgesetzt bei
   `battleEnd`/`endAction`.
 - Anzeige: Sieg/Niederlage, Kacheln „du:KI“, Vorteils-Balken (blau oben/rot unten), Schildlinien, letzte sechs
-  Momente. „Spielfeld ansehen“ blendet aus (`endHidden`), Knopf „Statistik der Partie“ holt ihn zurück. Im Replay nur
-  „Replay schließen“.
+  Momente. „Spielfeld ansehen“ blendet aus (`endHidden`), Knopf „Statistik der Partie“ holt ihn zurück. Im Replay
+  „Verlauf kopieren“, „Match exportieren (.json)“ und „Replay schließen“, dazu der Spiel-Hash.
+
+## Replay (`ReplayScreen.svelte`) und Export
+
+- Leiste: Schritte, Tempo (0,5×–8×, Verzögerung pro Entscheidung) und „Hand des Gegners“ (Board-Prop
+  `revealHands`: Handkarten von Sitz 2 offen in der Namensleiste, `def()` liest sie aus dem vollen Zustand,
+  Überfahren zeigt das Detail); beides in `localStorage` `gcg-battle-simulator.replay`.
+- Spiel-Hash (`src/sim/gamehash.ts`): 10 Zeichen aus allem, was das Spiel bestimmt (Decks, KIs, Seed, Modus,
+  Regeln, Gewichte, Mulligans, Zuglimit, Index), nicht aus Spielzahl, Namen, Anteilen. Nichts wird gespeichert;
+  die Suche im Simulator („Replay suchen“) rechnet die Hashes des aktuellen und aller gespeicherten Läufe nach.
+  Spieleliste hat eine Spalte „Hash“.
+- Replays werden mit der heutigen Engine und KI neu gespielt. Weicht Sieger oder Zugzahl vom gespeicherten Lauf
+  ab, zeigt die Leiste eine Warnung.
+- Export (`matchExport` in `src/app/lib/gameexport.ts`): die gespeicherte Partie (`SavedSession`, im Spiel-Reiter
+  ladbar, `npm run play -- show`) plus `match`: Decks mit Kartennamen und KI je Sitz, Ergebnis, Verlauf als
+  Zeilen, bei Simulationsspielen Hash, Spielnummer und der ganze Job. Gilt auch für „Partie speichern“ im Spiel.
 
 ## Startbildschirm (`PlayScreen.svelte`)
 

@@ -7,7 +7,7 @@
   import MetaScreen from "./components/meta/MetaScreen.svelte";
   import ReplayScreen from "./components/sim/ReplayScreen.svelte";
   import SimScreen from "./components/sim/SimScreen.svelte";
-  import type { SimJob } from "../sim/runner";
+  import type { GameSummary, SimJob } from "../sim/runner";
   import { loadCardPool } from "./lib/cardpool";
   import { db } from "./lib/db";
   import { BUNDLED_SNAPSHOT, setSnapshot, setUserDecks } from "./lib/decks";
@@ -32,7 +32,12 @@
   // A new version took over (service worker update): offer a reload, since the page still runs the old code.
   let updated = $state(false);
   // A simulated game being watched (from the simulator's game list).
-  let replay = $state.raw<{ job: SimJob; index: number; names: Record<string, string> } | null>(null);
+  let replay = $state.raw<{
+    job: SimJob;
+    index: number;
+    names: Record<string, string>;
+    expected?: GameSummary;
+  } | null>(null);
 
   onMount(() => {
     if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
@@ -89,10 +94,14 @@
       job={replay.job}
       index={replay.index}
       names={replay.names}
+      expected={replay.expected}
       onclose={() => (replay = null)}
     />
   {:else if pool && tab === "sim"}
-    <SimScreen {pool} onreplay={(job, index, names) => (replay = { job, index, names })} />
+    <SimScreen
+      {pool}
+      onreplay={(job, index, names, expected) => (replay = { job, index, names, expected })}
+    />
   {:else if pool && tab === "meta"}
     <MetaScreen {pool} />
   {:else if pool && tab === "decks"}

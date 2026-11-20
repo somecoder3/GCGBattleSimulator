@@ -14,6 +14,7 @@
     pool,
     canUndo,
     replay = false,
+    hash,
     exportNote,
     onundo,
     onnew,
@@ -27,6 +28,8 @@
     canUndo: boolean;
     /** Watching a recorded game: only closing it. */
     replay?: boolean;
+    /** Hash of a simulated game (searchable in the simulator). */
+    hash?: string;
     exportNote?: string;
     onundo: () => void;
     onnew: () => void;
@@ -61,6 +64,16 @@
   const sy = (n: number) => SH - 6 - (n / 6) * (SH - 14);
   const line = (k: 0 | 1) =>
     summary.points.map((p, i) => `${i ? "L" : "M"} ${(i + 0.5) * step} ${sy(p.shields[k])}`).join(" ");
+  let copied = $state(false);
+  async function copyHash() {
+    try {
+      await navigator.clipboard.writeText(hash ?? "");
+      copied = true;
+      setTimeout(() => (copied = false), 1500);
+    } catch {
+      // the hash stays selectable
+    }
+  }
   const fmt = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")}`;
 </script>
 
@@ -69,6 +82,14 @@
     <header>
       <h2>{title}</h2>
       <p class="headline">{headline}</p>
+      {#if hash}
+        <p class="hash">
+          Spiel-Hash <code>{hash}</code>
+          <button class="copy" onclick={copyHash} title="Hash kopieren (im Simulator suchbar)"
+            >{copied ? "✓" : "⧉"}</button
+          >
+        </p>
+      {/if}
     </header>
 
     <div class="grid">
@@ -174,6 +195,10 @@
     <div class="actions">
       <button class="btn" onclick={onhide}>Spielfeld ansehen</button>
       {#if replay}
+        <button class="btn" onclick={oncopy}>Verlauf kopieren</button>
+        <button class="btn" onclick={onsave} title="Decks mit Karten, alle Entscheidungen, Ergebnis, Verlauf"
+          >Match exportieren (.json)</button
+        >
         <button class="btn primary" onclick={onnew}>Replay schließen</button>
       {:else}
         {#if canUndo}<button class="btn" onclick={onundo}>↶ Letzte Entscheidung zurück</button>{/if}
@@ -236,6 +261,26 @@
       opacity: 0;
       transform: scale(1.6);
     }
+  }
+  .hash {
+    margin: -8px 0 12px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .hash code {
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgb(255 255 255 / 8%);
+    color: var(--text);
+    user-select: all;
+  }
+  .hash .copy {
+    margin-left: 4px;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: none;
+    color: var(--text-dim);
   }
   .headline {
     margin: 4px 0 14px;

@@ -328,6 +328,12 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
     Log weg. Detail hat jetzt eine feste Höhe (`clamp(180px, 42vh, 440px)`, Handy `34dvh`).
   - WebGPU o. Ä. war nicht nötig (CSS/SVG reichen). Geprüft bei 1440×900, 1024×640, 375×812 und im Replay.
     Tests `tests/app/gamesummary.test.ts`, `tests/app/gamelog.test.ts`; 289 Tests.
+- **Replays (20. Nov., Nutzerwunsch):** Tempo 0,5×–8× und Umschalter „Hand des Gegners“ im Replay;
+  „Match exportieren (.json)“ im Endbildschirm (Decks mit Kartennamen, KIs, Ergebnis, Verlauf, Job; lädt als
+  Partie); jedes Simulationsspiel hat einen **Spiel-Hash** (`src/sim/gamehash.ts`, aus Job + Index berechnet,
+  nichts gespeichert), sichtbar im Endbildschirm, in der Replay-Leiste und der Spieleliste, Suche „Replay suchen“
+  im Simulator. Warnung, wenn ein Replay heute anders endet als im Lauf. Details `docs/UI.md`. Tests
+  `tests/sim/gamehash.test.ts`.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
