@@ -18,6 +18,9 @@ npm run dev      # http://localhost:5173/ (Reiter „Spielen“: gegen die KI, �
 
 Bei einem bestehenden Klon ohne Submodul einmal `git submodule update --init`.
 
+Unter Windows startet ein Doppelklick auf `dev.bat` den Dev-Server und öffnet die App im Browser
+(installiert vorher fehlende `node_modules` und holt ein fehlendes Submodul `gcgdb/`).
+
 ### Kartenbilder
 
 Die offiziellen Bilder liegen **nicht** im Repo. `npm run images` übernimmt sie aus dem Cache von

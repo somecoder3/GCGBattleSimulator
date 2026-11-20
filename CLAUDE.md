@@ -328,6 +328,8 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
     Log weg. Detail hat jetzt eine feste Höhe (`clamp(180px, 42vh, 440px)`, Handy `34dvh`).
   - WebGPU o. Ä. war nicht nötig (CSS/SVG reichen). Geprüft bei 1440×900, 1024×640, 375×812 und im Replay.
     Tests `tests/app/gamesummary.test.ts`, `tests/app/gamelog.test.ts`; 289 Tests.
+- **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
+  Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
