@@ -22,6 +22,10 @@ export interface LogLine {
   player?: PlayerId;
   /** Caused by an automatic pass. */
   auto?: boolean;
+  /** The event the line describes ("attack", "draw" …), or "choice" for a decision without an event. */
+  event?: string;
+  /** Cards named in the text (visible to the human then), to highlight and show them. */
+  cards?: { id: CardId; no: string; name: string }[];
 }
 
 const REASONS = {
@@ -57,19 +61,31 @@ export function describeStep(engine: Engine, step: LogStep, human: PlayerId): Lo
   const who = (p: PlayerId) => (p === human ? "Du" : "KI");
   /** Verb form for "Du" or "KI". */
   const v = (p: PlayerId, du: string, ki: string) => `${who(p)} ${p === human ? du : ki}`;
-  const name = (id: CardId) => cardName(engine, s, id, human);
+  // Names used since the last line: they become the line's card references.
+  let named: { id: CardId; no: string; name: string }[] = [];
+  const name = (id: CardId) => {
+    const n = cardName(engine, s, id, human);
+    if (n !== HIDDEN_NAME) named.push({ id, no: s.cards[id]!.no, name: n });
+    return n;
+  };
   const owner = (id: CardId) => s.cards[id]!.owner;
   let subject: PlayerId | null = step.player;
-  const add = (kind: LogLine["kind"], text: string, extra: Partial<LogLine> = {}) =>
+  let event = "choice";
+  const add = (kind: LogLine["kind"], text: string, extra: Partial<LogLine> = {}) => {
+    const cards = named.filter((c) => text.includes(c.name));
+    named = [];
     lines.push({
       index: step.index,
       actor: step.player,
       subject,
       kind,
       text,
+      event,
+      ...(cards.length ? { cards } : {}),
       ...(step.auto ? { auto: true } : {}),
       ...extra,
     });
+  };
 
   // Decisions without an event of their own get a line, so every human decision can be rolled back.
   if (step.player === human && step.action) {
@@ -98,19 +114,28 @@ export function describeStep(engine: Engine, step: LogStep, human: PlayerId): Lo
   /** Name of a card the human has seen (looked at), even if it is hidden again now. */
   const seenName = (id: CardId) => {
     const no = s.cards[id]?.no;
-    return no && engine.lib.has(no) ? engine.lib.get(no).name : name(id);
+    if (!no || !engine.lib.has(no)) return name(id);
+    const n = engine.lib.get(no).name;
+    named.push({ id, no, name: n });
+    return n;
   };
   // Cards the human looked at and put under the deck: one line for all of them.
   const under: CardId[] = [];
   const flushUnder = () => {
     if (!under.length) return;
+    const was = event;
+    event = "toDeck";
     add("info", `Unter dein Deck: ${under.map(seenName).join(", ")}.`);
+    event = was;
     under.length = 0;
   };
 
+  /** In a mulligan step, draws before the first turn are a new opening hand (one line, not five). */
+  let redrawing = step.events.some((x) => x.t === "mulligan");
   for (const e of step.events) {
     if (!(e.t === "toDeck" && e.seenBy === human)) flushUnder();
     subject = eventSubject(e, s) ?? step.player;
+    event = e.t;
     switch (e.t) {
       case "gameStart":
         add("info", `${v(e.firstPlayer, "beginnst", "beginnt")}.`);
@@ -124,13 +149,15 @@ export function describeStep(engine: Engine, step: LogStep, human: PlayerId): Lo
         );
         break;
       case "turnStart":
+        redrawing = false;
         add("turn", `Zug ${e.turn} · ${e.player === human ? "Du" : "KI"}`, {
           turn: e.turn,
           player: e.player,
         });
         break;
       case "draw":
-        if (s.turn > 0) add("info", `${v(e.player, "ziehst", "zieht")} ${name(e.card)}.`);
+        // The new hand of a mulligan is one line ("zieht eine neue Starthand"), not five.
+        if (s.turn > 0 && !redrawing) add("info", `${v(e.player, "ziehst", "zieht")} ${name(e.card)}.`);
         break;
       case "deploy":
         add("info", `${v(e.player, "setzt", "setzt")} ${name(e.card)} ein.`);
@@ -254,9 +281,59 @@ function sign(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
+const HIDDEN_NAME = "eine Karte";
+
 /** Name of a card, or "eine Karte" if the human can't see it in this state. */
 export function cardName(engine: Engine, s: GameState, id: CardId, human: PlayerId): string {
   const card = s.cards[id];
-  if (!card || isHiddenFrom(s, id, human)) return "eine Karte";
+  if (!card || isHiddenFrom(s, id, human)) return HIDDEN_NAME;
   return engine.lib.has(card.no) ? engine.lib.get(card.no).name : card.no;
 }
+
+export type Segment = { text: string } | { card: { id: CardId; no: string; name: string } };
+
+/** The text of a line split at the names of its cards, to show them as references. */
+export function segments(line: LogLine): Segment[] {
+  const out: Segment[] = [];
+  let rest = line.text;
+  const refs = line.cards ?? [];
+  for (;;) {
+    let best: { at: number; ref: (typeof refs)[number] } | null = null;
+    for (const ref of refs) {
+      const at = rest.indexOf(ref.name);
+      if (at >= 0 && (!best || at < best.at || (at === best.at && ref.name.length > best.ref.name.length)))
+        best = { at, ref };
+    }
+    if (!best) break;
+    if (best.at) out.push({ text: rest.slice(0, best.at) });
+    out.push({ card: best.ref });
+    rest = rest.slice(best.at + best.ref.name.length);
+  }
+  if (rest) out.push({ text: rest });
+  return out;
+}
+
+/** Log filters: battles, effects (and cards played), or everything. */
+export const LOG_FILTERS = {
+  all: { label: "Alle", events: null },
+  battle: {
+    label: "Kämpfe",
+    events: ["attack", "block", "damage", "playerDamage", "shieldBreak", "destroyed", "gameOver"],
+  },
+  effects: {
+    label: "Effekte",
+    events: [
+      "effect",
+      "burst",
+      "modifier",
+      "recover",
+      "token",
+      "look",
+      "reveal",
+      "toHand",
+      "toDeck",
+      "removed",
+      "play",
+    ],
+  },
+} as const;

@@ -76,9 +76,12 @@
   </span>
 </div>
 
-{#key step}
-  <Board {engine} {pool} {session} replay onsave={() => {}} onnew={onclose} />
-{/key}
+<!-- The bar above takes about 48 px more than the app's header alone. -->
+<div style="--chrome: 112px">
+  {#key step}
+    <Board {engine} {pool} {session} replay onsave={() => {}} onnew={onclose} />
+  {/key}
+</div>
 
 <style>
   .bar {

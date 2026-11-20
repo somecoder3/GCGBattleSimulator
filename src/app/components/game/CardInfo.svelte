@@ -23,6 +23,19 @@
 
   const links = $derived(card.link.map((l) => ("pilotName" in l ? `[${l.pilotName}]` : `(${l.trait})`)));
 
+  /** Colour group of a timing keyword, like ExBurst's badges. */
+  function kwClass(value: string): string {
+    const v = value.split(/[･・]/)[0]!.trim();
+    if (v === "Burst") return "burst";
+    if (v === "Deploy") return "deploy";
+    if (v.startsWith("Activate")) return "activate";
+    if (v === "Attack") return "attack";
+    if (v === "Destroyed") return "destroyed";
+    if (/Pair|Link/.test(v)) return "pair";
+    if (v === "Main" || v === "Action") return "timing-main";
+    return "";
+  }
+
   const lines = $derived(splitCardText(card.text));
   const pilotLines = $derived(pilot ? splitCardText(pilot.text) : []);
 </script>
@@ -31,7 +44,9 @@
   {#each parts as line, i (i)}
     <p>
       {#each line as part, j (j)}
-        {#if part.kind === "text"}{part.value}{:else}<span class={part.kind}>{part.value}</span>{/if}
+        {#if part.kind === "text"}{part.value}{:else}<span class={part.kind} data-kw={kwClass(part.value)}
+            >{part.value}</span
+          >{/if}
       {/each}
     </p>
   {/each}
@@ -108,11 +123,33 @@
     margin: 4px 0 0;
   }
   .timing {
-    padding: 0 5px;
+    --kw: 79 195 255;
+    padding: 0 6px;
     border-radius: 4px;
-    background: color-mix(in srgb, var(--accent) 22%, transparent);
-    color: var(--accent);
-    font-weight: 600;
+    background: rgb(var(--kw) / 20%);
+    box-shadow: inset 0 0 0 1px rgb(var(--kw) / 35%);
+    color: rgb(var(--kw));
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .timing[data-kw="burst"] {
+    --kw: 255 150 60;
+  }
+  .timing[data-kw="deploy"] {
+    --kw: 64 214 196;
+  }
+  .timing[data-kw="activate"] {
+    --kw: 127 224 120;
+  }
+  .timing[data-kw="attack"] {
+    --kw: 255 110 110;
+  }
+  .timing[data-kw="destroyed"] {
+    --kw: 190 140 255;
+  }
+  .timing[data-kw="pair"] {
+    --kw: 255 209 102;
   }
   .keyword {
     color: #ffd166;

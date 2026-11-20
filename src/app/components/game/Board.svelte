@@ -5,7 +5,7 @@
   import { cardImageUrl } from "../../../data/cards";
   import CardImage from "../CardImage.svelte";
   import type { FieldDeck } from "../../../ai/opponent";
-  import { makePolicy } from "../../../ai/registry";
+  import { DIFFICULTIES, makePolicy } from "../../../ai/registry";
   import type { CardPool } from "../../../data/cards";
   import type { CardDef } from "../../../data/types";
   import type { Engine } from "../../../engine/engine";
@@ -20,11 +20,21 @@
     primaryCard,
     secondary,
   } from "../../lib/actions";
-  import { cardName, describeStart, describeSteps, type LogLine } from "../../lib/gamelog";
+  import {
+    LOG_FILTERS,
+    cardName,
+    describeStart,
+    describeSteps,
+    segments,
+    type LogLine,
+  } from "../../lib/gamelog";
   import { gameFileName, gameLogText } from "../../lib/gameexport";
   import { download } from "../../lib/db";
   import BoardCard from "./BoardCard.svelte";
   import CardInfo from "./CardInfo.svelte";
+  import LogIcon from "./LogIcon.svelte";
+  import GameEnd from "./GameEnd.svelte";
+  import { summarize } from "../../lib/gamesummary";
 
   let {
     engine,
@@ -118,6 +128,14 @@
   /** On narrow screens the side panel (controls, details, log) is a drawer. */
   let panelOpen = $state(false);
   let logBox = $state<HTMLElement>();
+  /** A card named in the log under the pointer (shown in the detail even if hidden on the board now). */
+  let peek = $state<CardDef | null>(null);
+  type LogFilter = keyof typeof LOG_FILTERS;
+  let logFilter = $state<LogFilter>("all");
+  function shownInLog(line: LogLine): boolean {
+    const events: readonly string[] | null = LOG_FILTERS[logFilter].events;
+    return !events || events.includes(line.event ?? "");
+  }
 
   // Cards fly between hand, battle area and base; cards without a counterpart (to the trash, drawn
   // from the deck) shrink and fade, with a red flash when they leave.
@@ -134,6 +152,8 @@
   // Short-lived effects of the last step: damage numbers, shaking shield areas, the turn banner.
   let hits = $state.raw(new Map<CardId, { amount: number; n: number }>());
   let shaking = $state.raw(new Set<PlayerId>());
+  /** Shield breaks of the last step per player, to play an impact (the number restarts it). */
+  let booms = $state.raw(new Map<PlayerId, number>());
   let banner = $state.raw<{ text: string; mine: boolean; n: number } | null>(null);
   let effectN = 0;
   const timers: ReturnType<typeof setTimeout>[] = [];
@@ -146,14 +166,18 @@
     const nextHits = new Map<CardId, { amount: number; n: number }>();
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const nextShake = new Set<PlayerId>();
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const nextBooms = new Map<PlayerId, number>();
     for (const e of step.events) {
       if (e.t === "damage" || e.t === "recover") {
         const amount = (nextHits.get(e.card)?.amount ?? 0) + (e.t === "damage" ? -e.amount : e.amount);
         nextHits.set(e.card, { amount, n: ++effectN });
         const card = step.after.cards[e.card]!;
         if (e.t === "damage" && card.zone === "base") nextShake.add(card.owner);
-      } else if (e.t === "shieldBreak" || e.t === "playerDamage") nextShake.add(e.player);
-      else if (e.t === "turnStart") {
+      } else if (e.t === "shieldBreak" || e.t === "playerDamage") {
+        nextShake.add(e.player);
+        nextBooms.set(e.player, ++effectN);
+      } else if (e.t === "turnStart") {
         banner = {
           text: e.player === human ? "Dein Zug" : "Zug der KI",
           mine: e.player === human,
@@ -165,6 +189,10 @@
     if (nextHits.size) {
       hits = nextHits;
       later(1200, () => (hits = new Map()));
+    }
+    if (nextBooms.size) {
+      booms = nextBooms;
+      later(900, () => (booms = new Map()));
     }
     if (nextShake.size) {
       shaking = nextShake;
@@ -238,6 +266,111 @@
   }
 
   onDestroy(() => clearTimeout(revealTimer));
+
+  // ------------------------------------------------------------------------------------------
+  // Arrows over the board: the running battle (attacker → target) and, while the human picks a target
+  // for an attack, from the attacker to the hovered or dragged-over target.
+
+  let boardEl = $state<HTMLElement>();
+  let size = $state({ w: 0, h: 0 });
+  type Arrow = { key: string; d: string; kind: "battle" | "aim"; x: number; y: number };
+  let arrows = $state.raw<Arrow[]>([]);
+  /** Where the menu of the selected card floats (board coordinates). */
+  let menuAt = $state<{ x: number; y: number; side: "above" | "right" | "left" } | null>(null);
+  /** The enemy's shield area under the pointer (aiming at the player). */
+  let aimPlayer = $state(false);
+
+  function centerOf(el: Element | null, box: DOMRect) {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (!r.width) return null;
+    return { x: r.left + r.width / 2 - box.left, y: r.top + r.height / 2 - box.top };
+  }
+
+  function arrowPath(from: { x: number; y: number }, to: { x: number; y: number }) {
+    // A curve that bends sideways, ending a little before the target's center.
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const end = { x: to.x - (dx / len) * 18, y: to.y - (dy / len) * 18 };
+    const bend = Math.min(80, len * 0.25);
+    const c = { x: (from.x + end.x) / 2 - (dy / len) * bend, y: (from.y + end.y) / 2 + (dx / len) * bend };
+    return { d: `M ${from.x} ${from.y} Q ${c.x} ${c.y} ${end.x} ${end.y}`, mid: c };
+  }
+
+  function placeArrows() {
+    if (!boardEl) return;
+    const box = boardEl.getBoundingClientRect();
+    size = { w: box.width, h: box.height };
+    const card = (id: CardId) => boardEl!.querySelector(`[data-card="${id}"]`);
+    const shields = (p: PlayerId) => boardEl!.querySelector(`[data-shields="${p}"] .shields`);
+    const list: Arrow[] = [];
+    const b = view.battle;
+    if (b) {
+      const from = centerOf(card(b.attacker), box);
+      const to = centerOf(
+        b.target === "player" ? shields(b.attackerOwner === 0 ? 1 : 0) : card(b.target),
+        box,
+      );
+      if (from && to) {
+        const { d, mid } = arrowPath(from, to);
+        list.push({ key: `b${b.attacker}`, d, kind: "battle", x: mid.x, y: mid.y });
+      }
+    }
+    if (selected !== null) {
+      const over = drag?.over;
+      const goal =
+        over === "player" || (over === undefined && aimPlayer)
+          ? "player"
+          : over !== null && over !== undefined && over !== "field"
+            ? Number(over)
+            : hovered;
+      const aims = selectedOptions.some((o) => o.type === "attack" && o.target === goal);
+      if (goal !== null && aims) {
+        const from = centerOf(card(selected), box);
+        const to = centerOf(goal === "player" ? shields(enemy) : card(goal), box);
+        if (from && to) {
+          const { d, mid } = arrowPath(from, to);
+          list.push({ key: "aim", d, kind: "aim", x: mid.x, y: mid.y });
+        }
+      }
+    }
+    arrows = list;
+    const el = selected !== null ? card(selected) : null;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      const inHand = !!el.closest(".hand");
+      if (inHand) {
+        // Above the hand card.
+        const x = Math.min(box.width - 110, Math.max(110, r.left + r.width / 2 - box.left));
+        menuAt = { x, y: r.top - box.top - 8, side: "above" };
+      } else {
+        // Beside a card on the field, so the targets stay visible.
+        const right = r.right - box.left + 12;
+        const fits = right + 230 < box.width;
+        menuAt = {
+          x: fits ? right : r.left - box.left - 12,
+          y: r.top - box.top + r.height / 2,
+          side: fits ? "right" : "left",
+        };
+      }
+    } else menuAt = null;
+  }
+
+  $effect(() => {
+    void [view, selected, hovered, aimPlayer, drag?.over];
+    placeArrows();
+    // Cards move with an animation (flip, rest): place again when they have settled.
+    const t = setTimeout(placeArrows, 360);
+    return () => clearTimeout(t);
+  });
+
+  $effect(() => {
+    if (!boardEl) return;
+    const ro = new ResizeObserver(() => placeArrows());
+    ro.observe(boardEl);
+    return () => ro.disconnect();
+  });
 
   onMount(refresh);
 
@@ -492,6 +625,22 @@
     over: "Spielende",
   };
 
+  /** The five phases of a turn (7-1) for the phase bar; battle and end steps are shown as a sub-step. */
+  const PHASES = [
+    { key: "start", label: "Start", steps: ["startTurn"] },
+    { key: "draw", label: "Draw", steps: ["draw"] },
+    { key: "resource", label: "Resource", steps: ["resource"] },
+    { key: "main", label: "Main", steps: ["main", "attack", "block", "battleAction", "damage", "battleEnd"] },
+    { key: "end", label: "End", steps: ["endAction", "endStep", "handStep", "cleanup"] },
+  ];
+  const phaseIndex = $derived(PHASES.findIndex((ph) => ph.steps.includes(view.step)));
+  const substep = $derived(
+    ["attack", "block", "battleAction", "damage", "battleEnd", "endAction", "handStep"].includes(view.step)
+      ? STEP_NAMES[view.step]
+      : "",
+  );
+  const aiLabel = DIFFICULTIES.find((d) => d.ai === (session.setup.ai ?? "heuristic-v1"))?.label ?? "";
+
   const activeResources = (ids: CardId[]) => ids.filter((id) => !view.cards[id]!.rested).length;
   const detailId = $derived(hovered ?? selected);
   const battleInfo = $derived.by(() => {
@@ -499,24 +648,31 @@
     if (!b) return "";
     return `${name(b.attacker)} greift ${b.target === "player" ? (b.attackerOwner === human ? "die KI" : "dich") : name(b.target)} an`;
   });
-  const endText = $derived(
-    !result
-      ? ""
-      : result.winner === null
-        ? "Unentschieden"
-        : result.winner === human
-          ? "Gewonnen!"
-          : "Verloren",
-  );
+  /** The end screen is hidden to look at the final position. */
+  let endHidden = $state(false);
+  $effect(() => {
+    if (!result) endHidden = false;
+  });
+  const summary = $derived.by(() => {
+    void view;
+    return result ? summarize(engine, session.steps, human) : null;
+  });
 </script>
 
 <svelte:window {onkeydown} {onpointermove} {onpointerup} onpointercancel={onpointerup} />
 
-{#snippet field(p: PlayerId)}
+{#snippet mat(p: PlayerId)}
   {@const player = view.players[p]}
-  <div class="field" class:mine={p === human}>
+  {@const top = player.trash.length ? def(player.trash[player.trash.length - 1]!) : undefined}
+  <div
+    class="mat"
+    class:mine={p === human}
+    class:active={view.active === p && !result && view.step !== "mulligan"}
+    aria-label={p === human ? "Deine Seite" : "Seite der KI"}
+  >
     <div
-      class="shieldzone"
+      class="zone shieldzone"
+      data-shields={p}
       data-drop={p === enemy ? "player" : undefined}
       class:over={drag !== null && p === enemy && drag.over === "player"}
       class:shake={shaking.has(p)}
@@ -527,12 +683,18 @@
       aria-label={p === enemy ? "KI angreifen" : "Deine Schilde"}
       onclick={() => p === enemy && clickEnemyPlayer()}
       onkeydown={(e) => e.key === "Enter" && p === enemy && clickEnemyPlayer()}
+      onpointerenter={() => p === enemy && (aimPlayer = true)}
+      onpointerleave={() => p === enemy && (aimPlayer = false)}
     >
-      <div class="shields" title="Schilde">
+      <span class="zlabel">Schilde</span>
+      <div class="shields" title="{player.shields.length} Schilde">
         {#each player.shields as id, i (id)}
-          <span class="shield" style="--i:{i}"></span>
+          <span class="shield" style="--i:{i}" out:fade={{ duration: 300 }}></span>
         {/each}
-        <strong class="count">{player.shields.length}</strong>
+        <strong class="count" class:low={player.shields.length <= 2}>{player.shields.length}</strong>
+        {#if booms.has(p)}
+          {#key booms.get(p)}<span class="boom" aria-hidden="true"></span>{/key}
+        {/if}
       </div>
       <div class="base">
         {#each player.base as id (id)}
@@ -543,6 +705,7 @@
             out:send={{ key: id }}
             class="draggable"
             class:dragging={drag?.id === id}
+            data-card={id}
             onpointerdown={(e) => onpointerdown(e, id)}
           >
             <BoardCard
@@ -562,155 +725,233 @@
       </div>
     </div>
     <div
-      class="battle"
+      class="zone battlezone"
       data-drop={p === human ? "field" : undefined}
       class:over={drag !== null && p === human && drag.over === "field"}
+      class:droppable={p === human && drag !== null && !!dropAction(drag.id, "field")}
     >
-      {#each player.battle as id (id)}
-        <!-- Dragging only adds to the card button inside; keyboard and screen readers use the button. -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="unit draggable"
-          class:dragging={drag?.id === id}
-          data-drop={id}
-          animate:flip={{ duration: 300 }}
-          in:receive={{ key: id }}
-          out:send={{ key: id }}
-          onpointerdown={(e) => onpointerdown(e, id)}
-        >
-          <BoardCard
-            card={def(id)}
-            stats={stats(id)}
-            rested={view.cards[id]!.rested}
-            pilot={pilotOf(id)}
-            state={cardState(id)}
-            flash={flashed.has(id)}
-            battle={battleRole(id)}
-            hit={hits.get(id) ?? null}
-            onclick={() => clickCard(id)}
-            onhover={(on) => (hovered = on ? id : null)}
-          />
-        </div>
-      {/each}
-      {#each { length: Math.max(0, 6 - player.battle.length) } as _, i (i)}
-        <div class="unit placeholder" aria-hidden="true"></div>
-      {/each}
-    </div>
-  </div>
-{/snippet}
-
-{#snippet info(p: PlayerId)}
-  {@const player = view.players[p]}
-  <div class="info">
-    <span class="who">{p === human ? "Du" : "KI"}</span>
-    <span title="Level = Anzahl Ressourcen">Lv. <strong>{player.resources.length}</strong></span>
-    <span class="resources" title="Aktive / alle Ressourcen">
-      {#each player.resources as id (id)}
-        <span class="res" class:rested={view.cards[id]!.rested} class:ex={view.cards[id]!.no === "EXR-001"}
-        ></span>
-      {/each}
-      <small>{activeResources(player.resources)}/{player.resources.length}</small>
-    </span>
-    <span title="Deck">Deck {player.deck.length}</span>
-    <button class="pile" onclick={() => (showTrash = showTrash === p ? null : p)} title="Trash ansehen">
-      Trash {player.trash.length}
-    </button>
-    {#if p !== human}
-      <span title="Handkarten der KI">Hand {player.hand.length}</span>
-    {/if}
-  </div>
-{/snippet}
-
-<div class="game">
-  <section class="board" aria-label="Spielfeld">
-    <div class="side enemy">
-      {@render info(enemy)}
-      <div class="opp-hand" aria-label="Hand der KI">
-        {#each opp.hand as id (id)}
-          <span class="mini-back" animate:flip={{ duration: 250 }} in:fade={{ duration: 200 }}></span>
-        {/each}
-      </div>
-      {@render field(enemy)}
-    </div>
-
-    <div class="center" class:waiting={!decision && !result}>
-      <div class="status">
-        <span class="turn">Zug {view.turn} · {myTurn ? "Dein Zug" : "Zug der KI"}</span>
-        <button class="panel-toggle" onclick={() => (panelOpen = !panelOpen)} aria-expanded={panelOpen}>
-          ☰ Log &amp; Details
-        </button>
-        <span class="step">{STEP_NAMES[view.step]}</span>
-        {#if battleInfo}<span class="battle-info">{battleInfo}</span>{/if}
-      </div>
-      {#if result}
-        <p class="prompt">Spielende.</p>
-      {:else if decision}
-        <p class="prompt">{decisionText(decision, name)}</p>
-        {#if selected !== null && selectedOptions.length}
-          <div class="menu" role="group" aria-label="Möglichkeiten für {name(selected)}">
-            <span class="menu-title">{name(selected)}:</span>
-            <button class="opt info-button" onclick={() => (panelOpen = true)} title="Karte im Detail"
-              >ⓘ</button
-            >
-            {#each selectedOptions as o (JSON.stringify(o))}
-              <button class="opt" onclick={() => act(o)}>{actionLabel(o, name)}</button>
-            {/each}
-            <button class="opt ghost" onclick={() => (selected = null)}>Abbrechen</button>
-          </div>
-        {/if}
-        {#if offBoard.length}
-          <div class="choices">
-            {#each offBoard as id (id)}
-              <BoardCard
-                card={def(id)}
-                state="legal"
-                onclick={() => clickCard(id)}
-                onhover={(on) => (hovered = on ? id : null)}
-              />
-            {/each}
-          </div>
-        {/if}
-        {#if buttons.length}
-          <div class="buttons">
-            {#each buttons as o (JSON.stringify(o))}
-              <button class="btn" class:primary={o === spaceAction} onclick={() => act(o)}>
-                {actionLabel(o, name)}{#if o === spaceAction}<kbd>Leertaste</kbd>{/if}
-              </button>
-            {/each}
-          </div>
-        {/if}
-      {:else if replay}
-        <p class="prompt">Replay (Sicht von Sitz 1)</p>
-      {:else}
-        <p class="prompt thinking">KI ist am Zug …</p>
-      {/if}
-    </div>
-
-    <div class="side me">
-      {@render field(human)}
-      {@render info(human)}
-      <div class="hand" aria-label="Deine Hand" style="--n: {Math.max(2, me.hand.length)}">
-        {#each me.hand as id (id)}
+      <span class="zlabel">Battle Area <small>{player.battle.length}/6</small></span>
+      <div class="battle">
+        {#each player.battle as id (id)}
           <!-- Dragging only adds to the card button inside; keyboard and screen readers use the button. -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
-            class="hand-card draggable"
+            class="unit draggable"
             class:dragging={drag?.id === id}
-            onpointerdown={(e) => onpointerdown(e, id)}
+            data-drop={id}
+            data-card={id}
             animate:flip={{ duration: 300 }}
             in:receive={{ key: id }}
             out:send={{ key: id }}
+            onpointerdown={(e) => onpointerdown(e, id)}
           >
             <BoardCard
               card={def(id)}
+              stats={stats(id)}
+              rested={view.cards[id]!.rested}
+              pilot={pilotOf(id)}
               state={cardState(id)}
+              flash={flashed.has(id)}
+              battle={battleRole(id)}
+              hit={hits.get(id) ?? null}
               onclick={() => clickCard(id)}
               onhover={(on) => (hovered = on ? id : null)}
             />
           </div>
         {/each}
+        {#each { length: Math.max(0, 6 - player.battle.length) } as _, i (i)}
+          <div class="unit placeholder" aria-hidden="true"></div>
+        {/each}
       </div>
     </div>
+    <div class="zone reszone" title="Level = Anzahl Ressourcen; aktive Ressourcen bezahlen Kosten">
+      <span class="zlabel">Ressourcen</span>
+      <span class="level">Lv <strong>{player.resources.length}</strong></span>
+      <div class="res-cards" style="--n: {Math.max(1, player.resources.length)}">
+        {#each player.resources as id (id)}
+          {@const c = def(id)}
+          <span
+            class="res-card"
+            class:rested={view.cards[id]!.rested}
+            class:ex={view.cards[id]!.no === "EXR-001"}
+            in:fly={{ y: p === human ? 20 : -20, duration: 300 }}
+          >
+            {#if c}<CardImage card={c} src={cardImageUrl(c, "small")} eager />{/if}
+          </span>
+        {/each}
+      </div>
+      <span class="res-count"
+        ><strong>{activeResources(player.resources)}</strong>/{player.resources.length} aktiv</span
+      >
+    </div>
+    <div class="piles">
+      <div class="pile" title="Deck: {player.deck.length} Karten">
+        <span class="pile-card back-card"></span>
+        <span class="pile-count">{player.deck.length}</span>
+        <small>Deck</small>
+      </div>
+      <button
+        class="pile"
+        class:open={showTrash === p}
+        onclick={() => (showTrash = showTrash === p ? null : p)}
+        title="Trash ansehen ({player.trash.length})"
+      >
+        {#if top}
+          <span class="pile-card"><CardImage card={top} src={cardImageUrl(top, "small")} eager /></span>
+        {:else}
+          <span class="pile-card empty-pile"></span>
+        {/if}
+        <span class="pile-count">{player.trash.length}</span>
+        <small>Trash</small>
+      </button>
+    </div>
+  </div>
+{/snippet}
+
+<div class="game">
+  <section class="board" aria-label="Spielfeld" bind:this={boardEl}>
+    <div class="plate enemy-plate">
+      <span class="avatar" aria-hidden="true">KI</span>
+      <span class="pname">KI <small>{aiLabel}</small></span>
+      <div class="opp-hand" aria-label="Hand der KI: {opp.hand.length} Karten">
+        {#each opp.hand as id (id)}
+          <span class="mini-back" animate:flip={{ duration: 250 }} in:fly={{ y: -12, duration: 250 }}></span>
+        {/each}
+      </div>
+      <span class="plate-info">Hand <strong>{opp.hand.length}</strong></span>
+    </div>
+    {@render mat(enemy)}
+
+    <div class="center" class:waiting={!decision && !result}>
+      <div class="turnbar">
+        <span class="turn-pill" class:mine={myTurn}>
+          Zug {view.turn} · {view.step === "mulligan" ? "Vorbereitung" : myTurn ? "Du" : "KI"}
+        </span>
+        <ol class="phases" class:mine={myTurn} aria-label="Phasen">
+          {#each PHASES as ph, i (ph.key)}
+            <li class:now={phaseIndex === i} class:done={phaseIndex > i}>{ph.label}</li>
+          {/each}
+        </ol>
+        {#if substep}<span class="substep">{substep}</span>{/if}
+        <button class="panel-toggle" onclick={() => (panelOpen = !panelOpen)} aria-expanded={panelOpen}>
+          ☰ Log &amp; Details
+        </button>
+      </div>
+      <div class="ask">
+        {#if battleInfo}<p class="battle-info">⚔ {battleInfo}</p>{/if}
+        {#if result}
+          <p class="prompt">Spielende.</p>
+        {:else if decision}
+          <p class="prompt">{decisionText(decision, name)}</p>
+          {#if offBoard.length}
+            <div class="choices">
+              {#each offBoard as id (id)}
+                <BoardCard
+                  card={def(id)}
+                  state="legal"
+                  onclick={() => clickCard(id)}
+                  onhover={(on) => (hovered = on ? id : null)}
+                />
+              {/each}
+            </div>
+          {/if}
+        {:else if replay}
+          <p class="prompt">Replay (Sicht von Sitz 1)</p>
+        {:else}
+          <p class="prompt thinking">
+            <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> KI denkt nach …
+          </p>
+        {/if}
+      </div>
+      <div class="buttons">
+        {#if decision}
+          {#each buttons as o (JSON.stringify(o))}
+            <button class="btn" class:primary={o === spaceAction} onclick={() => act(o)}>
+              {actionLabel(o, name)}{#if o === spaceAction}<kbd>Leertaste</kbd>{/if}
+            </button>
+          {/each}
+        {/if}
+      </div>
+    </div>
+
+    {@render mat(human)}
+    <div class="hand" aria-label="Deine Hand" style="--n: {Math.max(2, me.hand.length)}">
+      {#each me.hand as id, i (id)}
+        <!-- Dragging only adds to the card button inside; keyboard and screen readers use the button. -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="hand-card draggable"
+          class:dragging={drag?.id === id}
+          style="--k: {i - (me.hand.length - 1) / 2}; --ak: {Math.abs(i - (me.hand.length - 1) / 2)}"
+          data-card={id}
+          onpointerdown={(e) => onpointerdown(e, id)}
+          animate:flip={{ duration: 300 }}
+          in:receive={{ key: id }}
+          out:send={{ key: id }}
+        >
+          <BoardCard
+            card={def(id)}
+            state={cardState(id)}
+            onclick={() => clickCard(id)}
+            onhover={(on) => (hovered = on ? id : null)}
+          />
+        </div>
+      {/each}
+    </div>
+
+    {#if decision && selected !== null && selectedOptions.length && menuAt && !drag}
+      <div
+        class="card-menu"
+        data-side={menuAt.side}
+        style="left: {menuAt.x}px; top: {menuAt.y}px"
+        role="group"
+        aria-label="Möglichkeiten für {name(selected)}"
+        transition:fade={{ duration: 120 }}
+      >
+        <span class="menu-title">{name(selected)}</span>
+        {#each selectedOptions as o (JSON.stringify(o))}
+          <button class="opt" onclick={() => act(o)}>{actionLabel(o, name)}</button>
+        {/each}
+        <div class="menu-row">
+          <button class="opt info-button" onclick={() => (panelOpen = true)} title="Karte im Detail">ⓘ</button
+          >
+          <button class="opt ghost" onclick={() => (selected = null)}>Abbrechen</button>
+        </div>
+      </div>
+    {/if}
+
+    <svg class="arrows" width={size.w} height={size.h} aria-hidden="true">
+      <defs>
+        <marker
+          id="head-battle"
+          viewBox="0 0 10 10"
+          refX="6"
+          refY="5"
+          markerWidth="5"
+          markerHeight="5"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" fill="#ff8a3d" />
+        </marker>
+        <marker
+          id="head-aim"
+          viewBox="0 0 10 10"
+          refX="6"
+          refY="5"
+          markerWidth="5"
+          markerHeight="5"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" fill="#ffd166" />
+        </marker>
+      </defs>
+      {#each arrows as a (a.key)}
+        <g class="arrow {a.kind}" in:fade={{ duration: 180 }}>
+          <path class="glow" d={a.d} />
+          <path class="line" d={a.d} marker-end="url(#head-{a.kind})" />
+        </g>
+      {/each}
+    </svg>
 
     {#if drag && def(drag.id)}
       <div
@@ -719,6 +960,36 @@
         class:valid={!!dropAction(drag.id, drag.over)}
       >
         <BoardCard card={def(drag.id)} />
+      </div>
+    {/if}
+
+    {#if decision?.kind === "mulligan"}
+      <div class="opening" transition:fade={{ duration: 200 }}>
+        <span class="opening-title">Deine Starthand</span>
+        <span class="opening-hint"
+          >Behalten oder einmal komplett neu ziehen (die Hand kommt unter das Deck).</span
+        >
+        <div class="opening-cards" style:--n={me.hand.length}>
+          {#each me.hand as id, i (id)}
+            {@const c = def(id)}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="opening-card"
+              style="--d: {i * 70}ms"
+              onpointerenter={() => (hovered = id)}
+              onpointerleave={() => (hovered = null)}
+            >
+              {#if c}<CardImage card={c} src={cardImageUrl(c, "full")} eager />{/if}
+            </div>
+          {/each}
+        </div>
+        <div class="buttons">
+          {#each buttons as o (JSON.stringify(o))}
+            <button class="btn" class:primary={o === spaceAction} onclick={() => act(o)}>
+              {actionLabel(o, name)}{#if o === spaceAction}<kbd>Leertaste</kbd>{/if}
+            </button>
+          {/each}
+        </div>
       </div>
     {/if}
 
@@ -762,22 +1033,22 @@
       </button>
     {/if}
 
-    {#if result}
-      <div class="overlay" transition:fade>
-        <div class="end-card">
-          <h2 class:won={result.winner === human}>{endText}</h2>
-          <p>Nach {result.turn} Zügen.</p>
-          <div class="buttons">
-            {#if canUndo}<button class="btn" onclick={undo}>Letzte Entscheidung zurück</button>{/if}
-            <button class="btn primary" onclick={onnew}>Neues Spiel</button>
-          </div>
-          <div class="buttons export">
-            <button class="btn" onclick={copyLog}>Verlauf kopieren</button>
-            <button class="btn" onclick={saveGame}>Partie speichern (.json)</button>
-          </div>
-          {#if exportNote}<p class="export-note" role="status">{exportNote}</p>{/if}
-        </div>
-      </div>
+    {#if result && summary && endHidden}
+      <button class="show-end" onclick={() => (endHidden = false)}>Statistik der Partie</button>
+    {:else if result && summary}
+      <GameEnd
+        {summary}
+        {human}
+        {pool}
+        canUndo={canUndo && !replay}
+        {replay}
+        {exportNote}
+        onundo={undo}
+        {onnew}
+        oncopy={copyLog}
+        onsave={saveGame}
+        onhide={() => (endHidden = true)}
+      />
     {/if}
   </section>
 
@@ -819,7 +1090,9 @@
     </div>
 
     <div class="detail">
-      {#if detailId !== null && def(detailId)}
+      {#if peek}
+        <CardInfo card={peek} />
+      {:else if detailId !== null && def(detailId)}
         <CardInfo
           card={def(detailId)!}
           stats={view.cards[detailId]!.zone === "battle" || view.cards[detailId]!.zone === "base"
@@ -841,144 +1114,284 @@
           {/each}
         </div>
       {:else}
-        <p class="hint">
-          Karte überfahren (oder ⓘ) für Details. Leuchtende Karten kannst du nutzen: anklicken oder auf das
-          Ziel ziehen. Strg+Z oder ↶ nimmt deine letzte Entscheidung zurück.
-        </p>
+        <ul class="help">
+          <li><b>Überfahren</b> zeigt eine Karte hier im Detail (auch Namen im Log).</li>
+          <li><b>Leuchtende Karten</b> kannst du nutzen: anklicken oder auf das Ziel ziehen.</li>
+          <li>
+            <b>Leertaste</b> löst den blauen Knopf aus, <b>Strg+Z</b> nimmt deine letzte Entscheidung zurück, ↶
+            im Log springt zurück.
+          </li>
+        </ul>
       {/if}
     </div>
 
-    <ol class="log" bind:this={logBox} aria-label="Spielverlauf">
-      {#each lines as line, i (i)}
-        {@const back = rollbackIndex(line, i)}
-        <li class="kind-{line.kind}" class:mine={line.subject === human && line.kind !== "turn"}>
-          <span>{line.text}</span>
-          {#if back !== undefined}
-            <button
-              class="back"
-              title={line.kind === "turn"
-                ? "Zurück zum Beginn dieses Zuges"
-                : "Zurück vor diese Entscheidung"}
-              onclick={() => rollbackTo(back)}>↶</button
+    <div class="logbox">
+      <div class="log-tabs" role="tablist" aria-label="Log filtern">
+        {#each Object.entries(LOG_FILTERS) as [key, f] (key)}
+          <button role="tab" aria-selected={logFilter === key} onclick={() => (logFilter = key as LogFilter)}
+            >{f.label}</button
+          >
+        {/each}
+      </div>
+      <ol class="log" bind:this={logBox} aria-label="Spielverlauf">
+        {#each lines as line, i (i)}
+          {@const back = rollbackIndex(line, i)}
+          {#if line.kind === "turn" || shownInLog(line)}
+            <li
+              class="kind-{line.kind}"
+              class:mine={line.subject === human && line.kind !== "turn"}
+              class:theirs={line.subject !== null && line.subject !== human && line.kind !== "turn"}
+              class:turn-mine={line.kind === "turn" && line.player === human}
             >
+              {#if line.kind !== "turn"}<LogIcon event={line.event} />{/if}
+              <span class="txt">
+                {#each segments(line) as seg, j (j)}
+                  {#if "card" in seg}
+                    <button
+                      class="ref"
+                      class:theirs={view.cards[seg.card.id]?.owner !== human}
+                      onpointerenter={() => (peek = pool.get(seg.card.no) ?? null)}
+                      onpointerleave={() => (peek = null)}
+                      onfocus={() => (peek = pool.get(seg.card.no) ?? null)}
+                      onblur={() => (peek = null)}>{seg.card.name}</button
+                    >
+                  {:else}{seg.text}{/if}
+                {/each}
+              </span>
+              {#if back !== undefined}
+                <button
+                  class="back"
+                  title={line.kind === "turn"
+                    ? "Zurück zum Beginn dieses Zuges"
+                    : "Zurück vor diese Entscheidung"}
+                  onclick={() => rollbackTo(back)}>↶</button
+                >
+              {/if}
+            </li>
           {/if}
-        </li>
-      {/each}
-    </ol>
+        {/each}
+      </ol>
+    </div>
   </aside>
 </div>
 
 <style>
   .game {
-    /* Card width that still fits the window height: header, paddings and the center bar take about
-       360 px, each side needs about 2.9 card widths (battle area, info line, hand). Below 720 px of
-       height this is smaller than the width-based size, so nothing overlaps on low windows. */
-    --fit: calc((100dvh - 360px) / 5.8);
+    /* Card width that still fits the window height: header, paddings, labels and the center bar take
+       about 390 px (two rows on narrow boards); both mats and the hand need about 5.45 card widths. */
+    --fit: calc((100dvh - var(--chrome, 62px) - 330px) / 5.45);
     --cw: clamp(44px, min(6.2vw, var(--fit)), 92px);
+    --mine: 79 195 255;
+    --theirs: 255 93 108;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 1fr) 330px;
     gap: 14px;
-    height: calc(100dvh - 62px);
+    height: calc(100dvh - var(--chrome, 62px));
     padding: 10px 14px;
     overflow: hidden;
   }
   .board {
     position: relative;
-    display: grid;
-    grid-template-rows: 1fr auto 1fr;
-    gap: 8px;
-    min-height: 0;
-    padding: 10px 14px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background:
-      radial-gradient(ellipse at 50% 50%, rgb(79 195 255 / 7%), transparent 60%),
-      linear-gradient(180deg, #0e1420, #0a0e16 50%, #0e1420);
-    overflow: hidden;
-  }
-  .side {
+    container-type: inline-size;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     min-height: 0;
-  }
-  .enemy {
-    justify-content: flex-start;
-  }
-  .me {
-    /* "safe": if it still doesn't fit, overflow downwards instead of into the center bar. */
-    justify-content: safe flex-end;
-  }
-  .info {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px 16px;
-    font-size: 13px;
-    color: var(--text-dim);
-  }
-  .info strong {
-    color: var(--text);
-  }
-  .who {
-    font-weight: 700;
-    color: var(--text);
-    letter-spacing: 0.04em;
-  }
-  .resources {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-  }
-  .res {
-    width: 9px;
-    height: 14px;
-    border-radius: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 50%, transparent);
-  }
-  .res.ex {
-    background: #ffd166;
-  }
-  .res.rested {
-    background: #2a3446;
-    box-shadow: none;
-  }
-  .resources small {
-    margin-left: 4px;
-  }
-  .pile {
-    padding: 1px 8px;
+    padding: 8px 12px 0;
     border: 1px solid var(--line);
-    border-radius: 6px;
-    background: var(--bg-sunken);
-    font-size: 13px;
-    color: var(--text-dim);
+    border-radius: 16px;
+    background:
+      radial-gradient(ellipse 70% 30% at 50% 50%, rgb(79 195 255 / 8%), transparent 70%),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 1.6%) 0 1px, transparent 1px 48px),
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 1.6%) 0 1px, transparent 1px 48px),
+      linear-gradient(180deg, #111724, #0a0e16 50%, #0d1522);
+    overflow: hidden;
   }
-  .opp-hand {
-    display: flex;
-    gap: 3px;
-    min-height: 20px;
-  }
-  .mini-back {
-    width: 14px;
-    height: 20px;
-    border-radius: 2px;
-    border: 1px solid #2f4466;
-    background: linear-gradient(160deg, #1a2a44, #0b1220);
-  }
-  .field {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-  }
-  .shieldzone {
+
+  /* Name plate of the AI with its hand. */
+  .plate {
     display: flex;
     align-items: center;
     gap: 10px;
+    min-height: 26px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .avatar {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff5d6c, #7a1830);
+    box-shadow: 0 0 0 2px rgb(var(--theirs) / 30%);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+  }
+  .pname {
+    font-weight: 700;
+    color: var(--text);
+  }
+  .pname small {
+    margin-left: 4px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+  .plate-info strong {
+    color: var(--text);
+  }
+  .opp-hand {
+    display: flex;
+    padding-left: 4px;
+  }
+  .mini-back {
+    width: 15px;
+    height: 21px;
+    margin-left: -5px;
+    border-radius: 2px;
+    border: 1px solid #36507a;
+    background:
+      repeating-linear-gradient(45deg, transparent 0 3px, rgb(79 195 255 / 10%) 3px 4px),
+      linear-gradient(160deg, #1d3152, #0b1220);
+    box-shadow: -1px 0 2px rgb(0 0 0 / 50%);
+  }
+
+  /* One player's side: shields and base, battle area, resources, deck and trash. The AI's side is
+     mirrored, so both battle areas face the center. */
+  .mat {
+    --tone: var(--theirs);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "sh res piles"
+      "sh bat piles";
+    gap: 6px 8px;
     padding: 6px 8px;
+    border: 1px solid rgb(var(--tone) / 12%);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgb(var(--tone) / 6%), transparent 80%);
+    transition:
+      border-color 0.35s,
+      box-shadow 0.35s;
+  }
+  .mat.mine {
+    --tone: var(--mine);
+    grid-template-areas:
+      "sh bat piles"
+      "sh res piles";
+    background: linear-gradient(0deg, rgb(var(--tone) / 6%), transparent 80%);
+  }
+  .mat.active {
+    border-color: rgb(var(--tone) / 55%);
+    box-shadow:
+      0 0 0 1px rgb(var(--tone) / 18%),
+      inset 0 0 36px rgb(var(--tone) / 10%);
+  }
+  .zone {
+    position: relative;
+    padding: 16px 8px 6px;
+    border: 1px solid rgb(255 255 255 / 5%);
     border-radius: 10px;
-    border: 1px dashed transparent;
+    background: rgb(0 0 0 / 22%);
+  }
+  .zlabel {
+    position: absolute;
+    top: 3px;
+    left: 9px;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgb(var(--tone) / 70%);
+    pointer-events: none;
+  }
+  .zlabel small {
+    margin-left: 4px;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--text-dim);
+  }
+
+  .shieldzone {
+    grid-area: sh;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .shields {
+    position: relative;
+    width: calc(var(--cw) * 0.62);
+    height: calc(var(--cw) * 0.62 * 1.395 + 22px);
+  }
+  .shield {
+    position: absolute;
+    left: 0;
+    top: calc(var(--i) * 4px);
+    width: 100%;
+    aspect-ratio: 600 / 837;
+    border-radius: 4px;
+    border: 1px solid #36507a;
+    background:
+      repeating-linear-gradient(45deg, transparent 0 4px, rgb(79 195 255 / 8%) 4px 5px),
+      linear-gradient(160deg, #1d3152, #0b1220);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 50%);
+  }
+  .count {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    translate: -50% 0;
+    min-width: 26px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid rgb(var(--tone) / 45%);
+    background: #0b111c;
+    text-align: center;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .boom {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    translate: -50% -50%;
+    border: 3px solid #ffd166;
+    box-shadow:
+      0 0 18px #ff8a3d,
+      inset 0 0 12px #ff8a3d;
+    pointer-events: none;
+    animation: boom 0.8s ease-out forwards;
+  }
+  @keyframes boom {
+    0% {
+      opacity: 1;
+      transform: scale(0.3);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(4.5);
+    }
+  }
+  .count.low {
+    border-color: var(--danger);
+    background: #3a0f18;
+    color: #ffb3bb;
+  }
+  .base {
+    width: var(--cw);
+  }
+  .empty {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 600 / 837;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-card);
+    font-size: 11px;
+    color: var(--text-dim);
   }
   .draggable {
     touch-action: none;
@@ -1000,17 +1413,21 @@
     rotate: 0deg;
     filter: drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 80%, transparent));
   }
-  .battle.over,
-  .shieldzone.over {
-    outline: 2px dashed var(--accent);
-    outline-offset: 4px;
-    border-radius: 12px;
+  .battlezone.droppable {
+    border-color: rgb(var(--mine) / 45%);
+    background: rgb(var(--mine) / 7%);
   }
-  .field:not(.mine) {
+  .battlezone.over,
+  .shieldzone.over {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 24px rgb(var(--mine) / 25%);
+  }
+  .mat:not(.mine) {
     --lunge: 8px;
   }
   .shieldzone.defender {
     border-color: var(--danger);
+    box-shadow: inset 0 0 20px rgb(var(--theirs) / 25%);
   }
   .shieldzone.shake {
     animation: shake 0.45s ease-in-out;
@@ -1027,6 +1444,530 @@
     }
     80% {
       translate: 2px 0;
+    }
+  }
+  .shieldzone.target {
+    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    cursor: pointer;
+    animation: zonepulse 1s ease-in-out infinite;
+  }
+  @keyframes zonepulse {
+    50% {
+      background: transparent;
+    }
+  }
+
+  .battlezone {
+    grid-area: bat;
+    min-width: 0;
+  }
+  .battle {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: calc(var(--cw) * 0.32);
+    /* Room for a rested (turned) card at either end. */
+    padding-inline: calc(var(--cw) * 0.18);
+    min-height: calc(var(--cw) * 1.395 + 4px);
+  }
+  .unit {
+    width: var(--cw);
+  }
+  .placeholder {
+    aspect-ratio: 600 / 837;
+    border: 1px dashed rgb(255 255 255 / 7%);
+    border-radius: var(--radius-card);
+    background: rgb(255 255 255 / 1.5%);
+  }
+
+  .reszone {
+    grid-area: res;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 10px 5px;
+    min-width: 0;
+  }
+  .level {
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+  }
+  .level strong {
+    margin-left: 2px;
+    font-size: 20px;
+    color: var(--text);
+  }
+  .res-cards {
+    display: flex;
+    min-width: 0;
+    padding: 2px 0;
+  }
+  .res-card {
+    flex: none;
+    width: calc(var(--cw) * 0.42);
+    border-radius: 3px;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 55%);
+    transition:
+      filter 0.3s,
+      transform 0.3s;
+  }
+  .res-card + .res-card {
+    margin-left: calc(var(--cw) * -0.16);
+  }
+  .res-card.rested {
+    filter: grayscale(1) brightness(0.45);
+    transform: translateY(2px);
+  }
+  .res-card.ex {
+    box-shadow:
+      0 0 0 1.5px #ffd166,
+      0 0 10px rgb(255 209 102 / 45%);
+  }
+  .res-card :global(.card) {
+    border-radius: 3px;
+  }
+  .res-count {
+    flex: none;
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .res-count strong {
+    font-size: 15px;
+    color: rgb(var(--tone));
+  }
+
+  .piles {
+    grid-area: piles;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+  }
+  .pile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: calc(var(--cw) * 0.6);
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .pile-card {
+    display: block;
+    width: 100%;
+    aspect-ratio: 600 / 837;
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow:
+      0 2px 6px rgb(0 0 0 / 55%),
+      2px 2px 0 #1a2740,
+      4px 4px 0 #111a2a;
+  }
+  .back-card {
+    border: 1px solid #36507a;
+    background:
+      repeating-linear-gradient(45deg, transparent 0 4px, rgb(79 195 255 / 8%) 4px 5px),
+      linear-gradient(160deg, #1d3152, #0b1220);
+  }
+  .empty-pile {
+    border: 1px dashed var(--line);
+    box-shadow: none;
+  }
+  .pile-count {
+    position: absolute;
+    top: calc(var(--cw) * 0.6 * 1.395 / 2);
+    left: 50%;
+    translate: -50% -50%;
+    min-width: 24px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgb(5 8 14 / 85%);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-size: 12px;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  button.pile {
+    cursor: pointer;
+  }
+  button.pile:hover .pile-card,
+  .pile.open .pile-card {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  /* The center bar: turn, phases, prompt and buttons. */
+  .center {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+    align-items: center;
+    gap: 6px 14px;
+    min-height: 54px;
+    padding: 7px 10px 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgb(7 10 16 / 78%);
+    backdrop-filter: blur(4px);
+    text-align: center;
+  }
+  .turnbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 6px 12px;
+  }
+  .turn-pill {
+    padding: 3px 12px;
+    border: 1px solid rgb(var(--theirs) / 50%);
+    border-radius: 999px;
+    background: rgb(var(--theirs) / 16%);
+    color: #ff9aa3;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .turn-pill.mine {
+    border-color: rgb(var(--mine) / 50%);
+    background: rgb(var(--mine) / 14%);
+    color: #8fd8ff;
+  }
+  .phases {
+    --ph: var(--theirs);
+    display: flex;
+    gap: 3px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .phases.mine {
+    --ph: var(--mine);
+  }
+  .phases li {
+    padding: 3px 12px;
+    background: rgb(255 255 255 / 5%);
+    clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition:
+      background 0.3s,
+      color 0.3s;
+  }
+  .phases li.done {
+    color: rgb(var(--ph) / 55%);
+  }
+  .phases li.now {
+    background: rgb(var(--ph));
+    color: #05080e;
+  }
+  .substep {
+    color: #ffd166;
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .battle-info {
+    margin: 0;
+    color: #ffae70;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .prompt {
+    margin: 0;
+    font-weight: 550;
+  }
+  .thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-dim);
+  }
+  .dots {
+    display: inline-flex;
+    gap: 3px;
+  }
+  .dots i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgb(var(--theirs));
+    animation: dot 1s ease-in-out infinite;
+  }
+  .dots i:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .dots i:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  @keyframes dot {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: translateY(0);
+    }
+    40% {
+      opacity: 1;
+      transform: translateY(-4px);
+    }
+  }
+  .ask {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .center > .buttons {
+    justify-content: flex-end;
+  }
+  /* A narrow board: turn and phases in their own row above the prompt and the buttons. */
+  @container (max-width: 860px) {
+    .center {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 10px;
+    }
+    .turnbar {
+      grid-column: 1 / -1;
+      justify-content: center;
+    }
+    .prompt {
+      font-size: 13px;
+    }
+  }
+  .menu,
+  .buttons,
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+  }
+  .menu-title {
+    color: #ffd166;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .card-menu {
+    position: absolute;
+    z-index: 8;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 190px;
+    max-width: 260px;
+    padding: 8px;
+    border: 1px solid rgb(255 209 102 / 45%);
+    border-radius: 12px;
+    background: rgb(12 17 27 / 96%);
+    box-shadow:
+      var(--shadow),
+      0 0 24px rgb(255 209 102 / 12%);
+    transform: translate(-50%, -100%);
+    text-align: left;
+  }
+  .card-menu[data-side="right"] {
+    transform: translate(0, -50%);
+  }
+  .card-menu[data-side="left"] {
+    transform: translate(-100%, -50%);
+  }
+  .card-menu .opt {
+    width: 100%;
+    text-align: left;
+  }
+  .card-menu .opt:not(.ghost):not(.info-button) {
+    border-color: rgb(79 195 255 / 40%);
+    background: rgb(79 195 255 / 10%);
+    font-weight: 600;
+  }
+  .menu-row {
+    display: flex;
+    gap: 5px;
+  }
+  .menu-row .ghost {
+    flex: 1;
+  }
+  .opt,
+  .btn {
+    min-height: 36px;
+    padding: 6px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-raised);
+    font-size: 14px;
+  }
+  .opt:hover,
+  .btn:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+  .btn.primary {
+    border-color: #4fc3ff;
+    background: linear-gradient(180deg, #2aa8ff, #1677d9);
+    box-shadow:
+      0 0 0 1px rgb(79 195 255 / 30%),
+      0 4px 16px rgb(31 155 255 / 35%);
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .btn.primary:hover:not(:disabled) {
+    filter: brightness(1.12);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .ghost {
+    background: transparent;
+  }
+  kbd {
+    margin-left: 8px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: rgb(0 0 0 / 25%);
+    font: 11px var(--font);
+  }
+
+  /* The hand: a fan of cards at the bottom edge; the hovered card rises. */
+  .hand {
+    --hcw: clamp(46px, min(6.8vw, calc(var(--fit) * 1.08)), 104px);
+    display: flex;
+    justify-content: center;
+    flex: none;
+    height: calc(var(--hcw) * 1.395 * 0.86);
+    padding-top: 6px;
+  }
+  .hand-card {
+    --cw: var(--hcw);
+    flex: none;
+    transform-origin: 50% 120%;
+    transform: rotate(calc(var(--k) * 2.2deg)) translateY(calc(var(--ak) * 4px));
+    transition: transform 0.18s ease;
+  }
+  /* Many cards overlap instead of overflowing. */
+  .hand-card + .hand-card {
+    margin-left: min(-4px, calc((100% - var(--n) * (var(--hcw) + 6px)) / (var(--n) - 1)));
+  }
+  .hand-card:hover {
+    z-index: 3;
+    transform: translateY(-22%) scale(1.08);
+  }
+
+  .opening {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 20px;
+    background: radial-gradient(ellipse at 50% 50%, rgb(10 16 28 / 82%), rgb(3 5 10 / 92%));
+    backdrop-filter: blur(3px);
+  }
+  .opening-title {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .opening-hint {
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  .opening-cards {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin: 6px 0 4px;
+  }
+  .opening-card {
+    width: min(170px, calc((100vw - 120px) / var(--n)), 22vh);
+    border-radius: 8px;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 60%);
+    animation: deal 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1) backwards;
+    animation-delay: var(--d);
+    transition: transform 0.18s;
+  }
+  .opening-card:hover {
+    transform: translateY(-8px) scale(1.04);
+  }
+  @keyframes deal {
+    from {
+      opacity: 0;
+      transform: translateY(40px) rotate(-6deg) scale(0.85);
+    }
+  }
+  .show-end {
+    position: absolute;
+    z-index: 9;
+    right: 14px;
+    bottom: 14px;
+    padding: 8px 16px;
+    border: 1px solid #4fc3ff;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #2aa8ff, #1677d9);
+    box-shadow: 0 4px 16px rgb(31 155 255 / 35%);
+    color: #fff;
+    font-weight: 700;
+  }
+  .arrows {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    overflow: visible;
+  }
+  .arrow path {
+    fill: none;
+    stroke-linecap: round;
+  }
+  .arrow .glow {
+    stroke-width: 12px;
+    opacity: 0.22;
+    filter: blur(3px);
+  }
+  .arrow .line {
+    stroke-width: 4px;
+    stroke-dasharray: 14 8;
+    animation: march 0.6s linear infinite;
+  }
+  .arrow.battle path {
+    stroke: #ff8a3d;
+  }
+  .arrow.aim path {
+    stroke: #ffd166;
+  }
+  .arrow.aim .line {
+    stroke-width: 4px;
+    stroke-dasharray: 10 7;
+  }
+  .arrow.aim .glow {
+    opacity: 0.35;
+  }
+  @keyframes march {
+    to {
+      stroke-dashoffset: -22;
     }
   }
   .banner {
@@ -1078,172 +2019,6 @@
       transform: translateX(40px);
     }
   }
-  .shieldzone.target {
-    border-color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 12%, transparent);
-    cursor: pointer;
-    animation: zonepulse 1s ease-in-out infinite;
-  }
-  @keyframes zonepulse {
-    50% {
-      background: transparent;
-    }
-  }
-  .shields {
-    position: relative;
-    width: calc(var(--cw) * 0.62);
-    height: calc(var(--cw) * 0.62 * 1.395 + 20px);
-  }
-  .shield {
-    position: absolute;
-    left: 0;
-    top: calc(var(--i) * 4px);
-    width: 100%;
-    aspect-ratio: 600 / 837;
-    border-radius: 4px;
-    border: 1px solid #36507a;
-    background: linear-gradient(160deg, #1d3152, #0b1220);
-  }
-  .count {
-    position: absolute;
-    inset: auto 0 0 0;
-    text-align: center;
-    font-size: 15px;
-  }
-  .base {
-    width: var(--cw);
-  }
-  .empty {
-    display: grid;
-    place-items: center;
-    aspect-ratio: 600 / 837;
-    border: 1px dashed var(--line);
-    border-radius: var(--radius-card);
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-  .battle {
-    display: flex;
-    gap: calc(var(--cw) * 0.42);
-    padding: 0 calc(var(--cw) * 0.2);
-    flex: 1;
-    min-height: calc(var(--cw) * 1.395 + 18px);
-    align-items: center;
-  }
-  .unit {
-    width: var(--cw);
-  }
-  .placeholder {
-    aspect-ratio: 600 / 837;
-    border: 1px dashed rgb(36 48 68 / 70%);
-    border-radius: var(--radius-card);
-  }
-  .center {
-    /* Above both sides, so its buttons stay clickable even if a side overflows. */
-    position: relative;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    padding: 10px;
-    border-block: 1px solid var(--line);
-    background: rgb(7 10 16 / 55%);
-    text-align: center;
-  }
-  .status {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 6px 14px;
-    font-size: 13px;
-    color: var(--text-dim);
-  }
-  .turn {
-    color: var(--accent);
-    font-weight: 650;
-  }
-  .battle-info {
-    color: var(--danger);
-  }
-  .prompt {
-    margin: 0;
-    font-weight: 550;
-  }
-  .thinking {
-    color: var(--text-dim);
-    animation: breathe 1.4s ease-in-out infinite;
-  }
-  @keyframes breathe {
-    50% {
-      opacity: 0.45;
-    }
-  }
-  .menu,
-  .buttons,
-  .choices {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-  }
-  .menu-title {
-    color: #ffd166;
-    font-weight: 600;
-  }
-  .opt,
-  .btn {
-    min-height: 36px;
-    padding: 6px 14px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--bg-raised);
-    font-size: 14px;
-  }
-  .opt:hover,
-  .btn:hover:not(:disabled) {
-    border-color: var(--accent);
-  }
-  .btn.primary {
-    background: var(--accent-strong);
-    border-color: var(--accent-strong);
-    color: #fff;
-    font-weight: 600;
-  }
-  .btn:disabled {
-    opacity: 0.45;
-    cursor: default;
-  }
-  .ghost {
-    background: transparent;
-  }
-  kbd {
-    margin-left: 8px;
-    padding: 0 5px;
-    border-radius: 4px;
-    background: rgb(0 0 0 / 25%);
-    font: 11px var(--font);
-  }
-  .hand {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-    min-height: calc(var(--cw) * 1.395 + 6px);
-    padding-top: 4px;
-  }
-  .hand-card {
-    --cw: clamp(46px, min(6.6vw, calc(var(--fit) * 1.06)), 100px);
-    flex: none;
-    transition: transform 0.15s;
-  }
-  /* Many cards overlap instead of overflowing; the hovered one comes to the front. */
-  .hand-card + .hand-card {
-    margin-left: min(0px, calc((100% - var(--n) * (var(--cw) + 6px)) / (var(--n) - 1)));
-  }
-  .hand-card:hover {
-    z-index: 1;
-  }
   .reveal {
     position: absolute;
     left: 12px;
@@ -1283,33 +2058,6 @@
     font-size: 12px;
     color: var(--text-dim);
   }
-  .overlay {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    background: rgb(5 8 14 / 70%);
-    backdrop-filter: blur(3px);
-  }
-  .end-card {
-    padding: 28px 40px;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    background: var(--bg-raised);
-    text-align: center;
-    box-shadow: var(--shadow);
-  }
-  .end-card h2 {
-    margin: 0 0 4px;
-    font-size: 34px;
-    color: var(--danger);
-  }
-  .end-card h2.won {
-    color: #7fe0a0;
-  }
-  .buttons.export {
-    margin-top: 10px;
-  }
   .export-note {
     margin: 8px 0 0;
     font-size: 13px;
@@ -1340,10 +2088,12 @@
     border-radius: 8px;
     background: var(--bg-sunken);
   }
+  /* Fixed height: content changes on hover (log names, cards) must not move the log below, otherwise the
+     pointer leaves the name, the detail shrinks back and the log flickers up and down. */
   .detail {
-    min-height: 120px;
-    max-height: 52vh;
+    height: clamp(180px, 42vh, 440px);
     overflow: auto;
+    overscroll-behavior: contain;
     padding: 10px;
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -1359,44 +2109,116 @@
     flex-wrap: wrap;
     gap: 6px;
   }
+  .help {
+    margin: 0;
+    padding-left: 16px;
+    color: var(--text-dim);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .help b {
+    color: var(--text);
+    font-weight: 600;
+  }
   .hint {
     margin: 0;
     font-size: 13px;
     color: var(--text-dim);
   }
-  .log {
-    margin: 0;
-    padding: 8px 10px;
-    list-style: none;
-    overflow: auto;
+  .logbox {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--bg-sunken);
-    font-size: 13px;
+    overflow: hidden;
+  }
+  .log-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 6px 6px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .log-tabs button {
+    padding: 5px 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .log-tabs button[aria-selected="true"] {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+  }
+  .log {
+    margin: 0;
+    padding: 0 8px 8px;
+    list-style: none;
+    overflow: auto;
+    font-size: 12.5px;
+    line-height: 1.4;
   }
   .log li {
     display: flex;
-    justify-content: space-between;
-    gap: 6px;
-    padding: 2px 0;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 3px 2px;
     color: var(--text-dim);
+  }
+  .log li .txt {
+    flex: 1;
+    min-width: 0;
+    padding-top: 1px;
   }
   .log li.mine {
     color: var(--text);
   }
   .log li.kind-turn {
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px solid var(--line);
-    color: var(--accent);
-    font-weight: 650;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 8px -8px 2px;
+    padding: 5px 10px;
+    border-block: 1px solid var(--line);
+    border-left: 3px solid rgb(255 93 108);
+    background: #0d1320;
+    color: #ff9aa3;
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .log li.kind-turn.turn-mine {
+    border-left-color: rgb(79 195 255);
+    color: #8fd8ff;
   }
   .log li.kind-battle {
-    color: #f0b8a0;
+    color: #f3c3ae;
   }
   .log li.kind-important {
     color: #ffd166;
     font-weight: 600;
+  }
+  .ref {
+    padding: 0 3px;
+    border: 0;
+    border-radius: 4px;
+    background: rgb(79 195 255 / 12%);
+    color: #a9e2ff;
+    font: inherit;
+    font-weight: 600;
+    cursor: help;
+  }
+  .ref.theirs {
+    background: rgb(255 93 108 / 12%);
+    color: #ffb3bb;
+  }
+  .ref:hover,
+  .ref:focus-visible {
+    outline: 1px solid currentColor;
   }
   .back {
     flex: none;
@@ -1423,7 +2245,7 @@
       grid-template-columns: 1fr;
       height: auto;
       overflow: visible;
-      --cw: clamp(44px, 9.5vw, 80px);
+      --cw: clamp(44px, 8.6vw, 80px);
     }
     .board {
       min-height: 80dvh;
@@ -1431,78 +2253,146 @@
     .side-panel {
       grid-template-rows: auto auto 300px;
     }
-    .field {
-      gap: 8px;
-    }
     .battle {
-      gap: calc(var(--cw) * 0.3);
-      padding: 0;
+      gap: calc(var(--cw) * 0.22);
     }
-    .hand-card {
-      --cw: clamp(48px, 11vw, 84px);
+    .center {
+      grid-template-columns: minmax(0, 1fr);
+      justify-items: center;
+    }
+    .turnbar,
+    .center > .buttons {
+      justify-content: center;
+    }
+    .hand {
+      --hcw: clamp(48px, 10vw, 84px);
     }
   }
 
-  /* Phones in portrait: cards sized from the screen width, side panel as a drawer from the bottom. */
+  /* Phones in portrait: cards sized from the screen width, resources and piles in one row, side panel
+     as a drawer from the bottom. */
   @media (max-width: 700px) {
     .game {
-      --cw: min(50px, calc((100vw - 40px) / 7.7));
+      --cw: min(54px, calc((100vw - 48px) / 7.1));
       padding: 4px;
       gap: 0;
     }
     .board {
       min-height: calc(100dvh - 118px);
-      padding: 6px;
+      padding: 4px 4px 0;
       gap: 4px;
       border-radius: 10px;
     }
-    .side {
-      gap: 4px;
+    .plate {
+      min-height: 20px;
+      font-size: 12px;
     }
-    .field {
-      gap: 4px;
+    .avatar {
+      width: 20px;
+      height: 20px;
+      font-size: 8px;
+    }
+    .mini-back {
+      width: 10px;
+      height: 14px;
+      margin-left: -4px;
+    }
+    .mat {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        "res res piles"
+        "sh bat bat";
+      gap: 3px;
+      padding: 3px;
+      border-radius: 10px;
+    }
+    .mat.mine {
+      grid-template-areas:
+        "sh bat bat"
+        "res res piles";
+    }
+    .zone {
+      padding: 11px 3px 3px;
+      border-radius: 8px;
+    }
+    .zlabel {
+      top: 1px;
+      left: 5px;
+      font-size: 7.5px;
     }
     .shieldzone {
-      gap: 4px;
-      padding: 2px;
+      flex-direction: column;
+      gap: 3px;
     }
     .shields {
-      width: calc(var(--cw) * 0.55);
-      height: calc(var(--cw) * 0.55 * 1.395 + 14px);
+      width: calc(var(--cw) * 0.5);
+      height: calc(var(--cw) * 0.5 * 1.395 + 14px);
+    }
+    .shield {
+      top: calc(var(--i) * 2px);
     }
     .count {
-      font-size: 13px;
+      min-width: 20px;
+      padding: 0 4px;
+      font-size: 11px;
     }
     .base {
-      width: calc(var(--cw) * 0.9);
-      --cw: calc(min(50px, calc((100vw - 40px) / 7.7)) * 0.9);
+      --cw: calc(min(54px, calc((100vw - 48px) / 7.1)) * 0.8);
     }
     .battle {
       gap: 3px;
-      min-height: calc(var(--cw) * 1.395 + 12px);
+      padding-inline: 0;
+      min-height: calc(var(--cw) * 1.395);
+    }
+    .shieldzone .zlabel {
+      display: none;
+    }
+    .shieldzone {
+      padding-top: 4px;
     }
     /* A rested card is turned; smaller, so it stays within its slot. */
     .battle :global(.slot.rested .stack) {
       transform: rotate(90deg) scale(0.7);
     }
-    .info {
-      gap: 2px 10px;
-      font-size: 12px;
+    .reszone {
+      gap: 6px;
+      padding: 10px 6px 3px;
     }
-    .opp-hand {
-      min-height: 14px;
+    .level strong {
+      font-size: 15px;
     }
-    .mini-back {
-      width: 10px;
-      height: 14px;
+    .res-card {
+      width: calc(var(--cw) * 0.36);
+    }
+    .piles {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+    }
+    .pile {
+      width: calc(var(--cw) * 0.42);
+      font-size: 8px;
+    }
+    .pile-count {
+      top: calc(var(--cw) * 0.42 * 1.395 / 2);
+      min-width: 18px;
+      padding: 0 3px;
+      font-size: 10px;
     }
     .center {
       gap: 4px;
-      padding: 6px 4px;
+      padding: 5px 4px;
     }
-    .status {
-      gap: 2px 10px;
-      font-size: 12px;
+    .turnbar {
+      gap: 4px 6px;
+    }
+    .phases li {
+      padding: 2px 6px;
+      font-size: 9px;
+    }
+    .turn-pill {
+      padding: 2px 8px;
+      font-size: 10px;
     }
     .prompt {
       font-size: 13px;
@@ -1517,11 +2407,11 @@
       display: none;
     }
     .hand {
+      --hcw: min(76px, 20vw);
       justify-content: flex-start;
-      min-height: calc(var(--cw) * 1.395);
     }
     .hand-card {
-      --cw: min(64px, 17vw);
+      transform: none;
     }
     .panel-toggle {
       display: inline-flex;
@@ -1570,17 +2460,13 @@
       transform: none;
     }
     .detail {
-      max-height: 34dvh;
+      height: 34dvh;
     }
     .reveal-card {
       width: min(28vw, calc((100vw - 80px) / var(--n)));
     }
     .banner {
       font-size: 24px;
-    }
-    .end-card {
-      padding: 20px;
-      margin: 0 12px;
     }
   }
 </style>

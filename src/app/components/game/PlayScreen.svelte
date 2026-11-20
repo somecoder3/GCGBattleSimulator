@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CardPool } from "../../../data/cards";
+  import { cardImageUrl, type CardPool } from "../../../data/cards";
   import { AI_LABELS, DIFFICULTIES, type AiName } from "../../../ai/registry";
   import { Engine } from "../../../engine/engine";
   import { SNAPSHOT, cardLib, deckChoices, deckLabel, preset } from "../../lib/decks";
@@ -92,6 +92,42 @@
 
   const FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
+  const LEVEL_TEXT: Partial<Record<AiName, string>> = {
+    "heuristic-v0": "Spielt nach Regeln und Kartenwert, ohne vorauszudenken.",
+    "heuristic-v1": "Probiert jede Möglichkeit und rechnet bis zum nächsten eigenen Zug.",
+    search: "Simuliert viele mögliche Verläufe, sucht Auswege und Siegzüge.",
+    "search-strong": "Wie Schwer, mit mehr Stichproben: stärker, denkt länger.",
+  };
+
+  const STARTERS = [
+    { value: "roll", label: "Würfeln, Gewinner wählt" },
+    { value: "me", label: "Du" },
+    { value: "ai", label: "KI" },
+  ] as const;
+
+  /** The deck's face: its highest-level Unit (the most copies first). */
+  function faceCard(main: readonly string[]) {
+    // A local tally, not state.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const counts = new Map<string, number>();
+    for (const no of main) counts.set(no, (counts.get(no) ?? 0) + 1);
+    let best: { card: NonNullable<ReturnType<CardPool["get"]>>; score: number } | undefined;
+    for (const [no, n] of counts) {
+      const card = pool.get(no);
+      if (!card || card.type !== "UNIT") continue;
+      const score = (card.level ?? 0) * 10 + n;
+      if (!best || score > best.score) best = { card, score };
+    }
+    return best?.card;
+  }
+
+  const sides = $derived(
+    [
+      { who: "Du", side: "mine", deck: DECKS.find((d) => d.id === myDeck) },
+      { who: "KI", side: "theirs", deck: DECKS.find((d) => d.id === aiDeck) },
+    ].map((s) => ({ ...s, face: s.deck ? faceCard(s.deck.deck.main) : undefined })),
+  );
+
   function resume() {
     if (!saved) return;
     try {
@@ -139,44 +175,78 @@
   <section class="setup" aria-labelledby="setup-title">
     <h1 id="setup-title">Spiel gegen die KI</h1>
     <p class="lead">
-      Aktuelle Meta-Decks (Konsenslisten der Turnierdecks) oder Starter-Decks gegen eine KI. Alle
+      Meta-Decks (Konsenslisten der Turnierdecks), Starter- oder eigene Decks gegen eine KI. Alle
       Entscheidungen lassen sich zurücknehmen; dieselben Karten kommen wieder.
     </p>
-    <div class="grid">
+
+    <div class="versus">
+      {#each sides as v, i (v.side)}
+        {#if i === 1}<span class="vs" aria-hidden="true">VS</span>{/if}
+        <div class="deck-panel {v.side}">
+          <div class="art">
+            {#if v.face}<img src={cardImageUrl(v.face, "full")} alt="" />{/if}
+            <span class="who">{v.who}</span>
+          </div>
+          <div class="deck-info">
+            <strong
+              >{v.deck ? (v.deck.group === "user" ? v.deck.name : `${v.deck.id} ${v.deck.name}`) : ""}</strong
+            >
+            <span class="colors">
+              {#each (v.deck?.colors ?? "").split("/").filter(Boolean) as c (c)}
+                <i class="dot" data-color={c.trim().toLowerCase()}></i>{c.trim()}
+              {/each}
+              {#if v.deck?.share !== undefined}<span>· {(v.deck.share * 100).toFixed(1)} % der Meta</span
+                >{/if}
+            </span>
+            {#if v.side === "mine"}
+              <select bind:value={myDeck} aria-label="Dein Deck">{@render deckOptions()}</select>
+            {:else}
+              <select bind:value={aiDeck} aria-label="Deck der KI">{@render deckOptions()}</select>
+            {/if}
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    <h2>Schwierigkeit</h2>
+    <div class="levels" role="radiogroup" aria-label="Schwierigkeit">
+      {#each DIFFICULTIES as d (d.ai)}
+        <button
+          role="radio"
+          aria-checked={aiName === d.ai}
+          class:on={aiName === d.ai}
+          onclick={() => (aiName = d.ai)}
+          title={AI_LABELS[d.ai]}
+        >
+          <strong>{d.label}</strong>
+          <small>{LEVEL_TEXT[d.ai] ?? AI_LABELS[d.ai]}</small>
+        </button>
+      {/each}
+    </div>
+
+    <h2>Wer beginnt</h2>
+    <div class="seg" role="radiogroup" aria-label="Wer beginnt">
+      {#each STARTERS as o (o.value)}
+        <button
+          role="radio"
+          aria-checked={starter === o.value}
+          class:on={starter === o.value}
+          onclick={() => (starter = o.value)}>{o.label}</button
+        >
+      {/each}
+    </div>
+
+    <details class="advanced">
+      <summary>Erweitert</summary>
       <label>
-        Dein Deck
-        <select bind:value={myDeck}>
-          {@render deckOptions()}
-        </select>
-      </label>
-      <label>
-        Deck der KI
-        <select bind:value={aiDeck}>
-          {@render deckOptions()}
-        </select>
-      </label>
-      <label>
-        Schwierigkeit
-        <select bind:value={aiName}>
-          {#each DIFFICULTIES as d (d.ai)}<option value={d.ai}>{d.label} – {AI_LABELS[d.ai]}</option>{/each}
-        </select>
-      </label>
-      <label>
-        Wer beginnt
-        <select bind:value={starter}>
-          <option value="roll">Würfeln, Gewinner wählt</option>
-          <option value="me">Du</option>
-          <option value="ai">KI</option>
-        </select>
-      </label>
-      <label>
-        Seed
+        Seed (gleicher Seed = gleiche Karten)
         <span class="seed">
           <input type="number" min="0" bind:value={seed} />
           <button type="button" onclick={() => (seed = randomSeed())} title="Neuer Seed">⟳</button>
         </span>
       </label>
-    </div>
+    </details>
+
     {#if roll}
       {@const last = roll.rolls[roll.rolls.length - 1]!}
       <div class="roll" role="status">
@@ -216,10 +286,13 @@
       </div>
     {:else}
       <div class="actions">
-        <button class="btn primary" onclick={start}>Spiel starten</button>
+        <button class="btn primary big" onclick={start}>Spiel starten</button>
         {#if saved}
-          <button class="btn" onclick={resume}>
-            Partie fortsetzen ({saved.deckNames?.join(" gegen ") ?? "gespeichert"}, {saved.actions.length} Entscheidungen)
+          <button class="btn resume" onclick={resume}>
+            <strong>Partie fortsetzen</strong>
+            <small
+              >{saved.deckNames?.join(" gegen ") ?? "gespeichert"} · {saved.actions.length} Entscheidungen</small
+            >
           </button>
         {/if}
         <label class="btn file">
@@ -250,41 +323,188 @@
     font-size: 13px;
   }
   .setup {
-    max-width: 720px;
-    margin: 6vh auto;
-    padding: 28px;
+    max-width: 880px;
+    margin: 4vh auto;
+    padding: 26px 28px;
     border: 1px solid var(--line);
-    border-radius: 16px;
-    background: var(--bg-raised);
+    border-radius: 18px;
+    background:
+      radial-gradient(ellipse 80% 40% at 50% 0%, rgb(79 195 255 / 8%), transparent), var(--bg-raised);
   }
   h1 {
     margin: 0 0 6px;
     font-size: 24px;
   }
-  .lead {
-    margin: 0 0 20px;
+  h2 {
+    margin: 22px 0 8px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     color: var(--text-dim);
   }
-  .grid {
+  .lead {
+    margin: 0 0 18px;
+    color: var(--text-dim);
+  }
+  .versus {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
     gap: 14px;
+  }
+  .vs {
+    font-size: 32px;
+    font-weight: 900;
+    font-style: italic;
+    background: linear-gradient(180deg, #fff, #ffd166);
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 2px 10px rgb(255 209 102 / 40%));
+  }
+  .deck-panel {
+    --tone: 79 195 255;
+    overflow: hidden;
+    border: 1px solid rgb(var(--tone) / 40%);
+    border-radius: 14px;
+    background: var(--bg-sunken);
+    box-shadow: 0 0 30px rgb(var(--tone) / 8%);
+  }
+  .deck-panel.theirs {
+    --tone: 255 93 108;
+  }
+  .art {
+    position: relative;
+    height: 150px;
+    overflow: hidden;
+    background: linear-gradient(160deg, rgb(var(--tone) / 25%), #0b1220);
+  }
+  .art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 26%;
+    mask-image: linear-gradient(180deg, #000 55%, transparent);
+  }
+  .who {
+    position: absolute;
+    left: 12px;
+    bottom: 8px;
+    padding: 2px 12px;
+    border-radius: 999px;
+    background: rgb(var(--tone));
+    color: #05080e;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+  }
+  .deck-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px 12px;
+  }
+  .deck-info strong {
+    font-size: 15px;
+    line-height: 1.25;
+  }
+  .colors {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .dot {
+    width: 9px;
+    height: 9px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: var(--line);
+  }
+  .dot[data-color="blue"] {
+    background: var(--c-blue);
+  }
+  .dot[data-color="green"] {
+    background: var(--c-green);
+  }
+  .dot[data-color="red"] {
+    background: var(--c-red);
+  }
+  .dot[data-color="white"] {
+    background: var(--c-white);
+  }
+  .dot[data-color="purple"] {
+    background: var(--c-purple);
+  }
+  .levels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px;
+  }
+  .levels button {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-sunken);
+    text-align: left;
+  }
+  .levels small {
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .levels button.on {
+    border-color: var(--accent);
+    background: rgb(79 195 255 / 10%);
+    box-shadow: 0 0 0 1px rgb(79 195 255 / 30%);
+  }
+  .seg {
+    display: inline-flex;
+    flex-wrap: wrap;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .seg button {
+    padding: 8px 14px;
+    border: 0;
+    background: var(--bg-sunken);
+    color: var(--text-dim);
+  }
+  .seg button.on {
+    background: var(--accent-strong);
+    color: #fff;
+    font-weight: 600;
+  }
+  .advanced {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .advanced summary {
+    cursor: pointer;
   }
   label {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    max-width: 340px;
+    margin-top: 8px;
     font-size: 13px;
     color: var(--text-dim);
   }
   select,
   input {
-    min-height: 38px;
+    min-width: 0;
+    min-height: 36px;
     padding: 6px 10px;
     border: 1px solid var(--line);
     border-radius: 8px;
-    background: var(--bg-sunken);
-    font-size: 15px;
+    background: var(--bg-raised);
+    font-size: 14px;
   }
   .seed {
     display: flex;
@@ -366,6 +586,7 @@
   .actions {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 10px;
     margin-top: 22px;
   }
@@ -377,9 +598,48 @@
     background: var(--bg-sunken);
   }
   .btn.primary {
-    background: var(--accent-strong);
-    border-color: var(--accent-strong);
+    border-color: #4fc3ff;
+    background: linear-gradient(180deg, #2aa8ff, #1677d9);
+    box-shadow: 0 4px 16px rgb(31 155 255 / 30%);
     color: #fff;
-    font-weight: 600;
+    font-weight: 700;
+  }
+  .btn.big {
+    min-height: 48px;
+    padding: 10px 28px;
+    font-size: 16px;
+  }
+  .btn.resume {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .btn.resume small {
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .btn.file {
+    flex-direction: row;
+    max-width: none;
+    margin-top: 0;
+    color: var(--text);
+    font-size: 14px;
+  }
+  @media (max-width: 640px) {
+    .setup {
+      margin: 8px;
+      padding: 16px;
+    }
+    .versus {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .vs {
+      justify-self: center;
+      font-size: 22px;
+    }
+    .art {
+      height: 100px;
+    }
   }
 </style>

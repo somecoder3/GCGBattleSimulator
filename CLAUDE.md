@@ -290,6 +290,32 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Sammlung, Kommentare, Match-Log (W/L%), „Considering“, Versionen.
   - Auch im **Meta-Reiter** (Nutzerwunsch): Umschalter „Karten | Statistik“ für Konsens- und Turnierlisten;
     dort ohne Kartensuche, darum ohne Klick-Filter (`onpick` optional), Diagramme breiter (`--chart-min`).
+- **Spielfeld nach ExBurst-Vorbild überarbeitet (20. Nov., Nutzerwunsch):** Vorher eine Partie gegen die KI auf
+  `play.exburst.dev/gundam/play/ai` gespielt (Zonen mit Beschriftung, Phasenleiste, Kartendialog, Zielhinweise,
+  Log nach Zügen mit Filtern, Endbildschirm mit Match-Statistik). Umgesetzt in `src/app/components/game/`:
+  - `Board.svelte`: je Seite eine „Matte“ (Schilde/Base, Battle Area x/6, Ressourcen als echte Karten mit Lv und
+    „aktiv“, Deck- und Trash-Stapel mit oberster Karte), KI-Seite gespiegelt, aktive Seite leuchtet (blau du,
+    rot KI); Namensschild der KI mit Schwierigkeit und Handkarten; Mittelleiste in drei Spalten (Zug +
+    Phasen Start/Draw/Resource/Main/End + Substep, Aufforderung, Knöpfe), auf schmalen Spielfeldern per
+    Container Query zweizeilig; Hand als Fächer; Aktionsmenü einer gewählten Karte schwebt an der Karte
+    (Hand: darüber, Feld: daneben); **Pfeile** (SVG-Overlay, `placeArrows`): orange für den laufenden Kampf,
+    gelb beim Zielen (Überfahren/Ziehen); Starthand groß in der Mitte zur Mulligan-Wahl; Einschlag-Ring bei
+    Schildbruch; Höhe über `--chrome` (Replay hat eine Leiste mehr).
+  - Log (`gamelog.ts`): Zeilen tragen `event` und `cards` (sichtbare Karten); `segments()` macht Kartennamen
+    zu Verweisen (Überfahren zeigt die Karte im Detail, auch wenn sie jetzt verdeckt ist), Symbole
+    `LogIcon.svelte`, Filter Alle/Kämpfe/Effekte (`LOG_FILTERS`), Zugüberschriften klebend. Mulligan: die neue
+    Hand ist eine Zeile (vorher fünf „zieht eine Karte“).
+  - Endbildschirm `GameEnd.svelte` mit `src/app/lib/gamesummary.ts`: Vorteil je Zug aus der v1-Bewertung
+    (`Evaluator`, in Schild-Werten ≈ 3,3), Schilde je Zug, Schilde zerstört, Schaden an Units, Units zerstört,
+    Karten gespielt, MVP (meiste Wirkung) und letzter Treffer, Schlüsselmomente; „Spielfeld ansehen“ blendet
+    ihn aus. Kartendetail: Zeitpunkt-Schlüsselwörter farbig (Burst, Deploy, Activate, Attack, Destroyed, Pair/Link).
+  - Startbildschirm `PlayScreen.svelte`: „Du VS KI“ mit Aushängeschild je Deck (höchste Unit), Schwierigkeit
+    als erklärte Kacheln, Startwahl als Umschalter, Seed unter „Erweitert“.
+  - Ausführliche Beschreibung (Aufbau, Dateien, Fallen): **`docs/UI.md`**.
+  - Log flackerte beim Überfahren von Kartennamen (Nutzer): das Detail darüber wuchs mit dem Text und schob das
+    Log weg. Detail hat jetzt eine feste Höhe (`clamp(180px, 42vh, 440px)`, Handy `34dvh`).
+  - WebGPU o. Ä. war nicht nötig (CSS/SVG reichen). Geprüft bei 1440×900, 1024×640, 375×812 und im Replay.
+    Tests `tests/app/gamesummary.test.ts`, `tests/app/gamelog.test.ts`; 289 Tests.
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
   Makro-Aktionen), Gewichte für die Suche abstimmen.
 - Commits: M3 `e3bdd8e`, M4 `4f03529`, M5 `2a76b7f`, M6 bis `9da824e`, alle 15 Archetypen `d4eedaf` (alles
