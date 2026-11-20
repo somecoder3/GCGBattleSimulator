@@ -23,35 +23,32 @@
     support: "Support",
     link: "Link",
   };
+
+  // The symbols are files of their own (src/app/assets/keywords/<key>.svg), so docs/keyword-icons.html can show
+  // the same files without the app. Each file carries its color as `color="#…"` on the root and draws with
+  // currentColor; the chip's border takes the same color.
+  const FILES = import.meta.glob<string>("../../assets/keywords/*.svg", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  });
+  const ICONS = new Map(
+    Object.entries(FILES).map(([path, svg]) => [
+      path.replace(/^.*\/(\w+)\.svg$/, "$1"),
+      { svg, color: /\scolor="([^"]+)"/.exec(svg)?.[1] ?? "#9fb3c8" },
+    ]),
+  );
 </script>
 
 <script lang="ts">
   // A small round symbol for a keyword (or Link) on a card; the amount (Breach 3 …) sits beside it.
   let { kw, amount = 0 }: { kw: KeywordKey; amount?: number } = $props();
+  const icon = $derived(ICONS.get(kw));
 </script>
 
-<span class="kw" data-kw={kw}>
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    {#if kw === "blocker"}
-      <path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z" />
-    {:else if kw === "firstStrike"}
-      <path class="fill" d="M13.5 2 5 13.5h6L10 22l9-12h-6.2z" />
-    {:else if kw === "highManeuver"}
-      <path d="M4 18l6-6-6-6M12 18l6-6-6-6" />
-    {:else if kw === "suppression"}
-      <path d="M20 6.5l-9 5.5M20 17.5l-9-5.5M11 12H9" /><circle class="fill" cx="6" cy="12" r="3" />
-    {:else if kw === "breach"}
-      <path d="M4 20 18 6M13 6h5v5" /><path class="wall" d="M10 2v7M10 18v4" />
-    {:else if kw === "repair"}
-      <path d="M12 5v14M5 12h14" />
-    {:else if kw === "support"}
-      <path d="M12 20V7M6.5 12.5 12 7l5.5 5.5M7 4h10" />
-    {:else}
-      <path
-        d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"
-      />
-    {/if}
-  </svg>
+<span class="kw" data-kw={kw} style:--c={icon?.color}>
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -- our own SVG files from src/app/assets -->
+  <span class="glyph" aria-hidden="true">{@html icon?.svg ?? ""}</span>
   {#if amount > 0}<b>{amount}</b>{/if}
 </span>
 
@@ -70,22 +67,13 @@
     color: var(--c);
     box-shadow: 0 1px 4px rgb(0 0 0 / 60%);
   }
-  svg {
+  .glyph {
+    display: inline-flex;
+    line-height: 0;
+  }
+  .glyph :global(svg) {
     width: calc(var(--kw-size, 18px) - 6px);
     height: calc(var(--kw-size, 18px) - 6px);
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .fill {
-    fill: currentColor;
-    stroke: none;
-  }
-  .wall {
-    stroke-width: 2;
-    opacity: 0.6;
   }
   b {
     padding-right: 2px;
@@ -93,29 +81,5 @@
     line-height: 1;
     font-weight: 800;
     color: #fff;
-  }
-  [data-kw="blocker"] {
-    --c: #5fb4ff;
-  }
-  [data-kw="firstStrike"] {
-    --c: #ffd166;
-  }
-  [data-kw="highManeuver"] {
-    --c: #5ee6d0;
-  }
-  [data-kw="suppression"] {
-    --c: #c79bff;
-  }
-  [data-kw="breach"] {
-    --c: #ff6b7d;
-  }
-  [data-kw="repair"] {
-    --c: #7fe0a0;
-  }
-  [data-kw="support"] {
-    --c: #ffb36b;
-  }
-  [data-kw="link"] {
-    --c: #ffd166;
   }
 </style>

@@ -1,202 +1,420 @@
 <!doctype html>
 <html lang="de">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Keyword-Symbole</title>
-<!--
-  Eigenständige Beispielseite der Keyword-/Link-Symbole aus
-  src/app/components/game/KeywordIcon.svelte und BoardCard.svelte (Stand 20. Nov. 2026).
-  Nicht Teil der App; Pfade und Farben sind von Hand kopiert. Einfach im Browser öffnen.
--->
-<style>
-  :root {
-    --bg: #0b1220;
-    --panel: #131d30;
-    --line: #2a3a55;
-    --text: #e6edf6;
-    --muted: #8ea2bd;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    padding: 24px 16px 48px;
-    background: var(--bg);
-    color: var(--text);
-    font: 14px/1.5 system-ui, "Segoe UI", sans-serif;
-  }
-  main { max-width: 1000px; margin: 0 auto; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 32px 0 10px; }
-  p.lead { color: var(--muted); margin: 0 0 8px; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
-  th { color: var(--muted); font-weight: 600; font-size: 12px; }
-  tr:last-child td { border-bottom: 0; }
-  .scroll { overflow-x: auto; }
-  .row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-end; }
-  .cap { color: var(--muted); font-size: 12px; text-align: center; margin-top: 6px; }
-  label.bg { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); margin-top: 10px; }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Keyword-Symbole</title>
+    <!--
+      Übersicht der Keyword-Symbole. Die Symbole selbst sind die Dateien aus src/app/assets/keywords/, dieselben,
+      die die App (KeywordIcon.svelte) nutzt. Per Doppelklick öffnen, kein Server nötig.
+      KEYS unten nennt Name und Rahmenfarbe je Datei (eine lokal geöffnete Seite kann weder den Ordner auflisten
+      noch die Farbe aus der Datei lesen). tests/app/keywordicons.test.ts prüft, dass KEYS zu den Dateien passt.
+      Das Aussehen von Chips und Karten ist BoardCard.svelte nachgebaut.
+    -->
+    <style>
+      :root {
+        --bg: #0b0f17;
+        --panel: #131a26;
+        --line: #243044;
+        --text: #e6ecf5;
+        --muted: #8d9bb2;
+      }
+      body.light {
+        --bg: #eef2f7;
+        --panel: #fff;
+        --line: #d3dbe6;
+        --text: #1a2333;
+        --muted: #5a6b82;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px 16px 48px;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 "Segoe UI",
+          system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 16px;
+        margin: 32px 0 10px;
+      }
+      .lead,
+      code,
+      th,
+      .cap {
+        color: var(--muted);
+      }
+      .lead {
+        margin: 0 0 8px;
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 16px;
+      }
+      .scroll {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th,
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: middle;
+      }
+      th {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 28px 36px;
+        align-items: flex-start;
+      }
+      .cap {
+        font-size: 12px;
+        text-align: center;
+        margin-top: 8px;
+      }
+      label.bg {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .white {
+        display: inline-grid;
+        place-items: center;
+        padding: 6px;
+        border-radius: 8px;
+        background: #fff;
+        border: 1px solid #d3dbe6;
+      }
 
-  /* ---- KeywordIcon.svelte ---- */
-  .kw {
-    --c: #9fb3c8;
-    display: inline-flex; align-items: center; gap: 1px;
-    height: var(--kw-size, 18px); min-width: var(--kw-size, 18px);
-    padding: 0 2px; border-radius: 999px;
-    border: 1.5px solid var(--c);
-    background: rgb(8 12 20 / 90%);
-    color: var(--c);
-    box-shadow: 0 1px 4px rgb(0 0 0 / 60%);
-  }
-  .kw svg {
-    width: calc(var(--kw-size, 18px) - 6px); height: calc(var(--kw-size, 18px) - 6px);
-    fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
-  }
-  .kw .fill { fill: currentColor; stroke: none; }
-  .kw .wall { stroke-width: 2; opacity: 0.6; }
-  .kw b { padding-right: 2px; font-size: calc(var(--kw-size, 18px) * 0.62); line-height: 1; font-weight: 800; color: #fff; }
-  [data-kw="blocker"] { --c: #5fb4ff; }
-  [data-kw="firstStrike"] { --c: #ffd166; }
-  [data-kw="highManeuver"] { --c: #5ee6d0; }
-  [data-kw="suppression"] { --c: #c79bff; }
-  [data-kw="breach"] { --c: #ff6b7d; }
-  [data-kw="repair"] { --c: #7fe0a0; }
-  [data-kw="support"] { --c: #ffb36b; }
-  [data-kw="link"] { --c: #ffd166; }
+      /* Chip as in KeywordIcon.svelte. */
+      .kw {
+        --c: #9fb3c8;
+        display: inline-flex;
+        align-items: center;
+        gap: 1px;
+        height: var(--kw-size, 18px);
+        min-width: var(--kw-size, 18px);
+        padding: 0 2px;
+        border-radius: 999px;
+        border: 1.5px solid var(--c);
+        background: rgb(8 12 20 / 90%);
+        box-shadow: 0 1px 4px rgb(0 0 0 / 60%);
+      }
+      .kw img {
+        width: calc(var(--kw-size, 18px) - 6px);
+        height: calc(var(--kw-size, 18px) - 6px);
+      }
+      .kw b {
+        padding-right: 2px;
+        font-size: calc(var(--kw-size, 18px) * 0.62);
+        line-height: 1;
+        font-weight: 800;
+        color: #fff;
+      }
 
-  /* ---- BoardCard.svelte (Ausschnitt) ---- */
-  .kw-wrap { display: inline-block; border-radius: 999px; line-height: 0; }
-  .kw-wrap.granted { box-shadow: 0 0 0 1.5px #fff; }
-  .kw-wrap.temporary { box-shadow: 0 0 0 1.5px #ffd166; animation: glow 1.6s ease-in-out infinite; }
-  @keyframes glow { 50% { box-shadow: 0 0 0 1.5px #ffd166, 0 0 10px #ffd166; } }
+      /* Card on the board as in BoardCard.svelte. */
+      .kw-wrap {
+        display: inline-block;
+        border-radius: 999px;
+        line-height: 0;
+      }
+      .kw-wrap.granted {
+        box-shadow: 0 0 0 1.5px #fff;
+      }
+      .kw-wrap.temporary {
+        box-shadow: 0 0 0 1.5px #ffd166;
+        animation: glow 1.6s ease-in-out infinite;
+      }
+      @keyframes glow {
+        50% {
+          box-shadow:
+            0 0 0 1.5px #ffd166,
+            0 0 10px #ffd166;
+        }
+      }
+      .slot {
+        position: relative;
+        width: var(--cw, 84px);
+      }
+      .slot.paired {
+        padding-bottom: calc(var(--cw, 84px) * 1.395 * 0.28);
+      }
+      .stack {
+        position: relative;
+        transition: transform 0.25s cubic-bezier(0.3, 0.7, 0.4, 1);
+      }
+      .card,
+      .pilot {
+        aspect-ratio: 600 / 837;
+        border-radius: 6px;
+        border: 1px solid #2f4466;
+        box-shadow: 0 2px 8px rgb(0 0 0 / 50%);
+      }
+      .card {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        padding: 4px;
+        font-size: 11px;
+        text-align: center;
+        color: #8d9bb2;
+        background:
+          repeating-linear-gradient(45deg, transparent 0 6px, rgb(79 195 255 / 6%) 6px 7px),
+          linear-gradient(160deg, #24395e, #0e1729);
+      }
+      .pilot {
+        position: absolute;
+        inset: 0;
+        transform: translateY(28%);
+        background: linear-gradient(160deg, #3a3354, #17131f);
+      }
+      .rested .stack {
+        transform: rotate(90deg) scale(0.92);
+      }
+      .rested .card {
+        filter: brightness(0.78);
+      }
+      .link-hint .card {
+        box-shadow:
+          0 0 0 2px #ffd166,
+          0 0 16px rgb(255 209 102 / 55%);
+      }
+      .kws,
+      .link-badge {
+        --kw-size: clamp(18px, calc(var(--cw, 84px) * 0.27), 24px);
+        position: absolute;
+        z-index: 2;
+        top: 2px;
+        line-height: 0;
+      }
+      .kws {
+        left: -4px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+      }
+      .link-badge {
+        right: -4px;
+      }
+      .stats {
+        position: absolute;
+        right: 3px;
+        bottom: 3px;
+        display: flex;
+        gap: 2px;
+        font: 700 12px system-ui;
+      }
+      .stats span {
+        min-width: 20px;
+        padding: 0 4px;
+        border-radius: 4px;
+        text-align: center;
+        background: rgb(8 12 20 / 88%);
+        border: 1px solid #243044;
+      }
+      .ap {
+        color: #ffb36b;
+      }
+      .hp {
+        color: #7fe0a0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Keyword-Symbole</h1>
+      <p class="lead">
+        Die Symbole sind die Dateien aus <code>src/app/assets/keywords/</code>, dieselben wie im Spielfeld.
+        Größe in der App: 27&nbsp;% der Kartenbreite, zwischen 18 und 24&nbsp;px.
+      </p>
+      <label class="bg"
+        ><input type="checkbox" id="light" /> Heller Hintergrund (nur zum Vergleich, die App ist
+        dunkel)</label
+      >
 
-  .slot { position: relative; width: var(--cw, 84px); }
-  .stack { transition: transform 0.25s cubic-bezier(0.3, 0.7, 0.4, 1); }
-  .card {
-    aspect-ratio: 600 / 837; border-radius: 6px; border: 1px solid #2f4466;
-    background:
-      repeating-linear-gradient(45deg, transparent 0 6px, rgb(79 195 255 / 6%) 6px 7px),
-      linear-gradient(160deg, #24395e, #0e1729);
-    box-shadow: 0 2px 8px rgb(0 0 0 / 50%);
-    display: grid; place-items: center; color: var(--muted); font-size: 11px; text-align: center; padding: 4px;
-  }
-  .rested .stack { transform: rotate(90deg) scale(0.92); }
-  .rested .card { filter: brightness(0.78); }
-  .link-hint .card { box-shadow: 0 0 0 2px #ffd166, 0 0 16px rgb(255 209 102 / 55%); }
-  .kws, .link-badge {
-    --kw-size: clamp(18px, calc(var(--cw, 84px) * 0.27), 24px);
-    position: absolute; z-index: 2; top: 2px; line-height: 0;
-  }
-  .kws { left: -4px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
-  .link-badge { right: -4px; }
-  .stats { position: absolute; right: 3px; bottom: 3px; display: flex; gap: 2px; font: 700 12px system-ui; }
-  .stats span { min-width: 20px; padding: 0 4px; border-radius: 4px; text-align: center; background: rgb(8 12 20 / 88%); border: 1px solid var(--line); }
-  .ap { color: #ffb36b; } .hp { color: #7fe0a0; }
-  body.light { --bg: #eef2f7; --panel: #fff; --line: #d3dbe6; --text: #1a2333; --muted: #5a6b82; }
-</style>
-</head>
-<body>
-<main>
-  <h1>Keyword-Symbole</h1>
-  <p class="lead">
-    Symbole wie im Spielfeld (<code>KeywordIcon.svelte</code>, <code>BoardCard.svelte</code>). Größe in der App:
-    27&nbsp;% der Kartenbreite, zwischen 18 und 24&nbsp;px.
-  </p>
-  <label class="bg"><input type="checkbox" id="light" /> Heller Hintergrund (nur zum Vergleich, die App ist dunkel)</label>
+      <h2>Alle Symbole in verschiedenen Größen</h2>
+      <section class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Keyword</th>
+              <th>Symbol</th>
+              <th>18 px</th>
+              <th>24 px</th>
+              <th>32 px</th>
+              <th>48 px</th>
+              <th>mit Menge</th>
+              <th>Datei pur</th>
+            </tr>
+          </thead>
+          <tbody id="table"></tbody>
+        </table>
+      </section>
 
-  <h2>Alle Symbole in verschiedenen Größen</h2>
-  <section class="scroll">
-    <table>
-      <thead>
-        <tr><th>Keyword</th><th>Symbol</th><th>18 px</th><th>24 px</th><th>32 px</th><th>48 px</th><th>mit Menge</th></tr>
-      </thead>
-      <tbody id="table"></tbody>
-    </table>
-  </section>
+      <h2>Zustände</h2>
+      <section>
+        <div class="row" id="states"></div>
+      </section>
 
-  <h2>Zustände</h2>
-  <section>
-    <div class="row" id="states"></div>
-  </section>
+      <h2>Auf Karten (Beispiele)</h2>
+      <section>
+        <div class="row" id="cards"></div>
+        <p class="cap" style="text-align: left; margin-top: 14px">
+          Die Symbole sitzen außerhalb der Drehung und bleiben bei geruhten Units aufrecht. Kartenrücken als
+          Platzhalter statt der offiziellen Kartenbilder.
+        </p>
+      </section>
+    </main>
 
-  <h2>Auf Karten (Beispiele)</h2>
-  <section>
-    <div class="row" id="cards"></div>
-    <p class="cap" style="text-align:left;margin-top:14px">
-      Die Symbole sitzen außerhalb der Drehung und bleiben bei geruhten Units aufrecht.
-      Ohne Kartenbild: Platzhalter statt der offiziellen Bilder.
-    </p>
-  </section>
-</main>
+    <script>
+      const DIR = "../src/app/assets/keywords/";
+      // Datei → Name, Beschreibung, Rahmenfarbe (= color="…" in der Datei; geprüft von tests/app/keywordicons.test.ts).
+      const KEYS = {
+        blocker: ["Blocker", "Schild", "#5fb4ff"],
+        firstStrike: ["First Strike", "Blitz", "#ffd166"],
+        highManeuver: ["High-Maneuver", "Doppelpfeil", "#5ee6d0"],
+        suppression: ["Suppression", "Fächer mit zwei Strahlen (zwei Schilde)", "#c79bff"],
+        breach: ["Breach", "Pfeil durch eine Wand", "#ff6b7d"],
+        repair: ["Repair", "Plus", "#7fe0a0"],
+        support: ["Support", "Pfeil hoch, in AP-Farbe", "#ffb36b"],
+        link: ["Link", "Kette", "#ffd166"],
+      };
+      const AMOUNT = { breach: 3, repair: 2, support: 1 };
 
-<script>
-  const ICONS = {
-    blocker: ["Blocker", "Schild", '<path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z"/>'],
-    firstStrike: ["First Strike", "Blitz", '<path class="fill" d="M13.5 2 5 13.5h6L10 22l9-12h-6.2z"/>'],
-    highManeuver: ["High-Maneuver", "Doppelpfeil", '<path d="M4 18l6-6-6-6M12 18l6-6-6-6"/>'],
-    suppression: ["Suppression", "Fächer", '<path d="M20 6.5l-9 5.5M20 17.5l-9-5.5M11 12H9"/><circle class="fill" cx="6" cy="12" r="3"/>'],
-    breach: ["Breach", "Pfeil durch Wand", '<path d="M4 20 18 6M13 6h5v5"/><path class="wall" d="M10 2v7M10 18v4"/>'],
-    repair: ["Repair", "Plus", '<path d="M12 5v14M5 12h14"/>'],
-    support: ["Support", "Pfeil hoch", '<path d="M12 20V7M6.5 12.5 12 7l5.5 5.5M7 4h10"/>'],
-    link: ["Link", "Kette", '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>'],
-  };
-  const AMOUNT = { breach: 3, repair: 2, support: 1 };
+      function icon(kw, amount = 0, size) {
+        const style = `--c:${KEYS[kw][2]}` + (size ? `;--kw-size:${size}px` : "");
+        return `<span class="kw" style="${style}"><img src="${DIR}${kw}.svg" alt="" />${amount > 0 ? `<b>${amount}</b>` : ""}</span>`;
+      }
+      function badge(kw, amount = 0, cls = "") {
+        const extra =
+          cls === "temporary" ? " (durch Effekt, vorübergehend)" : cls === "granted" ? " (durch Effekt)" : "";
+        const title = KEYS[kw][0] + (amount ? ` ${amount}` : "") + extra;
+        return `<span class="kw-wrap ${cls}" title="${title}">${icon(kw, amount)}</span>`;
+      }
 
-  function icon(kw, amount = 0, size) {
-    const style = size ? ` style="--kw-size:${size}px"` : "";
-    return `<span class="kw" data-kw="${kw}"${style}><svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[kw][2]}</svg>${amount > 0 ? `<b>${amount}</b>` : ""}</span>`;
-  }
-  function badge(kw, amount = 0, cls = "") {
-    const [name] = ICONS[kw];
-    const title = name + (amount ? ` ${amount}` : "") + (cls === "temporary" ? " (durch Effekt, vorübergehend)" : cls === "granted" ? " (durch Effekt)" : "");
-    return `<span class="kw-wrap ${cls}" title="${title}">${icon(kw, amount)}</span>`;
-  }
+      document.getElementById("table").innerHTML = Object.entries(KEYS)
+        .map(
+          ([kw, [name, desc]]) => `<tr>
+            <td><b>${name}</b><br><code>${kw}.svg</code></td>
+            <td>${desc}</td>
+            ${[18, 24, 32, 48].map((s) => `<td>${icon(kw, 0, s)}</td>`).join("")}
+            <td>${AMOUNT[kw] ? icon(kw, AMOUNT[kw], 24) : "–"}</td>
+            <td><span class="white"><img src="${DIR}${kw}.svg" width="32" height="32" alt="" /></span></td>
+          </tr>`,
+        )
+        .join("");
 
-  document.getElementById("table").innerHTML = Object.entries(ICONS)
-    .map(([kw, [name, desc]]) => `<tr>
-      <td><b>${name}</b><br><code style="color:var(--muted)">${kw}</code></td>
-      <td>${desc}</td>
-      ${[18, 24, 32, 48].map((s) => `<td>${icon(kw, 0, s)}</td>`).join("")}
-      <td>${AMOUNT[kw] ? icon(kw, AMOUNT[kw], 24) : "–"}</td>
-    </tr>`)
-    .join("");
+      document.getElementById("states").innerHTML = [
+        ["", "Gedruckt"],
+        ["granted", "Durch Effekt (Pilot, Link, Dauereffekt): weiß umrandet"],
+        ["temporary", "Vorübergehend („during this turn/battle“): gold leuchtend"],
+      ]
+        .map(
+          ([cls, text]) => `<div style="--kw-size: 32px; max-width: 220px">
+            <div style="display: flex; gap: 6px; justify-content: center">
+              ${badge("blocker", 0, cls)}${badge("breach", 3, cls)}${badge("firstStrike", 0, cls)}
+            </div>
+            <div class="cap">${text}</div>
+          </div>`,
+        )
+        .join("");
 
-  document.getElementById("states").innerHTML = [
-    ["", "Gedruckt"],
-    ["granted", "Durch Effekt (Pilot, Link, Dauereffekt): weiß umrandet"],
-    ["temporary", "Vorübergehend („during this turn/battle“): gold leuchtend"],
-  ]
-    .map(([cls, text]) => `<div style="--kw-size:32px;max-width:200px">
-      <div style="display:flex;gap:6px;justify-content:center">${badge("blocker", 0, cls)}${badge("breach", 3, cls)}${badge("firstStrike", 0, cls)}</div>
-      <div class="cap">${text}</div></div>`)
-    .join("");
+      function card(c) {
+        const cw = c.cw ?? 84;
+        const cls = ["slot", c.rested && "rested", c.hint && "link-hint", c.link && "paired"]
+          .filter(Boolean)
+          .join(" ");
+        return `<div>
+          <div class="${cls}" style="--cw: ${cw}px">
+            <div class="stack">${c.link ? '<div class="pilot"></div>' : ""}<div class="card">${c.name}
+              <div class="stats"><span class="ap">${c.ap}</span><span class="hp">${c.hp}</span></div></div></div>
+            ${c.link || c.hint ? `<span class="link-badge">${icon("link")}</span>` : ""}
+            ${c.kws?.length ? `<span class="kws">${c.kws.map((k) => badge(...k)).join("")}</span>` : ""}
+          </div>
+          <div class="cap" style="width: ${Math.max(cw, 110)}px">${c.cap}</div>
+        </div>`;
+      }
+      document.getElementById("cards").innerHTML = [
+        { name: "Unit", kws: [["blocker"]], ap: 2, hp: 3, cap: "Blocker gedruckt" },
+        {
+          name: "Unit",
+          kws: [
+            ["breach", 3, "granted"],
+            ["firstStrike", 0, "granted"],
+          ],
+          link: true,
+          ap: 5,
+          hp: 4,
+          cap: "Gelinkt, Keywords vom Piloten (liegt darunter)",
+        },
+        {
+          name: "Unit",
+          kws: [["suppression", 0, "temporary"]],
+          ap: 4,
+          hp: 4,
+          cap: "Suppression nur diesen Kampf",
+        },
+        {
+          name: "Unit",
+          kws: [["highManeuver"], ["repair", 2], ["support", 1, "granted"]],
+          rested: true,
+          ap: 3,
+          hp: 5,
+          cap: "Geruht, drei Keywords",
+        },
+        {
+          name: "Unit auf der Hand",
+          hint: true,
+          ap: 3,
+          hp: 3,
+          cap: "Würde mit dem überfahrenen Piloten linken",
+        },
+        {
+          name: "",
+          kws: [["blocker"], ["breach", 2, "temporary"]],
+          link: true,
+          ap: 2,
+          hp: 2,
+          cw: 48,
+          cap: "Kleinste Kartengröße (1024×640)",
+        },
+      ]
+        .map(card)
+        .join("");
 
-  function card({ name, kws = [], link = false, hint = false, rested = false, ap, hp, cw = 84 }) {
-    return `<div>
-      <div class="slot${rested ? " rested" : ""}${hint ? " link-hint" : ""}" style="--cw:${cw}px">
-        <div class="stack"><div class="card">${name}</div></div>
-        <div class="stats"><span class="ap">${ap}</span><span class="hp">${hp}</span></div>
-        ${link || hint ? `<span class="link-badge">${icon("link")}</span>` : ""}
-        ${kws.length ? `<span class="kws">${kws.map((k) => badge(...k)).join("")}</span>` : ""}
-      </div>
-      <div class="cap" style="width:${Math.max(cw, 110)}px">${arguments[0].cap}</div>
-    </div>`;
-  }
-  document.getElementById("cards").innerHTML = [
-    { name: "Unit", kws: [["blocker"]], ap: 2, hp: 3, cap: "Blocker gedruckt" },
-    { name: "Unit + Pilot", kws: [["breach", 3, "granted"], ["firstStrike", 0, "granted"]], link: true, ap: 5, hp: 4, cap: "Gelinkt, Keywords vom Piloten" },
-    { name: "Unit", kws: [["suppression", 0, "temporary"]], ap: 4, hp: 4, cap: "Suppression nur diesen Kampf" },
-    { name: "Unit", kws: [["highManeuver"], ["repair", 2], ["support", 1, "granted"]], rested: true, ap: 3, hp: 5, cap: "Geruht, drei Keywords" },
-    { name: "Unit auf der Hand", hint: true, ap: 3, hp: 3, cap: "Würde mit dem überfahrenen Piloten linken" },
-    { name: "", kws: [["blocker"], ["breach", 2, "temporary"]], link: true, ap: 2, hp: 2, cw: 48, cap: "Kleinste Kartengröße (1024×640)" },
-  ]
-    .map(card)
-    .join("");
-
-
-  document.getElementById("light").addEventListener("change", (e) => document.body.classList.toggle("light", e.target.checked));
-</script>
-</body>
+      document
+        .getElementById("light")
+        .addEventListener("change", (e) => document.body.classList.toggle("light", e.target.checked));
+    </script>
+  </body>
 </html>

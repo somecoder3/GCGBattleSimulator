@@ -17,6 +17,8 @@ des Menschen.
 | `src/app/components/game/GameEnd.svelte`     | Endbildschirm mit Statistik                                                     |
 | `src/app/components/game/LogIcon.svelte`     | SVG-Symbol je Log-Ereignis                                                      |
 | `src/app/components/game/KeywordIcon.svelte` | Keyword-/Link-Symbol, `KeywordBadge`, `KEYWORD_LABEL`                           |
+| `src/app/assets/keywords/<key>.svg`          | Die Symbole als Dateien (Farbe im `color`-Attribut), auch für die Doku          |
+| `docs/keyword-icons.html`                    | Übersicht der Symbol-Dateien, per Doppelklick                                   |
 | `src/app/lib/gamelog.ts`                     | Log-Zeilen aus Engine-Events, `segments`, `LOG_FILTERS`                         |
 | `src/app/lib/gamesummary.ts`                 | `summarize()` für den Endbildschirm                                             |
 | `src/app/lib/actions.ts`                     | Optionen/Beschriftungen der Entscheidungen                                      |
