@@ -16,6 +16,7 @@ des Menschen.
 | `src/app/components/game/CardInfo.svelte`    | Kartendetail (Zeitpunkt-Schlüsselwörter farbig, Link-Bedingungen)               |
 | `src/app/components/game/GameEnd.svelte`     | Endbildschirm mit Statistik                                                     |
 | `src/app/components/game/LogIcon.svelte`     | SVG-Symbol je Log-Ereignis                                                      |
+| `src/app/components/game/KeywordIcon.svelte` | Keyword-/Link-Symbol, `KeywordBadge`, `KEYWORD_LABEL`                           |
 | `src/app/lib/gamelog.ts`                     | Log-Zeilen aus Engine-Events, `segments`, `LOG_FILTERS`                         |
 | `src/app/lib/gamesummary.ts`                 | `summarize()` für den Endbildschirm                                             |
 | `src/app/lib/actions.ts`                     | Optionen/Beschriftungen der Entscheidungen                                      |
@@ -46,6 +47,24 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
 - **Größen**: `--fit: calc((100dvh - var(--chrome, 62px) - 330px) / 5.45)` begrenzt die Kartenbreite aus der Höhe,
   `--chrome` = Höhe von Kopfzeile (+ Replay-Leiste). ≤ 1000 px eine Spalte, ≤ 700 px Handy-Layout (Matte
   `"res res piles" / "sh bat bat"`, Seitenleiste als Schublade „☰ Log & Details“).
+
+## Bedienung, Keywords, Links (Nutzerwunsch 20. Nov.)
+
+- **Klick auf eine Karte spielt nie von selbst** (`immediate()` in `Board.svelte`): Einsetzen, Paaren, Commands
+  und Activate öffnen immer das Aktionsmenü. Sofort wirken nur Antworten auf eine Frage (`target`, `discard`,
+  `block`). Vorher spielte ein Klick eine Unit mit nur einer Option direkt aus, obwohl der Nutzer die Karte nur
+  ansehen wollte.
+- **Festhalten**: Klick auf eine Karte ohne Optionen hält sie im Detail (`pinned`, Leiste „📌 Festgehalten“ mit
+  „Lösen“, erneuter Klick oder Esc löst). `detailId = hovered ?? selected ?? pinned`. Wie ExBursts Pin im Inspector.
+- **Keyword-Symbole** (`keywordBadges()`): nur Units in der Battle Area, aus `engine.keywords()` (gedruckt, Pilot/
+  Link, Dauereffekte, vorübergehende Modifier). Spalte am linken Kartenrand, außerhalb der Drehung (bleibt bei
+  geruhten Units aufrecht). Weiß umrandet = nicht gedruckt (`granted`), gold leuchtend = von einem Modifier
+  mit Ende (`temporary`, „during this turn/battle“). Tooltip mit Name und Menge. Symbole: Blocker Schild,
+  First Strike Blitz, High-Maneuver Doppelpfeil, Suppression Fächer, Breach Pfeil, Repair Plus, Support Pfeil hoch.
+- **Link**: Ketten-Symbol oben rechts an gelinkten Units (ersetzt das frühere „LINK“). `linkHints` (wie ExBurst):
+  Überfahren/Wählen eines eigenen Piloten (auch Command mit 【Pilot】, `pairable`) markiert Units auf der Hand und
+  Units ohne Piloten im Feld, mit denen er linken würde; eine Unit markiert passende Piloten auf der Hand
+  (`satisfiesLink`). Markierung: goldener Rahmen + Kette.
 
 ## Seitenleiste
 

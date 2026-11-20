@@ -2,6 +2,7 @@
   import { cardImageUrl } from "../../../data/cards";
   import type { CardDef } from "../../../data/types";
   import CardImage from "../CardImage.svelte";
+  import KeywordIcon, { KEYWORD_LABEL, type KeywordBadge } from "./KeywordIcon.svelte";
 
   // A card on the board: image (or card back if hidden), rested rotation, current AP/HP and markers.
   let {
@@ -14,6 +15,8 @@
     battle = "",
     hit = null,
     label = "",
+    keywords = [],
+    linkHint = false,
     onclick,
     onhover,
   }: {
@@ -38,12 +41,24 @@
     /** Damage (negative) or recovery (positive) to show as a floating number; `n` restarts it. */
     hit?: { amount: number; n: number } | null;
     label?: string;
+    /** Keywords the card has right now (only while they are active). */
+    keywords?: KeywordBadge[];
+    /** Would link with the hovered card (Pilot ↔ Unit), shown with the Link symbol. */
+    linkHint?: boolean;
     onclick?: () => void;
     onhover?: (on: boolean) => void;
   } = $props();
 
   const hpLeft = $derived(stats ? stats.hp - stats.damage : 0);
   const trend = (now: number, base: number) => (now > base ? "up" : now < base ? "down" : "");
+  function kwTitle(k: KeywordBadge): string {
+    const name = KEYWORD_LABEL[k.key] + (k.amount ? ` ${k.amount}` : "");
+    return k.temporary
+      ? `${name} (durch Effekt, vorübergehend)`
+      : k.granted
+        ? `${name} (durch Effekt)`
+        : name;
+  }
 </script>
 
 <button
@@ -52,6 +67,7 @@
   class:rested
   class:paired={!!pilot}
   class:flash
+  class:link-hint={linkHint}
   class:attacker={battle === "attacker"}
   class:defender={battle === "defender"}
   class:clickable={!!onclick}
@@ -74,7 +90,6 @@
       </div>
     {/if}
     <div class="card">
-      {#if pilot?.link}<span class="link-badge">LINK</span>{/if}
       {#if card}
         <CardImage {card} src={cardImageUrl(card, "small")} eager />
       {:else}
@@ -95,6 +110,20 @@
       {/if}
     </div>
   </div>
+  {#if pilot?.link || linkHint}
+    <span class="link-badge" title={linkHint ? "Würde mit der gewählten Karte linken" : "Gelinkt"}
+      ><KeywordIcon kw="link" /></span
+    >
+  {/if}
+  {#if keywords.length}
+    <span class="kws">
+      {#each keywords as k (k.key)}
+        <span class="kw-wrap" class:granted={k.granted} class:temporary={k.temporary} title={kwTitle(k)}
+          ><KeywordIcon kw={k.key} amount={k.amount} /></span
+        >
+      {/each}
+    </span>
+  {/if}
 </button>
 
 <style>
@@ -286,18 +315,55 @@
     }
   }
   .link-badge {
+    --kw-size: clamp(18px, calc(var(--cw, 84px) * 0.27), 24px);
     position: absolute;
     z-index: 2;
-    top: 3px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 0 6px;
-    border-radius: 4px;
-    background: rgb(8 12 20 / 88%);
-    border: 1px solid #8a6d2b;
-    color: #ffd166;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
+    top: 2px;
+    right: -4px;
+    line-height: 0;
+  }
+  .link-hint .card {
+    box-shadow:
+      0 0 0 2px #ffd166,
+      0 0 16px rgb(255 209 102 / 55%);
+  }
+  .link-hint .link-badge {
+    animation: pop 0.25s ease-out;
+  }
+  @keyframes pop {
+    from {
+      transform: scale(0.4);
+    }
+  }
+  /* Keywords: a column on the left edge of the card. */
+  .kws {
+    --kw-size: clamp(18px, calc(var(--cw, 84px) * 0.27), 24px);
+    position: absolute;
+    z-index: 2;
+    top: 2px;
+    left: -4px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    line-height: 0;
+    pointer-events: auto;
+  }
+  .kw-wrap {
+    border-radius: 999px;
+  }
+  .kw-wrap.granted {
+    box-shadow: 0 0 0 1.5px #fff;
+  }
+  .kw-wrap.temporary {
+    box-shadow: 0 0 0 1.5px #ffd166;
+    animation: glow 1.6s ease-in-out infinite;
+  }
+  @keyframes glow {
+    50% {
+      box-shadow:
+        0 0 0 1.5px #ffd166,
+        0 0 10px #ffd166;
+    }
   }
 </style>

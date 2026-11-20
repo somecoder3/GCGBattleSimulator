@@ -312,6 +312,10 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   - Startbildschirm `PlayScreen.svelte`: „Du VS KI“ mit Aushängeschild je Deck (höchste Unit), Schwierigkeit
     als erklärte Kacheln, Startwahl als Umschalter, Seed unter „Erweitert“.
   - Ausführliche Beschreibung (Aufbau, Dateien, Fallen): **`docs/UI.md`**.
+  - Nachtrag (Nutzerwunsch): Klick auf eine Handkarte öffnet immer das Menü (nur Antworten auf Fragen wirken
+    sofort), Klick auf Karten ohne Optionen hält sie im Detail fest; Keyword-Symbole an Units im Feld (nur
+    solange aktiv, vorübergehende gold leuchtend), Ketten-Symbol für Links und Link-Hinweis auf der Hand beim
+    Überfahren (`KeywordIcon.svelte`, `keywordBadges`, `linkHints`).
   - Log flackerte beim Überfahren von Kartennamen (Nutzer): das Detail darüber wuchs mit dem Text und schob das
     Log weg. Detail hat jetzt eine feste Höhe (`clamp(180px, 42vh, 440px)`, Handy `34dvh`).
   - WebGPU o. Ä. war nicht nötig (CSS/SVG reichen). Geprüft bei 1440×900, 1024×640, 375×812 und im Replay.

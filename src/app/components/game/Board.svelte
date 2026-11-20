@@ -8,6 +8,7 @@
   import { DIFFICULTIES, makePolicy } from "../../../ai/registry";
   import type { CardPool } from "../../../data/cards";
   import type { CardDef } from "../../../data/types";
+  import { satisfiesLink } from "../../../engine/cardlib";
   import type { Engine } from "../../../engine/engine";
   import type { Action, CardId, GameEvent, PlayerId } from "../../../engine/types";
   import { HIDDEN } from "../../../engine/view";
@@ -33,6 +34,7 @@
   import BoardCard from "./BoardCard.svelte";
   import CardInfo from "./CardInfo.svelte";
   import LogIcon from "./LogIcon.svelte";
+  import type { KeywordBadge } from "./KeywordIcon.svelte";
   import GameEnd from "./GameEnd.svelte";
   import { summarize } from "../../lib/gamesummary";
 
@@ -79,6 +81,8 @@
   let lines = $state.raw<LogLine[]>([]);
   let selected = $state<CardId | null>(null);
   let hovered = $state<CardId | null>(null);
+  /** A card held in the detail by a click (cards without options; hovering others still shows them). */
+  let pinned = $state<CardId | null>(null);
   let flashed = $state.raw(new Set<CardId>());
   let speed = $state(600);
 
@@ -460,6 +464,57 @@
     };
   }
 
+  const KW_ORDER = [
+    "blocker",
+    "firstStrike",
+    "highManeuver",
+    "suppression",
+    "breach",
+    "repair",
+    "support",
+  ] as const;
+
+  /** Keywords a Unit has right now (printed, from its Pilot/Link, or given by an effect for a while). */
+  function keywordBadges(id: CardId): KeywordBadge[] {
+    if (view.cards[id]!.zone !== "battle") return [];
+    const now = engine.keywords(session.state, id);
+    const printed = engine.card(session.state, id).keywords;
+    const out: KeywordBadge[] = [];
+    for (const key of KW_ORDER) {
+      const v = now[key];
+      if (!v) continue;
+      const amount = typeof v === "number" ? v : 0;
+      const temporary = session.state.modifiers.some((m) => m.target === id && m.keyword === key);
+      out.push({ key, amount, granted: printed[key] !== v, temporary });
+    }
+    return out;
+  }
+
+  /** Own cards that would link with the hovered/selected own card: a Pilot (or Command with 【Pilot】) and
+   *  Units in hand or on the field without a Pilot, or a Unit in hand and the Pilots in hand. */
+  const linkHints = $derived.by(() => {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- rebuilt on every change, never mutated later
+    const out = new Set<CardId>();
+    const src = hovered ?? selected;
+    if (src === null || replay) return out;
+    const c = view.cards[src];
+    if (!c || c.owner !== human || (c.zone !== "hand" && c.zone !== "battle")) return out;
+    const me = engine.card(session.state, src);
+    const isUnit = (id: CardId) => engine.card(session.state, id).type === "UNIT";
+    if (c.zone === "hand" && me.pairable) {
+      for (const id of [...view.players[human].hand, ...view.players[human].battle]) {
+        if (id === src || !isUnit(id) || view.cards[id]!.pilot !== null) continue;
+        if (satisfiesLink(engine.card(session.state, id), me)) out.add(id);
+      }
+    } else if (me.type === "UNIT" && c.pilot === null) {
+      for (const id of view.players[human].hand) {
+        const other = engine.card(session.state, id);
+        if (id !== src && other.pairable && satisfiesLink(me, other)) out.add(id);
+      }
+    }
+    return out;
+  });
+
   function pilotOf(id: CardId) {
     const p = view.cards[id]!.pilot;
     if (p === null) return null;
@@ -489,9 +544,11 @@
     refresh(session.apply(action));
   }
 
-  /** Options that need no second click: choosing a target, blocking, discarding, a simple deploy. */
+  /** Options that need no second click: answers to a question (choosing a target, blocking, discarding).
+   *  Playing a card (deploy, pair, command, activate) always opens the menu first (user's wish: a click on a
+   *  hand card must never play it by itself). */
   function immediate(o: Action): boolean {
-    return secondary(o) === null;
+    return (o.type === "target" || o.type === "discard" || o.type === "block") && secondary(o) === null;
   }
 
   function clickCard(id: CardId) {
@@ -499,8 +556,7 @@
       suppressClick = false;
       return;
     }
-    if (!decision) return;
-    if (selected !== null) {
+    if (decision && selected !== null) {
       const complete = selectedOptions.filter((o) => secondary(o) === id);
       if (complete.length === 1) return act(complete[0]!);
       if (id === selected) {
@@ -508,11 +564,14 @@
         return;
       }
     }
-    const own = options.filter((o) => primaryCard(o) === id);
+    const own = decision ? options.filter((o) => primaryCard(o) === id) : [];
     if (!own.length) {
+      // A card without options: clicking holds it in the detail (again: release).
       selected = null;
+      pinned = pinned === id ? null : id;
       return;
     }
+    pinned = null;
     if (own.length === 1 && immediate(own[0]!)) return act(own[0]!);
     selected = id;
   }
@@ -600,6 +659,7 @@
       undo();
     } else if (e.key === "Escape") {
       selected = null;
+      pinned = null;
       showTrash = null;
     } else if (e.key === " " && spaceAction && !e.repeat) {
       e.preventDefault();
@@ -642,7 +702,7 @@
   const aiLabel = DIFFICULTIES.find((d) => d.ai === (session.setup.ai ?? "heuristic-v1"))?.label ?? "";
 
   const activeResources = (ids: CardId[]) => ids.filter((id) => !view.cards[id]!.rested).length;
-  const detailId = $derived(hovered ?? selected);
+  const detailId = $derived(hovered ?? selected ?? pinned);
   const battleInfo = $derived.by(() => {
     const b = view.battle;
     if (!b) return "";
@@ -750,6 +810,8 @@
               stats={stats(id)}
               rested={view.cards[id]!.rested}
               pilot={pilotOf(id)}
+              keywords={keywordBadges(id)}
+              linkHint={linkHints.has(id)}
               state={cardState(id)}
               flash={flashed.has(id)}
               battle={battleRole(id)}
@@ -892,6 +954,7 @@
           <BoardCard
             card={def(id)}
             state={cardState(id)}
+            linkHint={linkHints.has(id)}
             onclick={() => clickCard(id)}
             onhover={(on) => (hovered = on ? id : null)}
           />
@@ -1093,6 +1156,12 @@
       {#if peek}
         <CardInfo card={peek} />
       {:else if detailId !== null && def(detailId)}
+        {#if detailId === pinned && hovered === null}
+          <div class="pin-bar">
+            <span>📌 Festgehalten</span>
+            <button class="btn ghost small" onclick={() => (pinned = null)}>Lösen</button>
+          </div>
+        {/if}
         <CardInfo
           card={def(detailId)!}
           stats={view.cards[detailId]!.zone === "battle" || view.cards[detailId]!.zone === "base"
@@ -1116,7 +1185,14 @@
       {:else}
         <ul class="help">
           <li><b>Überfahren</b> zeigt eine Karte hier im Detail (auch Namen im Log).</li>
-          <li><b>Leuchtende Karten</b> kannst du nutzen: anklicken oder auf das Ziel ziehen.</li>
+          <li>
+            <b>Leuchtende Karten</b> kannst du nutzen: anklicken öffnet die Auswahl, oder auf das Ziel ziehen. Andere
+            Karten hält ein Klick hier fest.
+          </li>
+          <li>
+            <b>Symbole am Kartenrand</b> sind die Keywords, die gerade wirken (gold leuchtend = nur
+            vorübergehend). Die <b>Kette</b> zeigt Links, beim Überfahren auch, welche Handkarte linken würde.
+          </li>
           <li>
             <b>Leertaste</b> löst den blauen Knopf aus, <b>Strg+Z</b> nimmt deine letzte Entscheidung zurück, ↶
             im Log springt zurück.
@@ -2098,6 +2174,18 @@
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--bg-raised);
+  }
+  .pin-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: -4px 0 8px;
+    font-size: 12px;
+    color: #ffd166;
+  }
+  .pin-bar .small {
+    padding: 2px 10px;
+    font-size: 12px;
   }
   .detail h3 {
     margin: 0 0 8px;
