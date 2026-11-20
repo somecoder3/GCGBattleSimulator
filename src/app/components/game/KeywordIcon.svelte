@@ -39,9 +39,9 @@
     {:else if kw === "highManeuver"}
       <path d="M4 18l6-6-6-6M12 18l6-6-6-6" />
     {:else if kw === "suppression"}
-      <path d="M4 12h9M4 6.5l9 5.5M4 17.5l9-5.5M13 12h2" /><circle class="fill" cx="18" cy="12" r="3" />
+      <path d="M20 6.5l-9 5.5M20 17.5l-9-5.5M11 12H9" /><circle class="fill" cx="6" cy="12" r="3" />
     {:else if kw === "breach"}
-      <path d="M4 20 18 6M11 5h8v8" /><path d="M6 4l2 3-2 2" />
+      <path d="M4 20 18 6M13 6h5v5" /><path class="wall" d="M10 2v7M10 18v4" />
     {:else if kw === "repair"}
       <path d="M12 5v14M5 12h14" />
     {:else if kw === "support"}
@@ -83,6 +83,10 @@
     fill: currentColor;
     stroke: none;
   }
+  .wall {
+    stroke-width: 2;
+    opacity: 0.6;
+  }
   b {
     padding-right: 2px;
     font-size: calc(var(--kw-size, 18px) * 0.62);
@@ -100,7 +104,7 @@
     --c: #5ee6d0;
   }
   [data-kw="suppression"] {
-    --c: #ff9a4d;
+    --c: #c79bff;
   }
   [data-kw="breach"] {
     --c: #ff6b7d;
@@ -109,7 +113,7 @@
     --c: #7fe0a0;
   }
   [data-kw="support"] {
-    --c: #c79bff;
+    --c: #ffb36b;
   }
   [data-kw="link"] {
     --c: #ffd166;

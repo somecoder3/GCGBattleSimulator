@@ -60,7 +60,7 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
   Link, Dauereffekte, vorübergehende Modifier). Spalte am linken Kartenrand, außerhalb der Drehung (bleibt bei
   geruhten Units aufrecht). Weiß umrandet = nicht gedruckt (`granted`), gold leuchtend = von einem Modifier
   mit Ende (`temporary`, „during this turn/battle“). Tooltip mit Name und Menge. Symbole: Blocker Schild,
-  First Strike Blitz, High-Maneuver Doppelpfeil, Suppression Fächer, Breach Pfeil, Repair Plus, Support Pfeil hoch.
+  First Strike Blitz, High-Maneuver Doppelpfeil, Suppression Fächer mit zwei Strahlen (lila), Breach Pfeil durch eine Wand, Repair Plus, Support Pfeil hoch (AP-Orange).
 - **Link**: Ketten-Symbol oben rechts an gelinkten Units (ersetzt das frühere „LINK“). `linkHints` (wie ExBurst):
   Überfahren/Wählen eines eigenen Piloten (auch Command mit 【Pilot】, `pairable`) markiert Units auf der Hand und
   Units ohne Piloten im Feld, mit denen er linken würde; eine Unit markiert passende Piloten auf der Hand
