@@ -394,7 +394,10 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Kalibrierung: echte Daten dünn (0–20 Spiele je Archetyp), M01 Shining echt 65 %, KI 35,5 % → KI-Schwäche.
   Egman taugt dafür nicht (große Events nur Top 8/16 ohne Bilanzen, keine Paarungen). Tauschsuche jetzt mit
   Doppel-Tauschen, erster Runde 2 Blöcke, sequenzieller Bestätigung bis 32 Blöcke; erster Lauf M01: kein Tausch
-  signifikant (bester +0,7 %).
+  signifikant (bester +0,7 %). **Stufe 2 und 3 gebaut (22. Nov.):** `pearls`, `values` (Ridge-Regression),
+  `swaps --pearls`, `seeds`, `evolve` (MAP-Elites, `src/lab/decklab/evolve.ts`). v0 überschätzt neue Decks stark
+  (45–49 % mit v0, 15–20 % mit v1) → `--evo-ai v1`; v1-Lauf mit `--seed 2` nach Generation 5 pausiert
+  (fortsetzbar mit demselben Befehl). Details `docs/DECKSEARCH.md` Abschnitt 10.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,

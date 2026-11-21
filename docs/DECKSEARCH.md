@@ -249,6 +249,39 @@ der KI 35,5 % gegen das Feld. Das ist der erste Kandidat für „KI-Schwächen z
     bewegen bei v1 höchstens 1–2 Punkte; das liegt an der Grenze dessen, was mit vertretbarer Rechenzeit messbar
     ist. Größere Hebel: Stufe 2/3 (andere Kerne, neue Archetypen) und die KI selbst.
 
+## 10. Stufe 2 und 3 gebaut (22. Nov. 2026)
+
+Neue Befehle von `npm run decklab` (Kern in `src/lab/decklab/pearls.ts`, `values.ts`, `evolve.ts`):
+
+- **`pearls [M01 | --colors White/Red]`** – unterschätzte Karten: Papierstärke (AP+HP gegen den Median der Units
+  gleichen Levels, Keywords, Zahl der Effekte, Kosten unter Level; je Kartentyp standardisiert) minus 4 ×
+  Spielrate in den Turnierlisten. Nur eine Vorauswahl; ob eine Karte hilft, misst die Simulation.
+- **`swaps M01 --pearls`** – die 12 besten Perlen der Deckfarben kommen als zusätzliche Tausch-Kandidaten dazu.
+- **`values M01 [--pearls]`** – Kartenwerte im Deck: zufällige Varianten (je 3 Tausche aus Archetyp-Karten und
+  Perlen), gepaart gegen die Basis gemessen, Ridge-Regression (`ridge`) → Wert je zusätzlicher Kopie mit
+  Standardfehler.
+- **`seeds`** – Keime aus dem Kombo-Graphen je Farbpaar (`deckSynergies` über alle nutzbaren Karten; gleiche
+  Partnergruppen nur einmal).
+- **`evolve`** – MAP-Elites: Nischen = Farbpaar × Kurve (Ø Unit-Level früh/mittel/spät) × Units-Anteil; Start mit
+  den Feld-Archetypen und Decks um die Keime (`buildAround`: Keim-Quelle 4×, Partner 2–3×, Rest nach Kartentyp
+  wie der Median der Turnierlisten mit den stärksten Karten der Farben); Nachkommen per Tausch (1–3 Karten,
+  gute Karten häufiger) oder Kreuzung (je Kartentyp von einem Elternteil); Endmessung der besten neuen Decks mit
+  `--ai`; Speichern als Labor-Deck nur ab `--min` (Standard 50 %).
+
+**Ergebnisse:**
+
+- Kartenwerte M01 (v1, 40 Varianten, 7872 Spiele, 4 min): alle Werte innerhalb von etwa ±2 Standardfehlern;
+  am ehesten eine zweite ZZ Gundam (+2,9 ± 1,9 %), Graze-Karten eher schädlich (−2 bis −3 %).
+- Evolution mit v0 (40 Generationen à 16, 124 000 Spiele, 4 min): **v0 überschätzt neue Decks stark**: die besten
+  neuen Decks lagen mit v0 bei 43–49 %, mit v1 nachgemessen bei 15–20 % (Meta-Decks: Nu Gundam 75 → 53 %).
+  Kein konkurrenzfähiger neuer Archetyp; die drei damals gespeicherten Decks wieder gelöscht und eine
+  Mindestquote eingebaut. Darum gibt es `--evo-ai v1` (gleicher `--seed` spielt aus dem Zwischenspeicher nach,
+  lange Läufe gehen in Etappen).
+- Evolution mit v1 (`--evo-ai v1 --generations 12 --batch 16 --seed 2`): auf Wunsch des Nutzers nach
+  Generation 5 pausiert (23 424 Spiele, bestes Deck 64,4 %, Red/White · spät · Effekte). Fortsetzen mit genau
+  demselben Befehl; das Bisherige kommt aus dem Zwischenspeicher, solange sich Engine/KI/Karten nicht ändern
+  (Code-Version `6c06dc01ed`).
+
 ## 9. Ursprüngliche offene Fragen
 
 - Wie viel Rechenzeit ist in Ordnung (eine Nacht, ein Wochenende)? Nur am Desktop per CLI oder auch im Browser?

@@ -54,12 +54,19 @@ export function legal(lib: CardLib, deck: DeckList): boolean {
  * Swaps supported by the archetype's real lists, best first: an add is worth more if the lists play more
  * copies of it than the base, a removal if they play fewer.
  */
-export function rankedSwaps(lib: CardLib, base: DeckList, meta: MetaDeck): Swap[] {
+export function rankedSwaps(
+  lib: CardLib,
+  base: DeckList,
+  meta: MetaDeck,
+  /** More cards to try (e.g. pearls), with the support they get instead of the real lists' copies. */
+  extra: Map<string, number> = new Map(),
+): Swap[] {
   const have = counts(base);
   const entries = meta.archetype.entries;
   const avg = new Map<string, number>();
   for (const e of entries)
     for (const [no, n] of Object.entries(e.cards)) avg.set(no, (avg.get(no) ?? 0) + n / entries.length);
+  for (const [no, support] of extra) if (!avg.has(no)) avg.set(no, (have.get(no) ?? 0) + support);
   const supported = (no: string) => lib.has(no) && lib.get(no).script.status !== "partial";
   const adds = [...avg.keys()].filter((no) => supported(no) && (have.get(no) ?? 0) < 4);
   const scored: { swap: Swap; score: number }[] = [];
@@ -93,6 +100,8 @@ export interface SearchOptions {
   /** Most blocks per opponent for a confirmation. */
   maxConfirmBlocks?: number;
   steps: number;
+  /** More cards to try as adds (pearls), see rankedSwaps. */
+  extraAdds?: Map<string, number>;
   log?: (text: string) => void;
 }
 
@@ -151,7 +160,7 @@ export async function swapSearch(
   let base = start;
   const steps: SwapStep[] = [];
   for (let step = 0; step < o.steps; step++) {
-    const swaps = rankedSwaps(lib, base, meta).slice(0, o.neighbours);
+    const swaps = rankedSwaps(lib, base, meta, o.extraAdds).slice(0, o.neighbours);
     o.log?.(`Schritt ${step + 1}: ${swaps.length} Tausch-Kandidaten`);
     if (!swaps.length) break;
     const winner = await race(search, base, swaps, field, o);
