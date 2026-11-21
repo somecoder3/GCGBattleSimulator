@@ -338,9 +338,10 @@ Beide nutzen dieselbe Speicherung wie die Simulationsläufe (IndexedDB) und spei
   von gundam-gcg.com (gedrosselt), erzeugt zwei Größen (Voll 600 px, Vorschau ~240 px, WebP) nach
   `build/images/` (**nicht im Repo**). Der Dev-Server liefert sie unter `cards/…` aus.
 - Platzhalter mit Name/Werten, solange ein Bild fehlt.
-- Später für die öffentliche Seite: Bilder nicht frei auf Pages legen (Pages ist öffentlich, auch bei
-  privatem Repo). Lösung wie in GCGScanner (verschlüsselte Pakete mit Passwort) oder eine andere, dann
-  gemeinsam entscheiden.
+- **Entschieden (21. Nov. 2026, Nutzer):** Die Originalbilder (600 px) liegen verschlüsselt mit einem festen
+  Schlüssel in der App im Repo (`public/cards/<name>.bin`, ~129 MB, `npm run images:pack`); die App
+  entschlüsselt sie im Build (`src/app/lib/cardimages.ts`), der Browser skaliert. Das ist nur Verschleierung
+  (Schlüssel im Code); ein Passwort wie in GCGScanner wurde angeboten und vom Nutzer abgelehnt.
 
 ---
 

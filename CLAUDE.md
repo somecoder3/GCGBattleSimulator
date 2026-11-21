@@ -340,6 +340,15 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Ergebnis (`optionalPlay`/`chooseWithoutOptional` in `src/ai/heuristic.ts`, alt `forcedFiller`). Gleich stark
   (v1 50,2/50,6 %, Suche 49,7 %), +5 % Zeit; Nutzer-Entscheidung: übernehmen. Ein erster Versuch, solche
   Karten in Simulationen nie zu spielen, wurde verworfen. Details `docs/AI.md` „Vorausschau“.
+- **Kartenbilder in der App (21. Nov., Nutzerentscheidung):** Originalbilder (600 px, eine Variante; der
+  Browser skaliert, Nutzerwunsch statt 240 + 480 px) verschlüsselt im Repo: `public/cards/<name>.bin` (2205
+  Dateien, ~129 MB) = IV + AES-GCM-256, **fester Schlüssel im Code** (`src/data/imagecrypt.ts`), IV aus dem
+  Bildinhalt (Neubau byte-gleich). `npm run images:pack` (aus `build/images/full`, entfernt Veraltetes).
+  Im Build lädt `src/app/lib/cardimages.ts` die `.bin`, entschlüsselt und zeigt Blob-URLs (`CardImage` erst
+  nahe dem Sichtbereich per IntersectionObserver, `use:cardSrc` für `<img>`); Dev-Server und Labor nutzen
+  weiter die rohen Bilder aus `build/images`. Service Worker cacht die `.bin`. **Hinweis an den Nutzer
+  gegeben:** fester Schlüssel = nur Verschleierung, jeder kann die Bilder aus der Seite holen; Passwort wie in
+  GCGScanner angeboten, abgelehnt. Im Preview geprüft (Kartenliste lädt nur Sichtbares, keine rohen WebP).
 - **Labor (21. Nov., Nutzerentscheidung):** Simulator und Replays sind nicht mehr in der PWA, sondern im
   **Labor**: `npm run lab` / `lab.bat` startet `tools/lab.ts` (127.0.0.1:5180), Vite im Middleware-Modus mit
   `__LAB__ = true` plus API `src/lab/api.ts`; Simulationen auf Worker-Threads (`src/lab/jobs.ts`, Fortschritt
@@ -455,8 +464,8 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
 - `cards.json` wird per `?url` als gehashte Datei gebaut und zur Laufzeit geladen (787 KB, gzip 85 KB).
 - Kartenbilder: `npm run images` kopiert aus GCGScanners Cache nach `build/images/full/` (600 px, 128 MB)
   und erzeugt `build/images/small/` (240 px, WebP q82, 49 MB) mit sharp. Ein Vite-Plugin in
-  `vite.config.ts` liefert sie im Dev- und Preview-Server unter `cards/<size>/<file>`; im Build sind sie
-  nicht enthalten. Die App lädt Bilder relativ (`base: "./"`).
+  `vite.config.ts` liefert sie im Dev- und Preview-Server unter `cards/<size>/<file>`; der Build enthält
+  nur die verschlüsselten `public/cards/*.bin` (siehe „Kartenbilder in der App“). Die App lädt Bilder relativ (`base: "./"`).
 - **Units mit AP „-“** (GCGDB `null`, z. B. GD01-048, EB01-013, 11 Karten) haben AP 0 (auf der Karte gedruckt,
   von Shops bestätigt); `CardPool` setzt fehlende AP/HP bei UNIT/UNIT TOKEN auf 0.
 - **Token** = Set `T` (dort gibt es auch ein Base-Token mit Typ BASE ohne Lv./Kosten, T-037), EX Base,
@@ -477,7 +486,8 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
 - Kartenbilder: alle 2205 liegen in GCGScanners `build\carddb-cache\images\` (`npm run images` findet sie
   über `../GCGScanner`). gundam-gcg.com
   sendet `Cross-Origin-Resource-Policy: same-site` (kein Einbinden von fremden Seiten). Bilder nicht ins Repo
-  und nicht frei auf Pages (Pages ist öffentlich).
+  und nicht frei auf Pages (Pages ist öffentlich); seit 21. Nov. nur verschlüsselt im Repo (siehe „Kartenbilder in
+  der App“).
 - `gh` ist nicht installiert; GitHub-Oberfläche über Claude in Chrome (Nutzer angemeldet als `somecoder3`).
   Zwei Rechner: zu Hause Projekte unter `D:\programming` (Node v26.13.1 seit 21. Nov., per winget `OpenJS.NodeJS.LTS`; Ausnahme von der 2-Wochen-Regel, weil Sicherheitsupdate; npm 11.20 überspringt das Install-Skript von esbuild, alles läuft trotzdem), Arbeitsrechner unter `E:\programming`
   (Node v26.13); auf beiden Python 3.11. Nach dem Wechsel: `git pull`, `npm ci`, ggf. `npm run images`.

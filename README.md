@@ -30,9 +30,12 @@ Decks als „Labor-Decks“. Details: `docs/LAB.md`.
 
 ### Kartenbilder
 
-Die offiziellen Bilder liegen **nicht** im Repo. `npm run images` übernimmt sie aus dem Cache von
-GCGScanner (`../GCGScanner/build/carddb-cache/images`) und erzeugt `build/images/full/` (600 px) und
-`build/images/small/` (240 px). Der Dev- und Preview-Server liefert sie unter `cards/<größe>/<datei>.webp`.
+Die offiziellen Bilder liegen **nur verschlüsselt** im Repo (`public/cards/<name>.bin`, Originalgröße, fester
+Schlüssel in `src/data/imagecrypt.ts`); ein Build (Preview, später Pages) lädt und entschlüsselt sie in der App.
+Für die Entwicklung übernimmt `npm run images` die unverschlüsselten Bilder aus dem Cache von GCGScanner
+(`../GCGScanner/build/carddb-cache/images`) nach `build/images/full/` (600 px) und `build/images/small/`
+(240 px, nicht im Repo); Dev-Server und Labor liefern sie unter `cards/<größe>/<datei>.webp`.
+`npm run images:pack` verschlüsselt neue oder geänderte Bilder (unveränderte bleiben byte-gleich).
 
 ```bash
 npm run images -- --source <ordner>   # andere Quelle

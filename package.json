@@ -19,6 +19,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "images": "tsx tools/images.ts",
+    "images:pack": "tsx tools/imagepack.ts",
     "verify": "npm run format:check && npm run lint && npm run check && npm test && npm run build",
     "sim": "tsx tools/sim.ts",
     "fuzz": "tsx tools/sim.ts --check --games 100000",

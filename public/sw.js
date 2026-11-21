@@ -1,7 +1,8 @@
 // Service worker: the app works offline after the first visit.
 // - The page itself: network first, cached copy when offline.
 // - Hashed assets (JS, CSS, cards.json) and the icons: cache first.
-// - Card images: cached when they are shown, kept across versions (they never change).
+// - Card images: cached when they are shown, kept across versions (they never change). In a build they are
+//   the encrypted originals cards/<name>.bin; the app decrypts them (src/app/lib/cardimages.ts).
 // The version comes from the registration URL (sw.js?v=<build id>); old caches are removed on activation.
 
 const VERSION = new URL(self.location.href).searchParams.get("v") || "dev";

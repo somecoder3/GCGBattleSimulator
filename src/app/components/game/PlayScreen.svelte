@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cardSrc } from "../../lib/cardimages";
   import { cardImageUrl, type CardPool } from "../../../data/cards";
   import { AI_LABELS, DIFFICULTIES, type AiName } from "../../../ai/registry";
   import { Engine } from "../../../engine/engine";
@@ -185,7 +186,7 @@
         {#if i === 1}<span class="vs" aria-hidden="true">VS</span>{/if}
         <div class="deck-panel {v.side}">
           <div class="art">
-            {#if v.face}<img src={cardImageUrl(v.face, "full")} alt="" />{/if}
+            {#if v.face}<img use:cardSrc={cardImageUrl(v.face, "full")} alt="" />{/if}
             <span class="who">{v.who}</span>
           </div>
           <div class="deck-info">

@@ -1,16 +1,56 @@
 <script lang="ts">
   import type { CardDef } from "../../data/types";
+  import { imageSource } from "../lib/cardimages";
 
   // Official image with a placeholder (number, name, stats) while it loads or if it is missing.
+  // In a build the images are encrypted (src/app/lib/cardimages.ts): `src` is the image path, `shown` the
+  // URL the <img> gets. Lazy images are only fetched near the viewport (as `loading="lazy"` did before).
   let { card, src, eager = false }: { card: CardDef; src: string; eager?: boolean } = $props();
 
   // Keyed by src, so switching printings never shows a stale state.
   let loaded = $state<string>();
   let failed = $state<string>();
   const status = $derived(failed === src ? "failed" : loaded === src ? "ok" : "loading");
+
+  let near = $state(false);
+  let shown = $state<{ src: string; url: string }>();
+
+  function nearViewport(node: HTMLElement) {
+    if (eager || typeof IntersectionObserver === "undefined") {
+      near = true;
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          near = true;
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
+  }
+
+  $effect(() => {
+    const path = src;
+    if (!path || !(near || eager)) return;
+    const source = imageSource(path);
+    if (typeof source === "string") {
+      shown = { src: path, url: source };
+      return;
+    }
+    let alive = true;
+    source.then(
+      (url) => alive && (shown = { src: path, url }),
+      () => alive && (failed = path),
+    );
+    return () => (alive = false);
+  });
 </script>
 
-<div class="card" data-color={card.color?.toLowerCase() ?? "none"}>
+<div class="card" data-color={card.color?.toLowerCase() ?? "none"} use:nearViewport>
   {#if status !== "ok"}
     <div class="placeholder" class:failed={status === "failed"}>
       <span class="no">{card.no}</span>
@@ -20,9 +60,9 @@
       {/if}
     </div>
   {/if}
-  {#if src && status !== "failed"}
+  {#if src && status !== "failed" && shown?.src === src}
     <img
-      {src}
+      src={shown.url}
       alt={card.name}
       loading={eager ? "eager" : "lazy"}
       decoding="async"
