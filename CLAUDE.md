@@ -479,7 +479,7 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   sendet `Cross-Origin-Resource-Policy: same-site` (kein Einbinden von fremden Seiten). Bilder nicht ins Repo
   und nicht frei auf Pages (Pages ist öffentlich).
 - `gh` ist nicht installiert; GitHub-Oberfläche über Claude in Chrome (Nutzer angemeldet als `somecoder3`).
-  Zwei Rechner: zu Hause Projekte unter `D:\programming` (Node v24.21), Arbeitsrechner unter `E:\programming`
+  Zwei Rechner: zu Hause Projekte unter `D:\programming` (Node v26.13.1 seit 21. Nov., per winget `OpenJS.NodeJS.LTS`; Ausnahme von der 2-Wochen-Regel, weil Sicherheitsupdate; npm 11.20 überspringt das Install-Skript von esbuild, alles läuft trotzdem), Arbeitsrechner unter `E:\programming`
   (Node v26.13); auf beiden Python 3.11. Nach dem Wechsel: `git pull`, `npm ci`, ggf. `npm run images`.
 
 ## Konventionen
