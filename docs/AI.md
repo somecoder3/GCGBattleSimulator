@@ -413,6 +413,35 @@ Banshee (ST12-006, gepaart: 4 Trash-Karten → First Strike für den Zug, 4 weit
   (Rauschen). Behalten: v0 messbar besser, sonst gleich, und die Entscheidungen sind in den Prüfstellungen
   (`tests/ai/fights.test.ts`) richtig.
 
+## Shining Gundam: Trash-Kosten und Link-Partner (22. Nov. 2026, Kalibrierung des Deck-Labors)
+
+Anlass: Die Kalibrierung (`npm run decklab -- calibrate`, `docs/DECKSEARCH.md`) zeigte Shining Gundam (M01, 18 %
+des Metas) bei v1 mit 35–39 % gegen das Feld, echt deutlich stärker. Die Liste war nicht schuld (beste echte Liste
+M01B ebenfalls ~40 %). Analyse mit `npm run game -- M01 M03 7 --explain 13` (neu: Werte aller v1-Optionen eines
+Zuges; `game` gibt beiden KIs jetzt wie der Simulator ihr Deck und das Feld mit):
+
+- **Trash-Karten als Kosten:** Shining Gundams 【Deploy】 („choose 2 (MF) Unit cards from your trash. Exile
+  them. If you do, … (Special Move) … to your hand“) und Master Gundams 【Attack】 (2 Special Moves verbannen →
+  5 Schaden) wurden fast nie genutzt. v0 behandelte die Wahl eigener Karten für „exile“ wie das Schädigen
+  eigener Units (Wertung −100, also „Fertig“), und v1 sah keinen Unterschied, weil v0 die zurückgeholte Karte in
+  der Simulation gleich wieder ausspielte (Gleichstand → v0 entscheidet). Jetzt sind eigene Karten im Trash
+  bei schädigenden Effekten billige Kosten (`targetScore`, die wertloseste zuerst); alt `plainTrashCost`.
+- **Link-Partner behalten:** Overflowing Affection warf Master Asia neben Master Gundam ab. `keepValue` gibt
+  Piloten mit passender Unit auf der Hand (und umgekehrt) +7 (`linkPartnerInHand`); alt `plainLinkKeep`.
+
+Messung (`npm run ab`, `--decks 12 --by-deck`, Variante „plain-shining“ = beide alt):
+
+| KI                               | gesamt                 | M01 Shining   |
+| -------------------------------- | ---------------------- | ------------- |
+| v0, beide Regeln (18 720 Spiele) | **51,6 %** (50,9–52,3) | 34,0 → 44,2 % |
+| v0, nur Trash-Kosten (9360)      | 51,1 %                 | 34,0 → 44,7 % |
+| v0, nur Link-Partner (18 720)    | 50,4 % (n. s.)         | ±0            |
+| v1, beide Regeln (9360)          | 50,7 % (49,7–51,7)     | 39,4 → 45,0 % |
+
+Deck-Labor (v1, Feld 12, 4 Blöcke): M01 gegen das Feld 39,3 → **44,5 %**. In Partien kommt Master Gundams
+Verbannung jetzt 1,7 statt 0,75 Karten pro Spiel vor, Special Moves aus dem Trash 0,9 statt 0,5. Weiter offen:
+v0 spielt zurückgeholte Special Moves in v1-Simulationen oft sofort ohne bleibenden Nutzen aus.
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen

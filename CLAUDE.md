@@ -445,8 +445,10 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
     Decks-Reiter kopiert Archetyp → Konsens oder eine echte Liste. Sortiert nach Ergebnis
     `resultScore` = log₂(Spieler)/√Platz; die erste ist die beste Liste (`M01B`, vorher bestplatzierte).
     Spielen/Simulieren aus dem Meta-Reiter nimmt die angezeigte Liste (Turnierliste als `M03T5`, nur im Speicher).
-- Beobachtung: Shining Gundam (M01, meistgespielt) gewinnt bei v1 nur ~40 %; die Karten sind korrekt (Partie
-  per `npm run game` geprüft), die KI spielt das Special-Move-Timing schlecht (v0 wirft z. B. Master Asia ab).
+- Beobachtung: Shining Gundam (M01, meistgespielt) gewann bei v1 nur ~40 %. **22. Nov. verbessert** (Kalibrierung
+  des Deck-Labors): eigene Trash-Karten als Effekt-Kosten (`plainTrashCost` = alt) und Link-Partner beim Abwerfen
+  behalten (`plainLinkKeep`); M01 gegen das Feld 39,3 → 44,5 % (v1), v0 gesamt 51,6 %. `npm run game` gibt den KIs
+  jetzt Deck und Feld mit und kann mit `--explain <Zug>` die v1-Werte zeigen. Details `docs/AI.md` „Shining Gundam“.
 
 ## Svelte-Fallen
 

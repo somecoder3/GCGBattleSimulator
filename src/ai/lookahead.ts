@@ -60,6 +60,11 @@ export class LookaheadPolicy implements Policy {
 
   /** All options, best first (stable: the v0 choice wins ties). */
   rank(view: GameState, decision: Decision): Action[] {
+    return this.explain(view, decision).map((x) => x.option);
+  }
+
+  /** The options with their values, best first (analysis: `npm run game -- … --explain`). */
+  explain(view: GameState, decision: Decision): { option: Action; score: number }[] {
     const base = determinize(view);
     const me = decision.player;
     const options = this.rules.allowed(view, decision); // the EX Resource rule
@@ -67,7 +72,7 @@ export class LookaheadPolicy implements Policy {
     const ordered = [preferred, ...options.filter((o) => o !== preferred)];
     const scored = ordered.map((option, i) => ({ option, i, score: this.score(base, option, me) }));
     scored.sort((a, b) => b.score - a.score || a.i - b.i);
-    return scored.map((x) => x.option);
+    return scored.map(({ option, score }) => ({ option, score }));
   }
 
   /**

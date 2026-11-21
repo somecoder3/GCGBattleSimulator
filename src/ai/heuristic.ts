@@ -73,6 +73,14 @@ export interface RuleOptions {
   /** Pair a Pilot with any Unit, even if a Unit it links is in the hand (before 18 Nov 2026). */
   pairAnyPilot?: boolean;
   /**
+   * Before 22 Nov 2026: own cards in the trash that an effect exiles (or otherwise "harms") were avoided like
+   * own Units in play, so "You may choose 2 (MF) Unit cards from your trash. Exile them. If you do, …"
+   * (Shining Gundam, Master Gundam) was never used. Now such trash cards count as a cheap cost.
+   */
+  plainTrashCost?: boolean;
+  /** Before 22 Nov 2026: discarding ignored that a Pilot links a Unit in the hand (and vice versa). */
+  plainLinkKeep?: boolean;
+  /**
    * v1/search simulations as before 20 Nov 2026: an end-of-main-phase Command that v0 plays in the
    * simulation counts even when the turn is better without it (see optionalPlay, docs/AI.md "Vorausschau").
    */
@@ -315,7 +323,23 @@ class Ctx {
     let v = card.type === "UNIT" ? 6 : card.type === "PILOT" ? 4 : 3;
     v += Math.min(card.level, level + 2);
     if (card.level > level + 3) v -= 4; // far away from being playable
+    if (!this.options.plainLinkKeep && card.type !== "COMMAND") v += this.linkPartnerInHand(id) ? 7 : 0;
     return v;
+  }
+
+  /**
+   * A Pilot with a Unit in the own hand it links (or a Unit with such a Pilot): both are worth keeping
+   * together (found 22 Nov 2026: Overflowing Affection discarded Master Asia next to Master Gundam).
+   */
+  linkPartnerInHand(id: CardId): boolean {
+    const me = this.card(id);
+    return this.s.players[this.me].hand.some((h) => {
+      if (h === id || !this.known(h)) return false;
+      const other = this.card(h);
+      if (me.type === "PILOT" && other.type === "UNIT") return satisfiesLink(other, me);
+      if (me.type === "UNIT" && other.pairable) return satisfiesLink(me, other);
+      return false;
+    });
   }
 
   /** The own deck's combo plan (src/ai/synergy.ts), if known. */
@@ -936,6 +960,11 @@ class Ctx {
     const inPlay = card.zone === "battle";
     const value = inPlay ? this.unitValue(o.card) : this.keepValue(o.card);
     if (intent.kind === "neutral") return friendly ? 1 + value : 0.5;
+    // Own trash cards an effect exiles are its cost ("… from your trash. Exile them. If you do, …"):
+    // cheap, the least valuable first.
+    if (friendly && card.zone === "trash" && intent.kind === "harm" && !this.options.plainTrashCost) {
+      return 1 + Math.max(0, 20 - value) * 0.05;
+    }
     const good = intent.kind === "harm" ? !friendly : friendly;
     if (good && inPlay && intent.rest && !friendly && !this.options.plainRest && this.known(o.card)) {
       return 1 + this.restValue(o.card) + value * 0.1;
