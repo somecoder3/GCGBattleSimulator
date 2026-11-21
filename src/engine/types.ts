@@ -123,7 +123,14 @@ export interface Frame {
   pc: number;
   vars: Record<string, CardId[]>;
   /** Choice in progress: variable, cards still to choose, whether the player may stop. */
-  choosing?: { as: string; left: number; optional: boolean; candidates: CardId[] };
+  choosing?: {
+    as: string;
+    left: number;
+    optional: boolean;
+    candidates: CardId[];
+    /** The full number or nothing ("You may choose 2 … If you do"). */
+    exact?: boolean;
+  };
   /** Cards from the deck only the controller has seen (Look at the top …). */
   looking?: CardId[];
   /** Remaining cards to place for "deploy N tokens" etc. when a choice interrupts it. */

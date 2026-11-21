@@ -345,6 +345,8 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   jeder gewählten Karte (auch nur „ⓘ Details“), immer ganz im Bild (gemessen und begrenzt), einklappbar („▾“),
   KI-Angriffe 1,1 s mit Pfeil angekündigt (`session.aiChoice`, `announced`). Im Handy-Layout mit der Partie des
   Nutzers geprüft. Details `docs/UI.md`.
+  Nachtrag: Kartenwahl durch Effekte wird gesammelt und erst mit „Bestätigen (n/m)“ ausgeführt (Tipp wählt/abwählt,
+  `staged`/`confirmStaged`, `Frame.choosing.exact` neu), „ⓘ Karte ansehen“ zeigt die getippte Karte am Handy.
 - **Wahl von Karten verständlicher (21. Nov., vom Nutzer am Handy gefunden):** Master Gundams 【Attack】 (2
   Special Moves aus dem Trash verbannen → 5 Schaden auf die Base) wirkte nicht, weil „Fertig“ (hervorgehoben,
   Leertaste) bei „Ziel wählen“ gedrückt wurde und damit nichts gewählt war; die Engine war richtig (nachgespielt

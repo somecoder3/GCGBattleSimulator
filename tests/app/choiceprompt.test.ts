@@ -31,7 +31,7 @@ engine.apply(s, { type: "attack", unit: s.players[0].battle[0]!, target: "player
 describe("optional choice of cards", () => {
   it("says how many cards from where, and that choosing none skips the effect", () => {
     const choice = choiceInfo(s);
-    expect(choice).toEqual({ left: 2, chosen: 0, optional: true, zone: "trash" });
+    expect(choice).toEqual({ left: 2, chosen: 0, optional: true, exact: true, candidates: 2, zone: "trash" });
     expect(decisionText(s.pending!, name, choice)).toBe(
       "Master Gundam: 2 Karten aus deinem Trash wählen. Ohne Wahl entfällt der Effekt.",
     );

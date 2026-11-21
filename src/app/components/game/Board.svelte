@@ -496,6 +496,54 @@
     ),
   );
   const buttonLabel = (o: Action) => (o.type === "done" ? doneLabel(choice) : actionLabel(o, name));
+
+  // Choosing cards for an effect: taps only collect them (again: remove), "Bestätigen" applies them (user's
+  // wish, 21 Nov 2026: the first tap of two had already resolved the effect, a wrong tap couldn't be undone).
+  let staged = $state<CardId[]>([]);
+  /** The last card tapped in a choice: shown in the detail (and on the phone with "Karte ansehen"). */
+  let stagedLook = $state<CardId | null>(null);
+  const staging = $derived(!!choice);
+  /** How many cards a confirmation needs: exactly the number (or all there are), or 1 … that many. */
+  const stageMax = $derived(choice ? Math.min(choice.left, choice.candidates) : 0);
+  const canConfirm = $derived.by(() => {
+    if (!choice || !staged.length) return false;
+    const upTo = choice.optional && !choice.exact;
+    return upTo ? staged.length <= stageMax : staged.length === stageMax;
+  });
+  $effect(() => {
+    void decision;
+    staged = [];
+    stagedLook = null;
+  });
+
+  function stage(id: CardId) {
+    stagedLook = id;
+    pinned = id;
+    if (staged.includes(id)) staged = staged.filter((x) => x !== id);
+    else if (stageMax === 1) staged = [id];
+    else if (staged.length < stageMax) staged = [...staged, id];
+  }
+
+  /** Applies the collected cards one by one (the engine asks for each), then "done" if it still asks. */
+  function confirmStaged() {
+    if (!decision || !canConfirm) return;
+    const source = decision.source;
+    let step: LogStep | undefined;
+    for (const id of staged) {
+      const pending = session.state.pending;
+      if (!pending || pending.player !== human || pending.source !== source) break;
+      const option = withCopies(pending.options).find((o) => o.type === "target" && o.card === id);
+      if (!option) break;
+      step = session.apply(option);
+    }
+    const pending = session.state.pending;
+    const info = choiceInfo(session.state);
+    if (pending?.player === human && pending.source === source && info && info.chosen > 0) {
+      const done = pending.options.find((o) => o.type === "done");
+      if (done) step = session.apply(done);
+    }
+    refresh(step);
+  }
   const selectedOptions = $derived(
     selected === null ? [] : options.filter((o) => primaryCard(o) === selected),
   );
@@ -613,6 +661,7 @@
   }
 
   function cardState(id: CardId): "" | "legal" | "selected" | "target" {
+    if (staging) return staged.includes(id) ? "selected" : legal.has(id) ? "legal" : "";
     if (id === selected) return "selected";
     if (targets.has(id)) return "target";
     if (selected === null && legal.has(id)) return "legal";
@@ -636,6 +685,7 @@
       suppressClick = false;
       return;
     }
+    if (staging && options.some((o) => o.type === "target" && o.card === id)) return stage(id);
     if (decision && selected !== null) {
       const complete = selectedOptions.filter((o) => secondary(o) === id);
       if (complete.length === 1) return act(complete[0]!);
@@ -683,7 +733,8 @@
   }
 
   function onpointerdown(e: PointerEvent, id: CardId) {
-    if (!decision || !legal.has(id) || e.button !== 0) return;
+    // In a choice of cards a tap only collects (no drag that would apply it at once).
+    if (!decision || staging || !legal.has(id) || e.button !== 0) return;
     pressed = { id, x: e.clientX, y: e.clientY, pointer: e.pointerId };
   }
 
@@ -747,6 +798,9 @@
       selected = null;
       pinned = null;
       showTrash = null;
+    } else if (e.key === " " && staging && canConfirm && !e.repeat) {
+      e.preventDefault();
+      confirmStaged();
     } else if (e.key === " " && spaceAction && !e.repeat) {
       e.preventDefault();
       act(spaceAction);
@@ -1015,7 +1069,7 @@
               {#each offBoard as id (id)}
                 <BoardCard
                   card={def(id)}
-                  state="legal"
+                  state={staged.includes(id) ? "selected" : "legal"}
                   onclick={() => clickCard(id)}
                   onhover={(on) => (hovered = on ? id : null)}
                 />
@@ -1031,7 +1085,23 @@
         {/if}
       </div>
       <div class="buttons">
-        {#if decision}
+        {#if decision && staging}
+          {#if staged.length}
+            <button class="btn primary" disabled={!canConfirm} onclick={confirmStaged}>
+              Bestätigen ({staged.length}/{stageMax}){#if canConfirm}<kbd>Leertaste</kbd>{/if}
+            </button>
+          {/if}
+          {#if stagedLook !== null}
+            <button class="btn look-btn" onclick={() => (panelOpen = true)}>ⓘ Karte ansehen</button>
+          {/if}
+          {#each buttons as o (JSON.stringify(o))}
+            {#if !(o.type === "done" && staged.length)}
+              <button class="btn" class:primary={o === spaceAction && !staged.length} onclick={() => act(o)}>
+                {buttonLabel(o)}{#if o === spaceAction && !staged.length}<kbd>Leertaste</kbd>{/if}
+              </button>
+            {/if}
+          {/each}
+        {:else if decision}
           {#each buttons as o (JSON.stringify(o))}
             <button class="btn" class:primary={o === spaceAction} onclick={() => act(o)}>
               {buttonLabel(o)}{#if o === spaceAction}<kbd>Leertaste</kbd>{/if}

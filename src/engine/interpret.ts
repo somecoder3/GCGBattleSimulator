@@ -416,7 +416,7 @@ function exec(c: Ctx, frame: Frame, instr: Instr): void {
         next();
         return;
       }
-      frame.choosing = { as, left, optional, candidates: pool };
+      frame.choosing = { as, left, optional, candidates: pool, ...(exact ? { exact } : {}) };
       offerChoice(c, frame, "target", instr.by === "opponent" ? other(me) : undefined);
       return;
     }

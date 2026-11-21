@@ -44,6 +44,12 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
   Wahl von Karten durch einen Effekt (`choiceInfo` in `actions.ts`, aus `Frame.choosing`): Text sagt Anzahl und
   Ort („2 Karten aus deinem Trash wählen. Ohne Wahl entfällt der Effekt.“); ohne gewählte Karte heißt „Fertig“
   „Nicht nutzen“ und liegt nicht auf der Leertaste (Nutzer, 21. Nov.: Master Gundam, „Fertig“ wählte nichts).
+  **Sammeln und Bestätigen** (Nutzer, 21. Nov.): Bei jeder Kartenwahl eines Effekts (`choiceInfo` liefert Anzahl,
+  `exact` aus `Frame.choosing`) sammelt ein Tipp die Karte (`staged`, nochmal: abwählen; bei einer Karte ersetzt
+  der Tipp), Ziehen ist dabei aus. „Bestätigen (n/m)“ ist erst aktiv, wenn die Anzahl passt (genau m, bei
+  „up to“ 1…m), und führt dann die Wahl Karte für Karte aus (`confirmStaged`, danach „done“, falls die Engine
+  noch fragt). Vorher wirkte schon der erste Tipp, und bei genau zwei Kandidaten wählte die Engine die zweite
+  selbst. „ⓘ Karte ansehen“ öffnet am Handy die Schublade mit der zuletzt getippten Karte (`stagedLook`, `pinned`).
 - **Hand** als Fächer (`--k`/`--ak`), Überfahren hebt die Karte.
 - **Aktionsmenü** schwebt an der gewählten Karte (`menuAt`, berechnet in `placeArrows`): Hand darüber, Feld
   daneben (damit Ziele sichtbar bleiben). Die gewählte Handkarte bleibt angehoben (`.hand-card.raised`), sonst sank sie

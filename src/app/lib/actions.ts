@@ -98,6 +98,10 @@ export interface ChoiceInfo {
   left: number;
   chosen: number;
   optional: boolean;
+  /** Exactly `left` cards (or none, if optional). */
+  exact: boolean;
+  /** Cards that can be chosen now. */
+  candidates: number;
   /** "trash", "hand", "battle" … if all candidates are in one zone of the chooser. */
   zone?: string;
 }
@@ -105,13 +109,20 @@ export interface ChoiceInfo {
 /** The running choice of a decision, read from the state (undefined for other decisions). */
 export function choiceInfo(state: GameState): ChoiceInfo | undefined {
   const pending = state.pending;
-  if (pending?.kind !== "effect" || pending.prompt !== "target") return undefined;
+  if (pending?.kind !== "effect" || !pending.options.some((o) => o.type === "target")) return undefined;
   const frame = [...state.frames].reverse().find((f) => f.choosing);
   if (!frame?.choosing) return undefined;
-  const { as, left, optional, candidates } = frame.choosing;
+  const { as, left, optional, candidates, exact } = frame.choosing;
   const zones = new Set(candidates.map((id) => state.cards[id]?.zone ?? ""));
   const zone = zones.size === 1 ? [...zones][0] : undefined;
-  return { left, chosen: frame.vars[as]?.length ?? 0, optional, ...(zone ? { zone } : {}) };
+  return {
+    left,
+    chosen: frame.vars[as]?.length ?? 0,
+    optional,
+    exact: !!exact,
+    candidates: candidates.length,
+    ...(zone ? { zone } : {}),
+  };
 }
 
 const ZONE_TEXT: Record<string, string> = {
