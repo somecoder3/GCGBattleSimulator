@@ -200,7 +200,42 @@ Ein Reiter „Deck-Labor“ oder ein Bericht pro Lauf, je Kandidat:
 Stufe 0 und 1 lassen sich in wenigen Sitzungen bauen und liefern schon brauchbare Ergebnisse. Stufe 3 ist der
 Teil mit dem größten Risiko: Die Ergebnisse hängen am stärksten von der KI ab.
 
-## 7. Offene Fragen an den Nutzer
+## 7. Antworten des Nutzers (21. Nov. 2026)
+
+- **Rechenzeit:** keine Nachtläufe (Laptop im Schlafzimmer, Lüfter). Darum rechnet das Deck-Labor
+  standardmäßig auf der Hälfte der Kerne (`--workers`) und speichert jeden Achterblock sofort: Läufe lassen sich
+  abbrechen und tagsüber in Etappen fortsetzen.
+- **KI:** v1 für erste Tests, eigentlich die Suche, sofern sie deutlich besser ist.
+- **Karten:** nur die aktuelle Bannliste; die Sammlung (ExBurst) vielleicht später.
+- **Format:** Bo1.
+- **KI-Schwächen:** zuerst beheben, wo sie ganze Archetypen betreffen.
+
+## 8. Stand: Stufe 0 und 1 gebaut (21. Nov. 2026)
+
+`npm run decklab` (`tools/decklab.ts`, Kern in `src/lab/decklab/`):
+
+- **Messen** (`measure.ts`): Einheit ist ein Achterblock eines Decks gegen einen Gegner (beide Startspieler,
+  Sitze, KI-Plätze). Der Seed eines Blocks hängt nur vom Basis-Seed und vom Gegner ab, nicht vom Kandidaten:
+  Alle Kandidaten spielen dieselben Situationen (gemeinsame Zufallszahlen), Vergleiche sind gepaart
+  (`pairedDiff`: gewichtetes Mittel der Blockdifferenzen mit 95-%-Intervall). Jeder Block liegt im
+  Labor-Speicher (`kv`, Schlüssel mit Code-Version, KI, Seed, Deck-Hashes, Block): Wiederholungen kosten nichts.
+- **Feld** (`field.ts`): die meistgespielten Archetypen (Konsenslisten, voll unterstützt), Gewichte = Meta-Anteile.
+- **Kalibrierung** (`npm run decklab -- calibrate`): Jeder Archetyp gegen jeden; daneben echte Ergebnisse aus
+  den **Paarungen** der Limitless-Turniere (neu im Snapshot: `MetaSnapshot.pairings`, je Spiel Turnier, die
+  Platzierungen beider Spieler und das Ergebnis, ohne Spieler). Die Platzierungen werden über die Listen
+  (`Archetype.entries`) dem Archetyp zugeordnet, auch „other“-Listen.
+- **Kartentausch** (`swaps.ts`, `npm run decklab -- swaps M01`): Nachbarn „−1 X / +1 Y“, Y aus den echten
+  Listen des Archetyps (mehr Kopien als die Basis), sortiert nach Unterstützung durch diese Listen; Rennen mit
+  Successive Halving gegen das Feld, Sieger auf frischen Seeds (Basis-Seed + 1000) bestätigt, übernommen nur
+  bei 95 % > 0; dann der nächste Schritt.
+
+**Erste Kalibrierung (v1, Feld 12, 4 Blöcke je Paarung = 4608 Spiele, 3 min auf 8 Workern):** Die echten
+Daten sind dünn. Limitless hat in 8 Wochen nur 148 Paarungen zwischen Spielern mit Liste (Egman liefert keine
+Paarungen), also 0–20 echte Spiele je Archetyp; die Spalte „echt“ ist deshalb nur ein grober Hinweis. Deutlich
+und zu früheren Beobachtungen passend: **Shining Gundam (M01, 18 % des Metas)** echt 65 % (16 Spiele), bei
+der KI 35,5 % gegen das Feld. Das ist der erste Kandidat für „KI-Schwächen zuerst beheben“.
+
+## 9. Ursprüngliche offene Fragen
 
 - Wie viel Rechenzeit ist in Ordnung (eine Nacht, ein Wochenende)? Nur am Desktop per CLI oder auch im Browser?
 - Welche KI ist der Maßstab: v1 (schnell) oder die Suche (genauer, ~9× langsamer)?

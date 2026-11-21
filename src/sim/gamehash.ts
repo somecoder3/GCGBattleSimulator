@@ -9,7 +9,7 @@
 import type { SimJob } from "./runner";
 
 /** cyrb53 (public domain): a fast 53-bit string hash. */
-function cyrb53(text: string, seed = 0): number {
+export function cyrb53(text: string, seed = 0): number {
   let h1 = 0xdeadbeef ^ seed;
   let h2 = 0x41c6ce57 ^ seed;
   for (let i = 0; i < text.length; i++) {

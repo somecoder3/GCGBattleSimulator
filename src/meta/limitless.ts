@@ -2,7 +2,7 @@
 // works from the browser too). Builds a meta snapshot: the top placings of recent tournaments.
 
 import type { CardPool } from "../data/cards";
-import type { MetaDeck, MetaSnapshot, MetaTournament } from "./types";
+import type { MetaDeck, MetaPairing, MetaSnapshot, MetaTournament } from "./types";
 
 export const LIMITLESS_API = "https://play.limitlesstcg.com/api";
 
@@ -21,11 +21,46 @@ interface ApiCard {
 }
 
 interface ApiStanding {
+  /** Player handle: only used to connect the pairings with the decks, never stored. */
+  player?: string;
   placing: number | null;
   record: { wins: number; losses: number; ties: number } | null;
   deck: { id: string; name: string } | null;
   decklist: Record<string, ApiCard[]> | null;
   drop: number | null;
+}
+
+interface ApiPairing {
+  round: number;
+  player1: string | null;
+  player2: string | null;
+  /** The winner's handle, "0" (or anything else) for a draw. */
+  winner: string | number | null;
+}
+
+/**
+ * The games of one tournament's pairings between kept placings (both players with a deck list in the
+ * snapshot), by placing: the player handles are only used here and never stored.
+ */
+export function toPairings(
+  tournament: string,
+  standings: ApiStanding[],
+  pairings: ApiPairing[],
+  kept: (placing: number) => boolean,
+): MetaPairing[] {
+  const placingOf = new Map<string, number>();
+  for (const s of standings)
+    if (s.player && s.placing !== null && kept(s.placing)) placingOf.set(s.player, s.placing);
+  const out: MetaPairing[] = [];
+  for (const p of pairings) {
+    if (!p.player1 || !p.player2) continue; // bye
+    const a = placingOf.get(p.player1);
+    const b = placingOf.get(p.player2);
+    if (a === undefined || b === undefined) continue;
+    const result = p.winner === p.player1 ? 1 : p.winner === p.player2 ? 2 : 0;
+    out.push({ tournament, a, b, result });
+  }
+  return out;
 }
 
 export interface SnapshotOptions {
@@ -94,6 +129,7 @@ export async function fetchSnapshot(pool: CardPool, options: SnapshotOptions): P
   log(`${tournaments.length} Turniere ab ${options.minPlayers} Spielern`);
 
   const decks: MetaDeck[] = [];
+  const pairings: MetaPairing[] = [];
   for (const [i, t] of tournaments.entries()) {
     await sleep(delay);
     const standings = await getJson<ApiStanding[]>(f, `${LIMITLESS_API}/tournaments/${t.id}/standings`);
@@ -102,7 +138,19 @@ export async function fetchSnapshot(pool: CardPool, options: SnapshotOptions): P
       .map((s) => toMetaDeck(pool, t.id, s))
       .filter((d): d is MetaDeck => d !== null);
     decks.push(...top);
-    log(`${i + 1}/${tournaments.length} ${t.date} ${t.name}: ${top.length} Decks`);
+    // Real matchups of all players (deck lists or not), for the calibration of the AI (docs/DECKSEARCH.md).
+    let games = 0;
+    try {
+      await sleep(delay);
+      const raw = await getJson<ApiPairing[]>(f, `${LIMITLESS_API}/tournaments/${t.id}/pairings`);
+      const kept = new Set(top.map((d) => d.placing));
+      const found = toPairings(t.id, standings, raw, (p) => kept.has(p));
+      pairings.push(...found);
+      games = found.length;
+    } catch {
+      // no pairings: the matchups of this tournament are missing
+    }
+    log(`${i + 1}/${tournaments.length} ${t.date} ${t.name}: ${top.length} Decks, ${games} Paarungen`);
   }
 
   return {
@@ -115,5 +163,6 @@ export async function fetchSnapshot(pool: CardPool, options: SnapshotOptions): P
     topN: options.topN,
     tournaments,
     decks,
+    pairings,
   };
 }

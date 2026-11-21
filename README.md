@@ -64,6 +64,7 @@ npm run images -- --download          # fehlende Bilder langsam von gundam-gcg.c
 | `npm run ab`       | Zwei Varianten derselben KI gegeneinander messen            |
 | `npm run first`    | Vorteil als Startspieler je Deck messen                     |
 | `npm run combos`   | Kombos eines Decks aus den Kartentexten anzeigen            |
+| `npm run decklab`  | Deck-Labor: messen, KI kalibrieren, Kartentausch suchen     |
 
 Aufbau der Regel-Engine: [docs/ENGINE.md](docs/ENGINE.md), Karteneffekte: [docs/EFFECTS.md](docs/EFFECTS.md),
 KI und Stärkemessungen: [docs/AI.md](docs/AI.md), Meta-Decks: [docs/META.md](docs/META.md), offizielle

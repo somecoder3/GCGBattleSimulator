@@ -386,8 +386,12 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   nur im Labor. Browser-Web-Worker (`src/sim/worker.ts`, `simworkers.ts`) entfernt. Tests `tests/lab/`.
   Beschreibung **`docs/LAB.md`**. **Später:** Cloud-Synchronisierung (Decks überall, mit dem Sohn tauschen,
   irgendwann Mehrspieler), Favorit Cloudflare Workers + D1; erst nach dem Labor.
-- **Neue Decks finden:** Überlegungen in **`docs/DECKSEARCH.md`** (noch nichts gebaut; Zwischenspeicher dann
-  im Labor).
+- **Neue Decks finden:** Überlegungen in **`docs/DECKSEARCH.md`**. Antworten des Nutzers (21. Nov.): keine
+  Nachtläufe (Lüfter), erst v1, eigentlich Suche; nur Bannliste; Bo1; KI-Schwächen zuerst. **Stufe 0 und 1
+  gebaut:** `npm run decklab` (`calibrate`, `measure`, `swaps`; `src/lab/decklab/`), Achterblöcke mit gemeinsamen
+  Seeds (gepaart), Cache im Labor-Speicher, halbe Kerne als Standard. Snapshot hat jetzt `pairings` (Limitless,
+  nach Platzierung, ohne Namen); Snapshot `data/meta/2026-11-21.json` (148 Paarungen, GD06 erschienen). Erste
+  Kalibrierung: echte Daten dünn (0–20 Spiele je Archetyp), M01 Shining echt 65 %, KI 35,5 % → KI-Schwäche.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,

@@ -23,6 +23,9 @@ Limitless-API ──limitless.ts──▶ Snapshot (data/meta/<datum>.json) ─�
 
 - Turniere der letzten **8 Wochen** mit mindestens **8 Spielern**, je die **Top 16** (Schalter `--weeks`,
   `--min-players`, `--top`). Viele Turniere auf Limitless haben keine Decklisten; die werden übersprungen.
+- **Paarungen** (seit 21. Nov. 2026, `…/tournaments/<id>/pairings`): Spiele zwischen zwei behaltenen
+  Platzierungen als `{ tournament, a, b, result }` (`toPairings`); die Spielernamen dienen nur zum Zuordnen und
+  werden nicht gespeichert. Für die Kalibrierung des Deck-Labors (`docs/DECKSEARCH.md`).
 - Gespeichert werden Turnier (Id, Name, Datum, Spielerzahl), Platzierung, Bilanz, Archetyp und Karten.
   **Keine Spielernamen.** Karten, die GCGDB nicht kennt, stehen unter `unknown`.
 - Limitless liefert kein Ressourcen-Deck; alle Decks bekommen 10× `R-001`.

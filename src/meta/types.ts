@@ -34,6 +34,20 @@ export interface MetaDeck {
   unknown: string[];
 }
 
+/**
+ * One game of a tournament's pairings, by the placings of both players (no players are kept). With the
+ * decks of the snapshot (tournament + placing) it becomes a game between two archetypes, including lists
+ * that Limitless calls "other" (they join the most similar archetype, archetypes.ts).
+ */
+export interface MetaPairing {
+  tournament: string;
+  /** Placings of the two players. */
+  a: number;
+  b: number;
+  /** 1: a won, 2: b won, 0: draw. */
+  result: 0 | 1 | 2;
+}
+
 export interface MetaSnapshot {
   version: 1;
   /** "limitless" in older snapshots; "limitless+egman" since 17 Nov 2026. */
@@ -47,6 +61,8 @@ export interface MetaSnapshot {
   topN: number;
   tournaments: MetaTournament[];
   decks: MetaDeck[];
+  /** Games of the pairings, both players among the kept placings (since 21 Nov 2026; Limitless only). */
+  pairings?: MetaPairing[];
 }
 
 export interface Archetype {

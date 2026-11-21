@@ -32,7 +32,8 @@
     "first": "tsx tools/first.ts",
     "combos": "tsx tools/combos.ts",
     "ab": "tsx tools/ab.ts",
-    "play": "tsx tools/play.ts"
+    "play": "tsx tools/play.ts",
+    "decklab": "tsx tools/decklab.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
