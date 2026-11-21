@@ -41,6 +41,9 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
 - **Namensschild der KI**: Schwierigkeit aus `DIFFICULTIES`, Handkarten als kleine Rücken.
 - **Mittelleiste** (drei Spalten): Zug + Phasenleiste `PHASES` (Start/Draw/Resource/Main/End, `phaseIndex`) +
   Unterschritt; Aufforderung/Kampfinfo/Optionen ohne Karte; Knöpfe. `@container (max-width: 860px)`: zweizeilig.
+  Wahl von Karten durch einen Effekt (`choiceInfo` in `actions.ts`, aus `Frame.choosing`): Text sagt Anzahl und
+  Ort („2 Karten aus deinem Trash wählen. Ohne Wahl entfällt der Effekt.“); ohne gewählte Karte heißt „Fertig“
+  „Nicht nutzen“ und liegt nicht auf der Leertaste (Nutzer, 21. Nov.: Master Gundam, „Fertig“ wählte nichts).
 - **Hand** als Fächer (`--k`/`--ak`), Überfahren hebt die Karte.
 - **Aktionsmenü** schwebt an der gewählten Karte (`menuAt`, berechnet in `placeArrows`): Hand darüber, Feld
   daneben (damit Ziele sichtbar bleiben). Die gewählte Handkarte bleibt angehoben (`.hand-card.raised`), sonst sank sie

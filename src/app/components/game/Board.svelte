@@ -15,7 +15,9 @@
   import type { GameSession, LogStep } from "../../../sim/session";
   import {
     actionLabel,
+    choiceInfo,
     decisionText,
+    doneLabel,
     isButton,
     primaryButton,
     primaryCard,
@@ -426,7 +428,15 @@
   const decision = $derived(!replay && view.pending && view.pending.player === human ? view.pending : null);
   const options = $derived(decision?.options ?? []);
   const buttons = $derived(options.filter(isButton));
-  const spaceAction = $derived(primaryButton(buttons));
+  /** A running choice of cards (how many, optional): for the text and the "done" button. */
+  const choice = $derived(decision ? choiceInfo(session.state) : undefined);
+  // Without any card chosen, "done" skips the effect: never the button of the space key then.
+  const spaceAction = $derived(
+    primaryButton(
+      choice?.optional && choice.chosen === 0 ? buttons.filter((o) => o.type !== "done") : buttons,
+    ),
+  );
+  const buttonLabel = (o: Action) => (o.type === "done" ? doneLabel(choice) : actionLabel(o, name));
   const selectedOptions = $derived(
     selected === null ? [] : options.filter((o) => primaryCard(o) === selected),
   );
@@ -936,7 +946,7 @@
         {#if result}
           <p class="prompt">Spielende.</p>
         {:else if decision}
-          <p class="prompt">{decisionText(decision, name)}</p>
+          <p class="prompt">{decisionText(decision, name, choice)}</p>
           {#if offBoard.length}
             <div class="choices">
               {#each offBoard as id (id)}
@@ -961,7 +971,7 @@
         {#if decision}
           {#each buttons as o (JSON.stringify(o))}
             <button class="btn" class:primary={o === spaceAction} onclick={() => act(o)}>
-              {actionLabel(o, name)}{#if o === spaceAction}<kbd>Leertaste</kbd>{/if}
+              {buttonLabel(o)}{#if o === spaceAction}<kbd>Leertaste</kbd>{/if}
             </button>
           {/each}
         {/if}
@@ -1082,7 +1092,7 @@
         <div class="buttons">
           {#each buttons as o (JSON.stringify(o))}
             <button class="btn" class:primary={o === spaceAction} onclick={() => act(o)}>
-              {actionLabel(o, name)}{#if o === spaceAction}<kbd>Leertaste</kbd>{/if}
+              {buttonLabel(o)}{#if o === spaceAction}<kbd>Leertaste</kbd>{/if}
             </button>
           {/each}
         </div>

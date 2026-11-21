@@ -1,7 +1,7 @@
 // How the board offers the engine's options: which card an option belongs to, which second card
 // (target) completes it, and a German label for menus and buttons.
 
-import type { Action, AttackTarget, CardId, Decision } from "../../engine/types";
+import type { Action, AttackTarget, CardId, Decision, GameState } from "../../engine/types";
 
 /** The card the player starts an option from (a hand card, an attacking Unit, a target …). */
 export function primaryCard(action: Action): CardId | null {
@@ -90,8 +90,43 @@ export function actionLabel(action: Action, name: (id: CardId) => string): strin
   }
 }
 
+/**
+ * A choice of cards an effect is making (the engine's `Frame.choosing`): how many are still to choose,
+ * how many are chosen, whether choosing is optional, and where the candidates are (for the text).
+ */
+export interface ChoiceInfo {
+  left: number;
+  chosen: number;
+  optional: boolean;
+  /** "trash", "hand", "battle" … if all candidates are in one zone of the chooser. */
+  zone?: string;
+}
+
+/** The running choice of a decision, read from the state (undefined for other decisions). */
+export function choiceInfo(state: GameState): ChoiceInfo | undefined {
+  const pending = state.pending;
+  if (pending?.kind !== "effect" || pending.prompt !== "target") return undefined;
+  const frame = [...state.frames].reverse().find((f) => f.choosing);
+  if (!frame?.choosing) return undefined;
+  const { as, left, optional, candidates } = frame.choosing;
+  const zones = new Set(candidates.map((id) => state.cards[id]?.zone ?? ""));
+  const zone = zones.size === 1 ? [...zones][0] : undefined;
+  return { left, chosen: frame.vars[as]?.length ?? 0, optional, ...(zone ? { zone } : {}) };
+}
+
+const ZONE_TEXT: Record<string, string> = {
+  trash: " aus deinem Trash",
+  hand: " von deiner Hand",
+  shieldArea: " aus deiner Schildzone",
+};
+
+/** Label of the "done" button: without any card chosen, an optional choice means not using the effect. */
+export function doneLabel(choice: ChoiceInfo | undefined): string {
+  return choice?.optional && choice.chosen === 0 ? "Nicht nutzen" : "Fertig";
+}
+
 /** One-line description of what the decision asks. */
-export function decisionText(decision: Decision, name: (id: CardId) => string): string {
+export function decisionText(decision: Decision, name: (id: CardId) => string, choice?: ChoiceInfo): string {
   const src = decision.source !== undefined ? name(decision.source) : "";
   switch (decision.kind) {
     case "mulligan":
@@ -122,8 +157,16 @@ export function decisionText(decision: Decision, name: (id: CardId) => string): 
           return "Kein Platz: eine Unit in den Trash legen.";
         case "order":
           return "Mehrere eigene Effekte lösen gleichzeitig aus: welcher zuerst?";
-        default:
-          return `${src}: Ziel wählen.`;
+        default: {
+          // Found in a game of the user (21 Nov 2026): "Ziel wählen" with a highlighted "Fertig" for Master
+          // Gundam's "You may choose 2 (Special Move) Command cards from your trash" looked like confirming
+          // the effect, but "Fertig" chose nothing and the effect didn't happen.
+          if (!choice) return `${src}: Ziel wählen.`;
+          const what = `${choice.left}${choice.chosen > 0 ? " weitere" : ""} ${choice.left === 1 ? "Karte" : "Karten"}`;
+          const where = choice.zone && choice.chosen === 0 ? (ZONE_TEXT[choice.zone] ?? "") : "";
+          const optional = choice.optional && choice.chosen === 0 ? " Ohne Wahl entfällt der Effekt." : "";
+          return `${src}: ${what}${where} wählen.${optional}`;
+        }
       }
   }
 }

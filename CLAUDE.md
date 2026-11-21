@@ -340,6 +340,12 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Ergebnis (`optionalPlay`/`chooseWithoutOptional` in `src/ai/heuristic.ts`, alt `forcedFiller`). Gleich stark
   (v1 50,2/50,6 %, Suche 49,7 %), +5 % Zeit; Nutzer-Entscheidung: übernehmen. Ein erster Versuch, solche
   Karten in Simulationen nie zu spielen, wurde verworfen. Details `docs/AI.md` „Vorausschau“.
+- **Wahl von Karten verständlicher (21. Nov., vom Nutzer am Handy gefunden):** Master Gundams 【Attack】 (2
+  Special Moves aus dem Trash verbannen → 5 Schaden auf die Base) wirkte nicht, weil „Fertig“ (hervorgehoben,
+  Leertaste) bei „Ziel wählen“ gedrückt wurde und damit nichts gewählt war; die Engine war richtig (nachgespielt
+  mit der exportierten Partie: mit Wahl 5 Schaden auf Mad Angler, danach fällt ein Schild). Jetzt nennt die Frage
+  Anzahl und Ort, ohne Wahl heißt der Knopf „Nicht nutzen“ und liegt nicht auf der Leertaste (`choiceInfo`,
+  `doneLabel` in `src/app/lib/actions.ts`). Test `tests/app/choiceprompt.test.ts`.
 - **Kartenbilder in der App (21. Nov., Nutzerentscheidung):** Originalbilder (600 px, eine Variante; der
   Browser skaliert, Nutzerwunsch statt 240 + 480 px) verschlüsselt im Repo: `public/cards/<name>.bin` (2205
   Dateien, ~129 MB) = IV + AES-GCM-256, **fester Schlüssel im Code** (`src/data/imagecrypt.ts`), IV aus dem
