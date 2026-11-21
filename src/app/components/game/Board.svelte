@@ -1311,20 +1311,27 @@
       <div class="opening" transition:fade={{ duration: 200 }}>
         <span class="opening-title">Deine Starthand</span>
         <span class="opening-hint"
-          >Behalten oder einmal komplett neu ziehen (die Hand kommt unter das Deck).</span
+          >Behalten oder einmal komplett neu ziehen (die Hand kommt unter das Deck). Antippen zeigt eine Karte
+          im Detail.</span
         >
         <div class="opening-cards" style:--n={me.hand.length}>
           {#each me.hand as id, i (id)}
             {@const c = def(id)}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
+            <!-- A tap shows the card in the detail (on the phone: the drawer; user's wish, 21 Nov 2026). -->
+            <button
               class="opening-card"
               style="--d: {i * 70}ms"
               onpointerenter={() => (hovered = id)}
               onpointerleave={() => (hovered = null)}
+              onclick={() => {
+                pinned = id;
+                panelOpen = true;
+              }}
+              title="Karte im Detail ansehen"
+              aria-label="{c?.name ?? 'Karte'} ansehen"
             >
               {#if c}<CardImage card={c} src={cardImageUrl(c, "full")} eager />{/if}
-            </div>
+            </button>
           {/each}
         </div>
         <div class="buttons">
@@ -2337,6 +2344,10 @@
     margin: 6px 0 4px;
   }
   .opening-card {
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: zoom-in;
     width: min(170px, calc((100vw - 120px) / var(--n)), 22vh);
     border-radius: 8px;
     box-shadow: 0 12px 30px rgb(0 0 0 / 60%);

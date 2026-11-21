@@ -77,7 +77,8 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
 - **Pfeile** (SVG-Overlay, `arrowPath` = quadratische Kurve): orange für den laufenden Kampf (`view.battle`),
   gelb beim Zielen (gewählte Karte → überfahrene Karte, `drag.over` oder Schilde über `aimPlayer`). Neu berechnet
   bei Änderung von View/Auswahl, nach 360 ms (Animationen) und per ResizeObserver.
-- **Starthand** (`decision.kind === "mulligan"`): groß in der Mitte mit Austeil-Animation und Knöpfen.
+- **Starthand** (`decision.kind === "mulligan"`): groß in der Mitte mit Austeil-Animation und Knöpfen. Antippen
+  einer Karte hält sie im Detail fest und öffnet am Handy die Schublade (Nutzer, 21. Nov.).
 - **Größen**: `--fit: calc((100dvh - var(--chrome, 62px) - 330px) / 5.45)` begrenzt die Kartenbreite aus der Höhe,
   `--chrome` = Höhe von Kopfzeile (+ Replay-Leiste). ≤ 1000 px eine Spalte, ≤ 700 px Handy-Layout (Matte
   `"res res piles" / "sh bat bat"`, Seitenleiste als Schublade „☰ Log & Details“).
