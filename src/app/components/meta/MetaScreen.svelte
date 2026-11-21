@@ -188,27 +188,29 @@
       {/each}
     </ol>
 
-    <details class="reload">
-      <summary>Neu von Limitless laden</summary>
-      <div class="form">
-        <label>Wochen <input type="number" min="1" max="52" bind:value={weeks} /></label>
-        <label>ab Spielern <input type="number" min="2" bind:value={minPlayers} /></label>
-        <label>Top <input type="number" min="1" bind:value={topN} /></label>
-      </div>
-      <div class="actions">
-        <button class="btn primary" onclick={reload} disabled={loading}>{loading ? "Lade …" : "Laden"}</button
-        >
-        {#if snapshot !== BUNDLED_SNAPSHOT}<button class="btn" onclick={useBundled}
-            >Mitgelieferten Stand nutzen</button
-          >{/if}
-      </div>
-      <p class="hint">
-        Fragt play.limitlesstcg.com ab (ein Abruf pro Turnier, gedrosselt). Die Turniere von Egman kommen aus
-        dem mitgelieferten Stand (wöchentlich aktualisiert). Spielernamen werden nicht gespeichert.
-      </p>
-      {#if error}<p class="error">{error}</p>{/if}
-      {#if log.length}<pre class="log">{log.join("\n")}</pre>{/if}
-    </details>
+    <!-- Reloading writes data: only in the lab (user's decision, 21 Nov 2026). -->
+    {#if __LAB__}<details class="reload">
+        <summary>Neu von Limitless laden</summary>
+        <div class="form">
+          <label>Wochen <input type="number" min="1" max="52" bind:value={weeks} /></label>
+          <label>ab Spielern <input type="number" min="2" bind:value={minPlayers} /></label>
+          <label>Top <input type="number" min="1" bind:value={topN} /></label>
+        </div>
+        <div class="actions">
+          <button class="btn primary" onclick={reload} disabled={loading}
+            >{loading ? "Lade …" : "Laden"}</button
+          >
+          {#if snapshot !== BUNDLED_SNAPSHOT}<button class="btn" onclick={useBundled}
+              >Mitgelieferten Stand nutzen</button
+            >{/if}
+        </div>
+        <p class="hint">
+          Fragt play.limitlesstcg.com ab (ein Abruf pro Turnier, gedrosselt). Die Turniere von Egman kommen
+          aus dem mitgelieferten Stand (wöchentlich aktualisiert). Spielernamen werden nicht gespeichert.
+        </p>
+        {#if error}<p class="error">{error}</p>{/if}
+        {#if log.length}<pre class="log">{log.join("\n")}</pre>{/if}
+      </details>{/if}
 
     <details class="banlist">
       <summary>Bannliste (Stand {BANLIST_DATE})</summary>

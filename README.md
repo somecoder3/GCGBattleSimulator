@@ -21,6 +21,13 @@ Bei einem bestehenden Klon ohne Submodul einmal `git submodule update --init`.
 Unter Windows startet ein Doppelklick auf `dev.bat` den Dev-Server und öffnet die App im Browser
 (installiert vorher fehlende `node_modules` und holt ein fehlendes Submodul `gcgdb/`).
 
+### Labor (Simulator, nur Desktop)
+
+Simulator und Replays gehören nicht zur PWA, sondern zum **Labor**: `npm run lab` (oder `lab.bat`) startet
+einen lokalen Server auf http://localhost:5180 mit der ganzen App, rechnet Simulationen auf allen Kernen und
+speichert Läufe und Decks in `data-lab/lab.db` (SQLite, nicht im Repo). Läuft das Labor, zeigt die PWA dessen
+Decks als „Labor-Decks“. Details: `docs/LAB.md`.
+
 ### Kartenbilder
 
 Die offiziellen Bilder liegen **nicht** im Repo. `npm run images` übernimmt sie aus dem Cache von
@@ -37,6 +44,7 @@ npm run images -- --download          # fehlende Bilder langsam von gundam-gcg.c
 | Befehl             | Zweck                                                       |
 | ------------------ | ----------------------------------------------------------- |
 | `npm run dev`      | Dev-Server                                                  |
+| `npm run lab`      | Labor: App mit Simulator, Server auf Port 5180 (`--open`)   |
 | `npm test`         | Tests (Vitest)                                              |
 | `npm run check`    | Typprüfung (svelte-check)                                   |
 | `npm run lint`     | ESLint                                                      |

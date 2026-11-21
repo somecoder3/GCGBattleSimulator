@@ -25,6 +25,13 @@ export function setUserDecks(decks: UserDeck[]): void {
   USER_DECKS = decks;
 }
 
+/** Decks of a lab running on this computer (PWA only, read-only; src/app/lib/lab.ts). */
+let LAB_DECKS: UserDeck[] = [];
+
+export function setLabDecks(decks: UserDeck[]): void {
+  LAB_DECKS = decks;
+}
+
 /**
  * Tournament lists picked in the Meta tab for a game or a simulation (id "M03T5" = 5th list of M03).
  * Only kept in memory; they show up among the meta decks until the page is reloaded.
@@ -48,7 +55,7 @@ export function cardLib(pool: CardPool): CardLib {
 }
 
 export interface DeckChoice extends NamedDeck {
-  group: "meta" | "starter" | "test" | "user";
+  group: "meta" | "starter" | "test" | "user" | "lab";
   /** Meta share (0–1) for meta decks. */
   share?: number;
   supported: boolean;
@@ -70,7 +77,16 @@ export function deckChoices(pool: CardPool, list: MetaList = "consensus"): DeckC
     group: "user",
     supported: d.deck.main.every((no) => lib.has(no) && lib.get(no).script.status !== "partial"),
   }));
-  return [...meta, ...PICKED, ...starters, ...tests, ...own];
+  // Ids "lab:…", so they never clash with own decks (copies of the same deck can be in both).
+  const fromLab: DeckChoice[] = LAB_DECKS.map((d) => ({
+    id: `lab:${d.id}`,
+    name: d.name,
+    colors: deckColors(lib, d.deck.main),
+    deck: d.deck,
+    group: "lab",
+    supported: d.deck.main.every((no) => lib.has(no) && lib.get(no).script.status !== "partial"),
+  }));
+  return [...meta, ...PICKED, ...starters, ...tests, ...own, ...fromLab];
 }
 
 export function deckColors(lib: CardLib, nos: readonly string[]): string {
@@ -84,6 +100,6 @@ export function deckColors(lib: CardLib, nos: readonly string[]): string {
 
 export function deckLabel(d: DeckChoice): string {
   const share = d.share !== undefined ? ` · ${(d.share * 100).toFixed(1)} %` : "";
-  const title = d.group === "user" ? d.name : `${d.id} ${d.name}`;
+  const title = d.group === "user" || d.group === "lab" ? d.name : `${d.id} ${d.name}`;
   return `${title} (${d.colors})${share}${d.supported ? "" : " · unvollständig"}`;
 }

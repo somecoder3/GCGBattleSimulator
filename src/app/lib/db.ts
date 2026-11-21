@@ -1,9 +1,11 @@
-// Small IndexedDB store for the app (no library): saved simulation runs, own decks and a cached meta
-// snapshot. Everything stays in the browser.
+// Small IndexedDB store for the app (no library): own decks and a cached meta snapshot. In the lab
+// (__LAB__) decks and the meta snapshot live on the lab server instead (src/app/lib/lab.ts). Simulation
+// runs are kept by the lab; `runs` here only holds runs of older versions until they are moved to the lab.
 
 import type { DeckList } from "../../engine/types";
 import type { MetaSnapshot } from "../../meta/types";
 import type { GameSummary, SimJob } from "../../sim/runner";
+import { lab } from "./lab";
 
 export interface SavedRun {
   id?: number;
@@ -63,7 +65,7 @@ function run<T>(
 // Svelte state proxies can't be stored (structured clone); everything goes in as plain JSON data.
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
-export const db = {
+const browserDb = {
   runs: {
     all: () => run<SavedRun[]>("runs", "readonly", (s) => s.getAll() as IDBRequest<SavedRun[]>),
     put: (r: SavedRun) => run<IDBValidKey>("runs", "readwrite", (s) => s.put(plain(r))).then(Number),
@@ -84,6 +86,13 @@ export const db = {
     put: (snapshot: MetaSnapshot) => run("meta", "readwrite", (s) => s.put(plain(snapshot), "snapshot")),
     clear: () => run("meta", "readwrite", (s) => s.delete("snapshot")),
   },
+};
+
+export const db = {
+  /** Simulation runs of older versions in this browser (moved to the lab, see App.svelte). */
+  runs: browserDb.runs,
+  decks: __LAB__ ? lab.decks : browserDb.decks,
+  meta: __LAB__ ? lab.meta : browserDb.meta,
 };
 
 /** Offers a file to the user (JSON, CSV, deck lists). */

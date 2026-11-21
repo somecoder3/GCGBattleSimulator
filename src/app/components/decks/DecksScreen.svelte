@@ -66,6 +66,8 @@
   const metaTemplates = templates.filter((d) => d.group === "meta");
   const starterTemplates = templates.filter((d) => d.group === "starter");
   const testTemplates = templates.filter((d) => d.group === "test");
+  /** Decks of a running lab (PWA): copied as own decks. */
+  const labTemplates = templates.filter((d) => d.group === "lab");
   const archetype = $derived(
     (metaTemplates.find((d) => d.id === copyFrom) as (MetaDeck & { group: "meta" }) | undefined)?.archetype,
   );
@@ -105,7 +107,7 @@
     if (!t) return;
     const entry = archetype && copyList !== "consensus" ? archetype.entries[Number(copyList)] : undefined;
     if (entry) newDeck(`${t.name} – Platz ${entry.placing} ${entry.tournament.name}`, { ...entry.cards });
-    else newDeck(`${t.name} (Kopie)`, countsOf(t.deck.main));
+    else newDeck(t.group === "lab" ? t.name : `${t.name} (Kopie)`, countsOf(t.deck.main));
   }
 
   function importList() {
@@ -346,7 +348,7 @@
     {/if}
 
     <details>
-      <summary>Aus Meta- oder Starter-Deck kopieren</summary>
+      <summary>Aus Meta-, Starter-{labTemplates.length ? " oder Labor-" : " "}Deck kopieren</summary>
       <div class="copy">
         <select
           bind:value={copyFrom}
@@ -354,6 +356,11 @@
           aria-label="Archetyp oder Deck"
         >
           <option value="">Archetyp oder Deck wählen …</option>
+          {#if labTemplates.length}
+            <optgroup label="Labor-Decks">
+              {#each labTemplates as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+            </optgroup>
+          {/if}
           {#if metaTemplates.length}
             <optgroup label="Meta-Archetypen">
               {#each metaTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}

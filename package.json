@@ -5,10 +5,11 @@
   "description": "Battle simulator and AI for the Gundam Card Game",
   "type": "module",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "vite",
+    "lab": "tsx tools/lab.ts",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",

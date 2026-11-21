@@ -10,7 +10,10 @@ export default ts.config(
   ...ts.configs.recommended,
   ...svelte.configs.recommended,
   {
-    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+    languageOptions: {
+      // __BUILD_ID__ and __LAB__ are replaced by Vite (vite.config.ts, tools/lab.ts).
+      globals: { ...globals.browser, ...globals.node, __BUILD_ID__: "readonly", __LAB__: "readonly" },
+    },
     rules: {
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     },

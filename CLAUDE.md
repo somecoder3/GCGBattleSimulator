@@ -331,7 +331,7 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
 - **Replays (20. Nov., Nutzerwunsch):** Tempo 0,5×–8× und Umschalter „Hand des Gegners“ im Replay;
   „Match exportieren (.json)“ im Endbildschirm (Decks mit Kartennamen, KIs, Ergebnis, Verlauf, Job; lädt als
   Partie); jedes Simulationsspiel hat einen **Spiel-Hash** (`src/sim/gamehash.ts`, aus Job + Index berechnet,
-  nichts gespeichert), sichtbar im Endbildschirm, in der Replay-Leiste und der Spieleliste, Suche „Replay suchen“
+  im Labor indiziert), sichtbar im Endbildschirm, in der Replay-Leiste und der Spieleliste, Suche „Replay suchen“
   im Simulator. Warnung, wenn ein Replay heute anders endet als im Lauf. Details `docs/UI.md`. Tests
   `tests/sim/gamehash.test.ts`.
 - **Such-Karten in der Simulation (20. Nov., vom Nutzer im Replay gefunden):** v1 griff mit White Gundam
@@ -340,6 +340,20 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Ergebnis (`optionalPlay`/`chooseWithoutOptional` in `src/ai/heuristic.ts`, alt `forcedFiller`). Gleich stark
   (v1 50,2/50,6 %, Suche 49,7 %), +5 % Zeit; Nutzer-Entscheidung: übernehmen. Ein erster Versuch, solche
   Karten in Simulationen nie zu spielen, wurde verworfen. Details `docs/AI.md` „Vorausschau“.
+- **Labor (21. Nov., Nutzerentscheidung):** Simulator und Replays sind nicht mehr in der PWA, sondern im
+  **Labor**: `npm run lab` / `lab.bat` startet `tools/lab.ts` (127.0.0.1:5180), Vite im Middleware-Modus mit
+  `__LAB__ = true` plus API `src/lab/api.ts`; Simulationen auf Worker-Threads (`src/lab/jobs.ts`, Fortschritt
+  per Server-Sent Events, Seite darf zu), Speicher SQLite über eingebautes `node:sqlite` (`src/lab/store.ts`,
+  `data-lab/lab.db`, nicht im Repo): Läufe mit Code-Version (`src/lab/version.ts`) und Hash-Index, Decks,
+  Meta-Snapshot. Im Labor liegen Decks und Meta auf dem Server (`db.ts` schaltet um, Client
+  `src/app/lib/lab.ts`). PWA: ohne Simulator-Reiter (dynamischer Import `src/app/labscreens.ts`, im Build
+  geprüft), fragt ein laufendes Labor nach Decks („Labor-Decks“, Ids `lab:…`, CORS nur für lokale Server und
+  `somecoder3.github.io`, 403 sonst), bietet an, alte Browser-Läufe ins Labor zu übertragen; „Meta neu laden“
+  nur im Labor. Browser-Web-Worker (`src/sim/worker.ts`, `simworkers.ts`) entfernt. Tests `tests/lab/`.
+  Beschreibung **`docs/LAB.md`**. **Später:** Cloud-Synchronisierung (Decks überall, mit dem Sohn tauschen,
+  irgendwann Mehrspieler), Favorit Cloudflare Workers + D1; erst nach dem Labor.
+- **Neue Decks finden:** Überlegungen in **`docs/DECKSEARCH.md`** (noch nichts gebaut; Zwischenspeicher dann
+  im Labor).
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,

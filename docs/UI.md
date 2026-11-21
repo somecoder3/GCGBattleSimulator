@@ -106,8 +106,9 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
   `revealHands`: Handkarten von Sitz 2 offen in der Namensleiste, `def()` liest sie aus dem vollen Zustand,
   Überfahren zeigt das Detail); beides in `localStorage` `gcg-battle-simulator.replay`.
 - Spiel-Hash (`src/sim/gamehash.ts`): 10 Zeichen aus allem, was das Spiel bestimmt (Decks, KIs, Seed, Modus,
-  Regeln, Gewichte, Mulligans, Zuglimit, Index), nicht aus Spielzahl, Namen, Anteilen. Nichts wird gespeichert;
-  die Suche im Simulator („Replay suchen“) rechnet die Hashes des aktuellen und aller gespeicherten Läufe nach.
+  Regeln, Gewichte, Mulligans, Zuglimit, Index), nicht aus Spielzahl, Namen, Anteilen. Die Suche im
+  Simulator („Replay suchen“) prüft den Lauf auf dem Bildschirm und dann den Hash-Index des Labors
+  (`game_hashes`, `docs/LAB.md`).
   Spieleliste hat eine Spalte „Hash“.
 - Replays werden mit der heutigen Engine und KI neu gespielt. Weicht Sieger oder Zugzahl vom gespeicherten Lauf
   ab, zeigt die Leiste eine Warnung.

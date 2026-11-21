@@ -22,6 +22,7 @@
     { key: "starter", label: "Starter-Decks" },
     { key: "test", label: "Testdecks" },
     { key: "user", label: "Eigene Decks" },
+    { key: "lab", label: "Labor-Decks" },
   ] as const;
 
   let session = $state.raw<GameSession>();
@@ -161,7 +162,7 @@
 </script>
 
 {#snippet deckOptions()}
-  {#each groups as g (g.key)}
+  {#each groups.filter((g) => DECKS.some((d) => d.group === g.key)) as g (g.key)}
     <optgroup label={g.label}>
       {#each DECKS.filter((d) => d.group === g.key) as d (d.id)}<option value={d.id}>{deckLabel(d)}</option
         >{/each}
@@ -189,7 +190,11 @@
           </div>
           <div class="deck-info">
             <strong
-              >{v.deck ? (v.deck.group === "user" ? v.deck.name : `${v.deck.id} ${v.deck.name}`) : ""}</strong
+              >{v.deck
+                ? v.deck.group === "user" || v.deck.group === "lab"
+                  ? v.deck.name
+                  : `${v.deck.id} ${v.deck.name}`
+                : ""}</strong
             >
             <span class="colors">
               {#each (v.deck?.colors ?? "").split("/").filter(Boolean) as c (c)}

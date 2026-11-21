@@ -2,7 +2,6 @@
   import { onDestroy, onMount } from "svelte";
   import { AI_LABELS, AI_NAMES, type AiName } from "../../../ai/registry";
   import type { CardPool } from "../../../data/cards";
-  import { runPool } from "../../../sim/pool";
   import { fullRounds, roundSize, type DeckEntry, type GameSummary, type SimJob } from "../../../sim/runner";
   import {
     cardStats,
@@ -13,14 +12,16 @@
     type Rate,
     type SimStats,
   } from "../../../sim/stats";
-  import { db, download, type SavedRun } from "../../lib/db";
+  import { download } from "../../lib/db";
+  import { lab, type LabEvent, type LabRunInfo } from "../../lib/lab";
   import { SNAPSHOT, deckChoices, preset, type DeckChoice } from "../../lib/decks";
   import { metaBaseId, type MetaList } from "../../../meta/decks";
-  import { createWorkers, defaultWorkerCount, type BrowserWorker } from "../../lib/simworkers";
   import HoverTip from "../HoverTip.svelte";
   import { findGame, jobHasher } from "../../../sim/gamehash";
 
-  // Simulator: many AI games in Web Workers, live statistics, saved runs, card performance, replays.
+  // Simulator (lab only): many AI games on the lab server's worker threads, live statistics, saved runs,
+  // card performance, replays. The server keeps running jobs and saved runs (src/lab/); this page can be
+  // closed and opened again while a job runs.
 
   let {
     pool,
@@ -45,7 +46,7 @@
   // Which groups are open, kept across reloads (user's wish, 19 Nov 2026).
   const OPENED_KEY = "gcg-battle-simulator.sim-groups";
   function loadOpened(): Record<DeckChoice["group"], boolean> {
-    const fallback = { user: true, meta: false, starter: false, test: false };
+    const fallback = { user: true, meta: false, starter: false, test: false, lab: false };
     try {
       const saved = JSON.parse(localStorage.getItem(OPENED_KEY) ?? "null") as unknown;
       return saved && typeof saved === "object" ? { ...fallback, ...saved } : fallback;
@@ -107,7 +108,8 @@
       ...(text ? { text } : {}),
     };
   }
-  let workerCount = $state(defaultWorkerCount());
+  let workerCount = $state(7);
+  let cores = $state(64);
 
   let running = $state(false);
   let done = $state(0);
@@ -118,23 +120,85 @@
   let stats = $state.raw<SimStats>();
   let job = $state.raw<SimJob>();
   let names = $state.raw<Record<string, string>>({});
-  let runs = $state.raw<SavedRun[]>([]);
+  let runs = $state.raw<LabRunInfo[]>([]);
   let view = $state<"overview" | "matrix" | "cards" | "games">("overview");
   let cardDeck = $state("");
   let gameFilter = $state("");
 
-  let workers: BrowserWorker[] = [];
-  let abort: AbortController | undefined;
-  let started = 0;
+  /** Games of the job shown, by index (events can repeat a game after reattaching). Not reactive on
+   *  purpose: `results` is published from it at most twice a second. */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  let collected = new Map<number, GameSummary>();
+  let lastStats = 0;
+  /** Is this page following the server's current job? */
+  let following = false;
+  let closeEvents: (() => void) | undefined;
 
-  onMount(() => void loadRuns());
-  onDestroy(stop);
+  onMount(() => {
+    void loadRuns();
+    lab.info().then(
+      (info) => {
+        workerCount = info.workers;
+        cores = info.cores;
+      },
+      () => (error = "Der Labor-Server antwortet nicht (npm run lab)."),
+    );
+    closeEvents = lab.jobs.events(onEvent);
+  });
+  onDestroy(() => closeEvents?.());
 
   async function loadRuns() {
     try {
-      runs = (await db.runs.all()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      runs = await lab.runs.list();
     } catch {
       runs = [];
+    }
+  }
+
+  /** Shows a job of the server (after opening the page while it runs, or one started elsewhere). */
+  function follow(state: NonNullable<Extract<LabEvent, { type: "state" }>["state"]>) {
+    following = true;
+    job = state.job;
+    names = state.names;
+    collected = new Map(state.games.map((g) => [g.index, g]));
+    total = state.total;
+    done = collected.size;
+    elapsed = (Date.now() - state.startedAt) / 1000;
+    running = state.running;
+    cardDeck = state.job.mode === "gauntlet" ? (state.job.focus ?? "") : (state.job.decks[0]?.id ?? "");
+    publish(true);
+  }
+
+  function publish(force: boolean) {
+    if (!force && performance.now() - lastStats < 500) return;
+    lastStats = performance.now();
+    results = [...collected.values()].sort((a, b) => a.index - b.index);
+    stats = computeStats(results);
+  }
+
+  function onEvent(e: LabEvent) {
+    if (e.type === "state") {
+      if (e.state?.running) follow(e.state);
+      return;
+    }
+    if (!following) {
+      // A job started in another window: show it.
+      if (e.type === "progress") void lab.jobs.current().then((state) => state?.running && follow(state));
+      return;
+    }
+    if (e.type === "progress") {
+      for (const g of e.games) collected.set(g.index, g);
+      done = collected.size;
+      total = e.total;
+      elapsed = e.elapsed;
+      publish(false);
+    } else {
+      elapsed = e.elapsed;
+      running = false;
+      following = false;
+      publish(true);
+      if (e.error) error = e.error;
+      void loadRuns();
     }
   }
 
@@ -196,104 +260,85 @@
     error = undefined;
     job = next;
     names = Object.fromEntries(chosen.map((d) => [d.id, d.name]));
-    running = true;
-    done = 0;
-    total = next.games;
+    collected = new Map();
     results = [];
     stats = undefined;
+    done = 0;
+    total = next.games;
+    elapsed = 0;
     view = "overview";
-    started = performance.now();
-    abort = new AbortController();
-    workers = createWorkers(Math.min(workerCount, next.games));
-    let collected: GameSummary[] = [];
-    let lastStats = 0;
+    cardDeck = gauntlet ? focus : (decks[0]?.id ?? "");
+    running = true;
+    following = true;
     try {
-      await runPool(next, workers, {
-        signal: abort.signal,
-        onProgress: (n, _total, latest) => {
-          done = n;
-          elapsed = (performance.now() - started) / 1000;
-          collected = [...collected, ...latest];
-          if (performance.now() - lastStats > 500 || n === next.games) {
-            lastStats = performance.now();
-            results = collected;
-            stats = computeStats(collected);
-          }
-        },
-      });
-      results = collected.sort((a, b) => a.index - b.index);
-      stats = computeStats(results);
-      cardDeck = gauntlet ? focus : (decks[0]?.id ?? "");
-      await save();
+      // Svelte state proxies can't be serialized as they are; the job goes as plain data.
+      await lab.jobs.start(JSON.parse(JSON.stringify(next)) as SimJob, names, workerCount);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
-    } finally {
-      stop();
+      running = false;
+      following = false;
     }
   }
 
+  /** Stops the job; the games played so far are saved as a run. */
   function stop() {
-    abort?.abort();
-    for (const w of workers) w.terminate();
-    workers = [];
-    running = false;
-    elapsed = (performance.now() - started) / 1000;
+    lab.jobs.stop().catch((e: unknown) => (error = e instanceof Error ? e.message : String(e)));
   }
 
-  async function save() {
-    if (!job || !results.length) return;
-    const label = !job.decks.length
-      ? "Zufallsdecks"
-      : `${job.decks.length} Decks${job.mode === "gauntlet" ? ` · Gauntlet ${job.focus}` : ""}`;
+  async function openRun(info: LabRunInfo) {
     try {
-      await db.runs.put({
-        name: `${label} · ${job.ai.join(" / ")} · ${results.length} Spiele`,
-        createdAt: new Date().toISOString(),
-        job,
-        games: results,
-        deckNames: names,
-      });
-      await loadRuns();
-    } catch {
-      // Saving is optional (e.g. private browsing).
+      const r = await lab.runs.get(info.id);
+      job = r.job;
+      names = r.deckNames;
+      results = r.games;
+      collected = new Map(r.games.map((g) => [g.index, g]));
+      stats = computeStats(r.games);
+      total = done = r.games.length;
+      elapsed = 0;
+      cardDeck = r.job.mode === "gauntlet" ? (r.job.focus ?? "") : (r.job.decks[0]?.id ?? "");
+      view = "overview";
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
     }
-  }
-
-  function openRun(r: SavedRun) {
-    job = r.job;
-    names = r.deckNames;
-    results = r.games;
-    stats = computeStats(r.games);
-    total = done = r.games.length;
-    elapsed = 0;
-    cardDeck = r.job.mode === "gauntlet" ? (r.job.focus ?? "") : (r.job.decks[0]?.id ?? "");
-    view = "overview";
   }
 
   // Every simulated game has a hash (src/sim/gamehash.ts); searching it opens the replay.
   const hashOf = $derived(job ? jobHasher(job) : null);
   let hashQuery = $state("");
   let hashNote = $state<string>();
-  function searchHash() {
-    const current = job ? [{ job, games: results, deckNames: names }] : [];
-    const found = findGame([...current, ...runs], hashQuery);
+  async function searchHash() {
+    hashNote = undefined;
+    // The job on screen first (also while it runs), then the saved runs of the lab.
+    const current = job ? findGame([{ job, games: results, deckNames: names }], hashQuery) : undefined;
+    if (current && results.some((g) => g.index === current.index)) {
+      onreplay(
+        current.run.job,
+        current.index,
+        names,
+        results.find((g) => g.index === current.index),
+      );
+      return;
+    }
+    const found = await lab.findGame(hashQuery);
     if (!found) {
       hashNote = "Kein Spiel mit diesem Hash im aktuellen oder in den gespeicherten Läufen.";
       return;
     }
-    hashNote = undefined;
-    const { run, index } = found;
-    onreplay(
-      run.job,
-      index,
-      run.deckNames,
-      run.games.find((g) => g.index === index),
-    );
+    try {
+      const run = await lab.runs.get(found.runId);
+      onreplay(
+        run.job,
+        found.index,
+        run.deckNames,
+        run.games.find((g) => g.index === found.index),
+      );
+    } catch (e) {
+      hashNote = e instanceof Error ? e.message : String(e);
+    }
   }
 
-  async function deleteRun(r: SavedRun) {
-    if (r.id === undefined) return;
-    await db.runs.delete(r.id);
+  async function deleteRun(r: LabRunInfo) {
+    await lab.runs.delete(r.id).catch(() => undefined);
     await loadRuns();
   }
 
@@ -346,7 +391,10 @@
   <div class="left">
     <div class="panel settings">
       <h1>Simulator</h1>
-      <p class="lead">KI gegen KI in Web Workern auf allen Kernen. Jedes Spiel folgt aus Seed und Nummer.</p>
+      <p class="lead">
+        KI gegen KI auf allen Kernen des Labor-Servers; die Seite darf dabei zu sein. Jedes Spiel folgt aus
+        Seed und Nummer.
+      </p>
 
       <fieldset disabled={running}>
         <legend>Decks</legend>
@@ -456,7 +504,7 @@
               >
             </span>
           </label>
-          <label>Worker <input type="number" min="1" max="64" bind:value={workerCount} /></label>
+          <label>Worker <input type="number" min="1" max={cores} bind:value={workerCount} /></label>
         </div>
         <p class="hint">
           Gespielt werden {planned.games} Spiele: {planned.games / planned.round}

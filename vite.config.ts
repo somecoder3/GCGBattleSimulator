@@ -34,7 +34,8 @@ function localCardImages(): Plugin {
 export default defineConfig({
   base: "./",
   // Version of the service worker cache (public/sw.js): a new one with every build.
-  define: { __BUILD_ID__: JSON.stringify(Date.now().toString(36)) },
+  // __LAB__: the lab build with simulator and lab tabs (tools/lab.ts sets it); the PWA leaves them out.
+  define: { __BUILD_ID__: JSON.stringify(Date.now().toString(36)), __LAB__: "false" },
   plugins: [svelte(), localCardImages()],
   server: { port: 5173, strictPort: true },
   preview: { port: 4173, strictPort: true },

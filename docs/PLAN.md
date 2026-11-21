@@ -246,7 +246,8 @@ Effekte werden **als Daten** beschrieben und von der Engine interpretiert. Beisp
 - Startspieler abwechselnd (Standard) oder zufällig/fest; KI-Stufe und Zeitbudget pro Seite;
   Mulligan-Politik; Seed (reproduzierbar); Zugbegrenzung gegen Endlosspiele; Anzahl Worker (Standard:
   Kerne − 1).
-- Läuft im Browser (Web-Worker-Pool, pausier- und fortsetzbar) und als **Node-CLI** für große Läufe:
+- Läuft im **Labor** (lokaler Node-Server mit Worker-Threads, seit 21. Nov. 2026, `docs/LAB.md`; vorher
+  Web Worker im Browser) und als **Node-CLI** für große Läufe:
   `npm run sim -- --decks meta-top8 --games 1000 --ai heuristic`.
 
 ### Erfasste Werte
