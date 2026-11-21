@@ -349,6 +349,11 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   weiter die rohen Bilder aus `build/images`. Service Worker cacht die `.bin`. **Hinweis an den Nutzer
   gegeben:** fester Schlüssel = nur Verschleierung, jeder kann die Bilder aus der Seite holen; Passwort wie in
   GCGScanner angeboten, abgelehnt. Im Preview geprüft (Kartenliste lädt nur Sichtbares, keine rohen WebP).
+- **Veröffentlichung (21. Nov., Nutzerentscheidung):** Repo öffentlich gemacht (Pages geht bei privaten Repos nur
+  mit bezahltem Plan; Alternativen Cloudflare Pages, Pro, zweites Repo angeboten). `.github/workflows/pages.yml`
+  baut die PWA (`vite build`, ohne Labor, mit verschlüsselten Bildern) bei jedem Push auf `main` und
+  veröffentlicht sie unter `https://somecoder3.github.io/GCGBattleSimulator/` (Pages-Quelle „GitHub Actions“).
+  Vorher geprüft: Commits nur mit der noreply-Adresse, keine Geheimnisse im Repo.
 - **Labor (21. Nov., Nutzerentscheidung):** Simulator und Replays sind nicht mehr in der PWA, sondern im
   **Labor**: `npm run lab` / `lab.bat` startet `tools/lab.ts` (127.0.0.1:5180), Vite im Middleware-Modus mit
   `__LAB__ = true` plus API `src/lab/api.ts`; Simulationen auf Worker-Threads (`src/lab/jobs.ts`, Fortschritt
