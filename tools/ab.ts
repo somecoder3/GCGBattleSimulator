@@ -36,6 +36,7 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   "plain-trash-cost": { rules: { plainTrashCost: true } },
   "plain-link-keep": { rules: { plainLinkKeep: true } },
   "plain-shining": { rules: { plainTrashCost: true, plainLinkKeep: true } },
+  "sampled-opponent": { rules: { sampledOpponent: true } },
   "forced-filler": { rules: { forcedFiller: true } },
   combos: { rules: { comboFuel: true, linkValue: true } },
   "idle-commands": { rules: { searchIdleCommands: true } },

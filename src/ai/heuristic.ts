@@ -81,6 +81,11 @@ export interface RuleOptions {
   /** Before 22 Nov 2026: discarding ignored that a Pilot links a Unit in the hand (and vice versa). */
   plainLinkKeep?: boolean;
   /**
+   * v1 experiment (22 Nov 2026): simulate with one sampled hand and deck of the opponent (from the field,
+   * like the search AI) instead of stand-ins that can't be played.
+   */
+  sampledOpponent?: boolean;
+  /**
    * v1/search simulations as before 20 Nov 2026: an end-of-main-phase Command that v0 plays in the
    * simulation counts even when the turn is better without it (see optionalPlay, docs/AI.md "Vorausschau").
    */

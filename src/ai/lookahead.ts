@@ -13,6 +13,8 @@ import { HIDDEN } from "../engine/view";
 import { DEFAULT_WEIGHTS, Evaluator, type ComboKnowledge, type Weights } from "./evaluate";
 import { planFor } from "./synergy";
 import { HeuristicPolicy, type RuleOptions } from "./heuristic";
+import { sampleState, type Knowledge } from "./opponent";
+import { seedRng, type RngState } from "../engine/rng";
 import type { Policy } from "./types";
 
 /** Stand-in for hidden cards: a Resource card can't be played from the hand and has no Burst. */
@@ -36,6 +38,7 @@ export class LookaheadPolicy implements Policy {
   private readonly rules: HeuristicPolicy;
   private readonly evaluator: Evaluator;
   private readonly options: RuleOptions;
+  private readonly rng: RngState;
 
   constructor(
     private readonly engine: Engine,
@@ -43,7 +46,11 @@ export class LookaheadPolicy implements Policy {
     /** See Horizon; `rules.horizon` overrides it. */
     private horizon: Horizon = "turn",
     rules: RuleOptions = {},
+    /** Own deck and field: only used with `rules.sampledOpponent`. */
+    private readonly knowledge: Knowledge = {},
+    seed = 1,
   ) {
+    this.rng = seedRng(seed ^ 0x1a2b3c);
     if (rules.horizon) this.horizon = rules.horizon;
     this.options = rules;
     this.rules = new HeuristicPolicy(engine, rules);
@@ -65,8 +72,11 @@ export class LookaheadPolicy implements Policy {
 
   /** The options with their values, best first (analysis: `npm run game -- … --explain`). */
   explain(view: GameState, decision: Decision): { option: Action; score: number }[] {
-    const base = determinize(view);
     const me = decision.player;
+    const base =
+      this.options.sampledOpponent && this.knowledge.field?.length
+        ? sampleState(view, me, this.engine.lib, this.knowledge, this.rng)
+        : determinize(view);
     const options = this.rules.allowed(view, decision); // the EX Resource rule
     const preferred = this.rules.choose(base, decision);
     const ordered = [preferred, ...options.filter((o) => o !== preferred)];

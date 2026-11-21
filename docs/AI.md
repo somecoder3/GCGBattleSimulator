@@ -442,6 +442,18 @@ Deck-Labor (v1, Feld 12, 4 Blöcke): M01 gegen das Feld 39,3 → **44,5 %**. In 
 Verbannung jetzt 1,7 statt 0,75 Karten pro Spiel vor, Special Moves aus dem Trash 0,9 statt 0,5. Weiter offen:
 v0 spielt zurückgeholte Special Moves in v1-Simulationen oft sofort ohne bleibenden Nutzen aus.
 
+### Weitere Analysen zur KI (22. Nov. 2026)
+
+- **Gleichstände:** In 24 v1-Partien waren bei 48 % der Main-Phase-Entscheidungen und 86 % der Abwürfe die besten
+  Optionen gleich bewertet (dann entscheidet v0). Viele sind harmlos (Reihenfolge von Angriffen, die die
+  Simulation ohnehin beide ausführt); sie zeigen aber, dass v0-Regeln direkt auf v1 und die Suche wirken.
+- **v1 gegen Suche:** Am häufigsten weichen sie beim Blocken ab (22 von 54), in beide Richtungen, ohne klares
+  Muster.
+- **Versuch `sampledOpponent`:** v1 simuliert mit **einer** aus dem Feld gezogenen Hand und Deck des Gegners statt
+  mit Platzhaltern (`RuleOptions.sampledOpponent`, `sampleState` aus `opponent.ts`). Ergebnis **36,8 %** gegen
+  normales v1 (35,8–37,7 %, 9360 Spiele), doppelte Rechenzeit: Eine einzelne Stichprobe ist zu zufällig (auch
+  die eigenen Nachziehkarten werden echt). Aus.
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen
