@@ -41,7 +41,7 @@ Limitless-API ──limitless.ts──▶ Snapshot (data/meta/<datum>.json) ─�
 - **Keine Spielernamen, keine Social-Links** (werden beim Einlesen verworfen; Test prüft das).
 - Prüfung 17. Nov. 2026: keine Nutzungsbedingungen; `robots.txt` erlaubt normale Clients (`Allow: /`),
   verbietet nur KI-Crawler und KI-Training (`ai-train=no`). Die App nennt die Quelle im Meta-Reiter.
-  **Vor einer öffentlichen Version Egman um Erlaubnis bitten** (Discord der Seite).
+  Auch in der öffentlichen Version genutzt (Nutzerentscheidung 21. Nov. 2026: Egman verbietet es nicht).
 - **Doppelte:** Egman-Turniere, die auf ein Limitless-Turnier des Snapshots verweisen (`source`) oder am
   selben Tag gleich heißen (`sameEvent`), werden übersprungen.
 - **Archetyp:** Egman benennt nach Leitkarte (+ erster Nebenkarte), z. B. „Strike Freedom Gundam (Victory

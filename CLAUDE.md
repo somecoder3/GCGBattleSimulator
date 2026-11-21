@@ -408,8 +408,8 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
     zu Limitless per Link oder Datum+Name aussortiert, Archetyp pro Egman-Gruppe (gleicher Name, sonst
     ähnlichster, sonst eigener). Snapshot `data/meta/2026-11-17.json`: 152 Listen aus 13 Turnieren (vorher 72
     aus 6). MetaSheep: Nutzungsbedingungen verbieten Abgreifen → nicht genutzt; Bandai selbst veröffentlicht
-    keine Turnierlisten (nur TCG+-Deckcodes über interne Schnittstelle → nicht genutzt). **Vor einer
-    öffentlichen Version Egman um Erlaubnis bitten.** Details `docs/META.md`.
+    keine Turnierlisten (nur TCG+-Deckcodes über interne Schnittstelle → nicht genutzt). Öffentliche Nutzung ok
+    (Nutzer, 21. Nov.: Egman verbietet es nicht). Details `docs/META.md`.
   - **Bannliste korrigiert:** Guntank (GD01-008) ist nur mit M1 Astray Shrike (GD05-015) gepaart; die
     Vanilla-2/2-Units sind untereinander gepaart (nur eine Sorte). Vorher war Guntank mit allen Vanilla-Units
     gepaart (Fehler aus M5, verfälschte Konsenslisten). Belege in `docs/META.md`.
