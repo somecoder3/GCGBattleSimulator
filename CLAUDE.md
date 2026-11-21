@@ -27,7 +27,7 @@ Webentwicklung. Plan und Begründungen: `docs/PLAN.md`.
   gesehenen Karten erraten; erstes Kartenziel Top-8-Archetypen der letzten 8 Wochen.
 - **M0 (Gerüst) fertig**, Commit `57220b2` (vom Nutzer gepusht): Vite 8 + TypeScript 6 + Svelte 5 (Runes),
   Vitest, ESLint, Prettier, svelte-check; GCGDB als Submodul `gcgdb/` (Branch `main`); `npm run verify` = alles
-  wie in der CI (`.github/workflows/ci.yml`, Node 24). Kartenliste mit Filtern (Suche, Set, alle acht Typen wie
+  wie in der CI (`.github/workflows/ci.yml`, Node 26 seit 21. Nov., vorher 24; auch `meta.yml`). Kartenliste mit Filtern (Suche, Set, alle acht Typen wie
   auf gundam-gcg.com, Farbe) und Detaildialog. Befehle und Einrichtung: `README.md`. CI-Lauf #1 auf GitHub grün (1 min).
 - **M1 (Engine-Kern) fertig**, Commit `59fe24b` (vom Nutzer gepusht). Beschreibung, Umfang und Grenzen: **`docs/ENGINE.md`**.
   Regeln ohne Kartentexte: Vorbereitung, Phasen, Ressourcen/Level/Kosten, Units, Pilots/Links, Bases,
