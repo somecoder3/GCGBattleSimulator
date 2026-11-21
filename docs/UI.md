@@ -69,6 +69,8 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
   stehen in der Seitenleiste (am Handy in „☰ Log & Details“) und bleiben gespeichert
   (`localStorage` `gcg-battle-simulator.board.speed`/`.autopilot`). Seine Züge sind normale eigene
   Entscheidungen, „Rückgängig“ springt also auch hinter sie zurück.
+- **Pause bei aufgedeckten Schilden** (21. Nov., Nutzer): Solange zerstörte Schilde in der Mitte gezeigt werden
+  (`revealed`, 2,8 s oder Klick), macht niemand weiter: weder KI noch Autopilot noch automatisches Passen.
 - **KI-Angriffe werden angekündigt** (21. Nov.): Statt `stepAI` fragt die KI-Schleife erst `session.aiChoice(ai)`;
   bei `attack` zeigt `announced` 1,1 s Pfeil, Angreifer-Markierung und „⚔ … greift … an“, erst dann läuft der Angriff
   (vorher lief ein ganzer Kampf in einem Schritt, wenn der Mensch nicht reagieren konnte).

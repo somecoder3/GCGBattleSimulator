@@ -349,7 +349,10 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   `staged`/`confirmStaged`, `Frame.choosing.exact` neu), „ⓘ Karte ansehen“ zeigt die getippte Karte am Handy.
 - **Autopilot (21. Nov., Nutzerwunsch):** „🤖 Autopilot“ in der Zugleiste lässt eine wählbare KI deine Seite
   spielen, an/aus jederzeit; KI-Stufe und Tempo in der Seitenleiste, gespeichert. `session.choiceFor`, Details
-  `docs/UI.md`. Im Browser geprüft (Zug 1–9 in 8 s bei „Schnell“, danach wieder selbst am Zug).
+  `docs/UI.md`. Im Browser geprüft (Zug 1–9 in 8 s bei „Schnell“, danach wieder selbst am Zug). Solange
+  zerstörte Schilde gezeigt werden, ziehen weder KI noch Autopilot (Nutzerwunsch).
+  - Falle beim Prüfen im Browser-Fenster: Ist die Seite `hidden`, laufen Svelte-Ausblendungen nicht zu Ende;
+    alte Overlays bleiben im DOM (mit `inert`). Nur `:not([inert])` zählen.
 - **Wahl von Karten verständlicher (21. Nov., vom Nutzer am Handy gefunden):** Master Gundams 【Attack】 (2
   Special Moves aus dem Trash verbannen → 5 Schaden auf die Base) wirkte nicht, weil „Fertig“ (hervorgehoben,
   Leertaste) bei „Ziel wählen“ gedrückt wurde und damit nichts gewählt war; die Engine war richtig (nachgespielt

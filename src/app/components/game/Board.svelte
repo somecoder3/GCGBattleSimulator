@@ -467,6 +467,9 @@
     void view;
     void stops;
     if (replay) return;
+    // While destroyed Shields are shown, nobody acts: neither the AI nor the autopilot nor automatic passes
+    // (user's wish, 21 Nov 2026). The overlay closes after 2.8 s or with a click; then the game goes on.
+    if (revealed.length) return;
     if (autopilot && !session.over && session.state.pending?.player === human) {
       // The autopilot also closes the cards put under the deck after a moment.
       if (under.length) {
