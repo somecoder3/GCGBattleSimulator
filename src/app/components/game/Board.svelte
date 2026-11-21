@@ -5,7 +5,7 @@
   import { cardImageUrl } from "../../../data/cards";
   import CardImage from "../CardImage.svelte";
   import type { FieldDeck } from "../../../ai/opponent";
-  import { DIFFICULTIES, makePolicy } from "../../../ai/registry";
+  import { DIFFICULTIES, makePolicy, type AiName } from "../../../ai/registry";
   import type { CardPool } from "../../../data/cards";
   import type { CardDef } from "../../../data/types";
   import { satisfiesLink } from "../../../engine/cardlib";
@@ -92,7 +92,39 @@
   /** A card held in the detail by a click (cards without options; hovering others still shows them). */
   let pinned = $state<CardId | null>(null);
   let flashed = $state.raw(new Set<CardId>());
-  let speed = $state(600);
+  let speed = $state(loadSetting("speed", 600, (v) => SPEEDS.some((sp) => sp.ms === v)));
+
+  // Autopilot (user's wish, 21 Nov 2026): an AI plays the human's side until it is switched off again; it
+  // knows the human's deck and, like the opponent AI, only the field of possible enemy decks.
+  let autopilot = $state(false);
+  let autopilotAi = $state<AiName>(
+    loadSetting("autopilot", "heuristic-v1" as AiName, (v) => DIFFICULTIES.some((d) => d.ai === v)),
+  );
+  const helper = $derived(
+    makePolicy(autopilotAi, engine, session.setup.options.seed + 7, undefined, {
+      deck: session.setup.decks[human],
+      field: opponentField,
+    }),
+  );
+
+  /** Small settings of the board in localStorage (only a convenience). */
+  function loadSetting<T>(key: string, fallback: T, valid: (v: unknown) => boolean): T {
+    try {
+      const v = JSON.parse(localStorage.getItem(`gcg-battle-simulator.board.${key}`) ?? "null") as unknown;
+      return valid(v) ? (v as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  $effect(() => {
+    const values = { speed, autopilot: autopilotAi };
+    try {
+      for (const [k, v] of Object.entries(values))
+        localStorage.setItem(`gcg-battle-simulator.board.${k}`, JSON.stringify(v));
+    } catch {
+      // only a convenience
+    }
+  });
 
   // When the game stops for the human in an action step (9-4).
   // When the game stops for the human in an action step (9-4). The engine only asks when the human can
@@ -434,7 +466,21 @@
   $effect(() => {
     void view;
     void stops;
-    if (replay || under.length) return; // the human first closes the cards put under the deck
+    if (replay) return;
+    if (autopilot && !session.over && session.state.pending?.player === human) {
+      // The autopilot also closes the cards put under the deck after a moment.
+      if (under.length) {
+        const timer = setTimeout(() => (under = []), Math.max(speed, 1500));
+        return () => clearTimeout(timer);
+      }
+      const policy = helper;
+      const timer = setTimeout(
+        () => refresh(session.apply(session.choiceFor(policy))),
+        session.state.pending.kind === "mulligan" ? Math.min(speed, 300) : speed,
+      );
+      return () => clearTimeout(timer);
+    }
+    if (under.length) return; // the human first closes the cards put under the deck
     if (skipActionStep()) {
       const timer = setTimeout(() => refresh(session.apply({ type: "pass" }, true)), Math.min(speed, 150));
       return () => clearTimeout(timer);
@@ -466,7 +512,13 @@
     logBox?.scrollTo({ top: logBox.scrollHeight });
   });
 
-  const decision = $derived(!replay && view.pending && view.pending.player === human ? view.pending : null);
+  const decision = $derived(
+    !replay && !autopilot && view.pending && view.pending.player === human ? view.pending : null,
+  );
+  // The game is over: the autopilot stops.
+  $effect(() => {
+    if (view.result) autopilot = false;
+  });
   const options = $derived(withCopies(decision?.options ?? []));
 
   /**
@@ -840,6 +892,7 @@
       : "",
   );
   const aiLabel = DIFFICULTIES.find((d) => d.ai === (session.setup.ai ?? "heuristic-v1"))?.label ?? "";
+  const autopilotLabel = $derived(DIFFICULTIES.find((d) => d.ai === autopilotAi)?.label ?? "");
 
   const activeResources = (ids: CardId[]) => ids.filter((id) => !view.cards[id]!.rested).length;
   const detailId = $derived(hovered ?? selected ?? pinned);
@@ -1054,6 +1107,20 @@
           {/each}
         </ol>
         {#if substep}<span class="substep">{substep}</span>{/if}
+        {#if !replay && !result}
+          <button
+            class="autopilot-toggle"
+            class:on={autopilot}
+            onclick={() => {
+              autopilot = !autopilot;
+              selected = null;
+            }}
+            aria-pressed={autopilot}
+            title="Eine KI spielt für dich ({autopilotLabel}); KI und Tempo unter ☰ bzw. in der Seitenleiste"
+          >
+            🤖 {autopilot ? "Autopilot an" : "Autopilot"}
+          </button>
+        {/if}
         <button class="panel-toggle" onclick={() => (panelOpen = !panelOpen)} aria-expanded={panelOpen}>
           ☰ Log &amp; Details
         </button>
@@ -1078,6 +1145,11 @@
           {/if}
         {:else if replay}
           <p class="prompt">Replay (Sicht von Sitz 1)</p>
+        {:else if autopilot && view.pending?.player === human}
+          <p class="prompt thinking">
+            <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> Autopilot ({autopilotLabel})
+            spielt für dich …
+          </p>
         {:else}
           <p class="prompt thinking">
             <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> KI denkt nach …
@@ -1363,7 +1435,15 @@
       <button class="btn panel-close" onclick={() => (panelOpen = false)} aria-label="Schließen">✕</button>
       {#if !replay}
         <button class="btn" onclick={undo} disabled={!canUndo} title="Strg+Z">↶ Rückgängig</button>
-        <label>
+        <label title="Welche KI für dich spielt, wenn der Autopilot an ist">
+          Autopilot
+          <select bind:value={autopilotAi}>
+            {#each DIFFICULTIES as d (d.ai)}
+              <option value={d.ai}>{d.label}</option>
+            {/each}
+          </select>
+        </label>
+        <label title="Wie schnell die KI zieht (auch der Autopilot)">
           Tempo
           <select bind:value={speed}>
             {#each SPEEDS as sp (sp.ms)}
@@ -2639,6 +2719,28 @@
   }
   .back:hover {
     border-color: var(--accent);
+  }
+  .autopilot-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-raised);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .autopilot-toggle.on {
+    border-color: #ffd166;
+    background: color-mix(in srgb, #ffd166 22%, var(--bg-raised));
+    color: #ffd166;
+    font-weight: 700;
+    animation: pulse-pilot 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse-pilot {
+    50% {
+      box-shadow: 0 0 10px rgb(255 209 102 / 45%);
+    }
   }
   .panel-toggle,
   .panel-close,

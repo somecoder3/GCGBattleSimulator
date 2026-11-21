@@ -126,6 +126,13 @@ export class GameSession {
   aiChoice(policy: Policy): Action {
     const pending = this.state.pending;
     if (!pending || pending.player === this.human) throw new Error("the AI has nothing to decide");
+    return this.choiceFor(policy);
+  }
+
+  /** What a policy would decide for whoever decides now (also the human's seat: autopilot). */
+  choiceFor(policy: Policy): Action {
+    const pending = this.state.pending;
+    if (!pending) throw new Error("nothing to decide");
     const view = policy.usesView === false ? this.state : viewFor(this.state, pending.player);
     return policy.choose(view, pending);
   }

@@ -62,6 +62,13 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
 - **Alle Kopien wählbar** (21. Nov.): Die Engine bietet je Kartennummer auf der Hand nur eine Kopie an;
   `withCopies()` erweitert die Optionen auf alle Kopien, `Engine.isCopyOfOption` nimmt sie an und spielt genau die
   angetippte Kopie (Test `tests/engine/copies.test.ts`).
+- **Autopilot** (21. Nov., Nutzerwunsch): Knopf „🤖 Autopilot“ in der Zugleiste schaltet eine KI ein, die deine Seite
+  spielt (`helper` = `makePolicy(autopilotAi, …)` mit deinem Deck und dem Feld, `session.choiceFor`), bis du
+  wieder ausschaltest; am Spielende geht er aus. Solange er an ist, gibt es keine Eingaben (`decision` ist null),
+  Karten unter dem Deck schließt er nach kurzer Zeit selbst. KI („Autopilot“: Leicht…Sehr schwer) und „Tempo“
+  stehen in der Seitenleiste (am Handy in „☰ Log & Details“) und bleiben gespeichert
+  (`localStorage` `gcg-battle-simulator.board.speed`/`.autopilot`). Seine Züge sind normale eigene
+  Entscheidungen, „Rückgängig“ springt also auch hinter sie zurück.
 - **KI-Angriffe werden angekündigt** (21. Nov.): Statt `stepAI` fragt die KI-Schleife erst `session.aiChoice(ai)`;
   bei `attack` zeigt `announced` 1,1 s Pfeil, Angreifer-Markierung und „⚔ … greift … an“, erst dann läuft der Angriff
   (vorher lief ein ganzer Kampf in einem Schritt, wenn der Mensch nicht reagieren konnte).
