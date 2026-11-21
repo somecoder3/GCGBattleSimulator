@@ -4,7 +4,7 @@
 //
 //   npm run decklab -- calibrate [--field 12] [--blocks 4]
 //   npm run decklab -- measure M01 M01B … [--field 12] [--blocks 4]
-//   npm run decklab -- swaps M01 [--steps 3] [--neighbours 32] [--first 1] [--finalists 4] [--confirm 6]
+//   npm run decklab -- swaps M01 [--steps 3] [--neighbours 32] [--first 2] [--finalists 4] [--confirm 8]
 //
 // Common options: --ai v1|v0|search (default v1), --workers N (default half the cores: quieter fan),
 // --seed N (search seeds; confirmation uses N + 1000), --data <file> (default data-lab/lab.db).
@@ -16,7 +16,7 @@ import { parseAiName } from "../src/ai/registry";
 import { Engine } from "../src/engine/engine";
 import { calibrate, metaField, realMatchups } from "../src/lab/decklab/field";
 import { fieldRate, Measurer, type MeasureSettings } from "../src/lab/decklab/measure";
-import { fmtSwap, pct, swapSearch } from "../src/lab/decklab/swaps";
+import { fmtSwap, pct, setCardNames, swapSearch } from "../src/lab/decklab/swaps";
 import { LabStore } from "../src/lab/store";
 import { codeVersion } from "../src/lab/version";
 import { metaDecks } from "../src/meta/decks";
@@ -33,9 +33,9 @@ const { values: args, positionals } = parseArgs({
     blocks: { type: "string", default: "4" },
     steps: { type: "string", default: "3" },
     neighbours: { type: "string", default: "32" },
-    first: { type: "string", default: "1" },
+    first: { type: "string", default: "2" },
     finalists: { type: "string", default: "4" },
-    confirm: { type: "string", default: "6" },
+    confirm: { type: "string", default: "8" },
     data: { type: "string" },
   },
 });
@@ -54,6 +54,7 @@ const settings = (s: number): MeasureSettings => ({
   codeVersion: version,
 });
 const field = metaField(snapshot, lib, Number(args.field));
+setCardNames((no) => (lib.has(no) ? lib.get(no).name : no));
 const started = Date.now();
 const log = (text: string) => console.log(text);
 void new Engine(lib); // the card scripts are built once here (fails early on broken data)

@@ -235,6 +235,20 @@ Paarungen), also 0–20 echte Spiele je Archetyp; die Spalte „echt“ ist desh
 und zu früheren Beobachtungen passend: **Shining Gundam (M01, 18 % des Metas)** echt 65 % (16 Spiele), bei
 der KI 35,5 % gegen das Feld. Das ist der erste Kandidat für „KI-Schwächen zuerst beheben“.
 
+### KI-Korrektur und erster Kartentausch-Lauf (22. Nov. 2026)
+
+- Nach der Kalibrierung zuerst die KI für Shining verbessert (`docs/AI.md` „Shining Gundam“): M01 gegen das Feld
+  39,3 → 44,5 % (v1).
+- **Kartentausch M01** (v1, Feld 12, 32 Kandidaten, je Lauf gut 4 Minuten auf 8 Workern):
+  - Lauf 1 (erste Runde 1 Block, Bestätigung 6): Sieger +2,0 % in der Suche, −3,3 % in der Bestätigung. Die erste
+    Runde mit einem Block war zu verrauscht (±36 %).
+  - Darum jetzt: erste Runde 2 Blöcke, Bestätigung 8 Blöcke und **sequenziell** (positiv, aber unsicher →
+    doppelt so viele Blöcke, bis 32), Doppel-Tausche (−2/+2), wenn die echten Listen beide Kopien stützen.
+  - Lauf 3: bester Tausch „−1 Silver Bullet / +1 Shining Gundam (ST12-002)“, Suche +2,3 %, Bestätigung mit 8 → 16 →
+    32 Blöcken: +2,4 → +0,6 → **+0,7 % (−1,9 … +3,2 %)**, nicht übernommen. Einzeltausche an der Konsensliste
+    bewegen bei v1 höchstens 1–2 Punkte; das liegt an der Grenze dessen, was mit vertretbarer Rechenzeit messbar
+    ist. Größere Hebel: Stufe 2/3 (andere Kerne, neue Archetypen) und die KI selbst.
+
 ## 9. Ursprüngliche offene Fragen
 
 - Wie viel Rechenzeit ist in Ordnung (eine Nacht, ein Wochenende)? Nur am Desktop per CLI oder auch im Browser?

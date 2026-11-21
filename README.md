@@ -58,7 +58,7 @@ npm run images -- --download          # fehlende Bilder langsam von gundam-gcg.c
 | `npm run fuzz`     | 100 000 Zufallsspiele mit Invarianten-Prüfung               |
 | `npm run coverage` | Wie viele Kartentexte die Engine versteht (`-- --set ST01`) |
 | `npm run meta`     | Aktuelle Turnierdecks von Limitless laden (`-- --report`)   |
-| `npm run game`     | Eine KI-Partie als Log, z. B. `-- M01 M02 3`                |
+| `npm run game`     | Eine KI-Partie als Log, z. B. `-- M01 M02 3 [--explain 13]` |
 | `npm run tune`     | Gewichte der KI v1 per Selbstspiel abstimmen (`docs/AI.md`) |
 | `npm run mulligan` | Mulligan-Regeln der KI messen (`docs/AI.md`)                |
 | `npm run ab`       | Zwei Varianten derselben KI gegeneinander messen            |

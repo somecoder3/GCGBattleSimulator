@@ -16,6 +16,8 @@ import { pairedDiff, type FieldDeck, type Measurer } from "./measure";
 export interface Swap {
   remove: string;
   add: string;
+  /** Copies swapped (1 or 2; default 1). Two copies change more, so they are easier to measure. */
+  n?: number;
 }
 
 export interface SwapStep {
@@ -34,8 +36,10 @@ const counts = (deck: DeckList) => {
 
 export function applySwap(deck: DeckList, s: Swap): DeckList {
   const main = [...deck.main];
-  main.splice(main.indexOf(s.remove), 1);
-  main.push(s.add);
+  for (let i = 0; i < (s.n ?? 1); i++) {
+    main.splice(main.indexOf(s.remove), 1);
+    main.push(s.add);
+  }
   return { main: main.sort(), resources: deck.resources };
 }
 
@@ -62,12 +66,16 @@ export function rankedSwaps(lib: CardLib, base: DeckList, meta: MetaDeck): Swap[
   for (const remove of have.keys()) {
     for (const add of adds) {
       if (add === remove) continue;
-      const swap = { remove, add };
-      const next = applySwap(base, swap);
-      if (!legal(lib, next)) continue;
       const addGain = (avg.get(add) ?? 0) - (have.get(add) ?? 0);
       const removeGain = (have.get(remove) ?? 0) - (avg.get(remove) ?? 0);
-      scored.push({ swap, score: addGain + removeGain });
+      for (const n of [1, 2]) {
+        if ((have.get(remove) ?? 0) < n || (have.get(add) ?? 0) + n > 4) continue;
+        const swap = n === 1 ? { remove, add } : { remove, add, n };
+        if (!legal(lib, applySwap(base, swap))) continue;
+        // A double swap only if the real lists support both copies.
+        if (n === 2 && (addGain < 1.5 || removeGain < 1)) continue;
+        scored.push({ swap, score: (addGain + removeGain) * (n === 2 ? 1.2 : 1) });
+      }
     }
   }
   return scored.sort((a, b) => b.score - a.score).map((s) => s.swap);
@@ -80,8 +88,10 @@ export interface SearchOptions {
   firstBlocks: number;
   /** Candidates left at the end of the race (they get the most blocks). */
   finalists: number;
-  /** Blocks per opponent to confirm the winner on fresh seeds. */
+  /** Blocks per opponent to confirm the winner on fresh seeds (doubled while positive but unsure). */
   confirmBlocks: number;
+  /** Most blocks per opponent for a confirmation. */
+  maxConfirmBlocks?: number;
   steps: number;
   log?: (text: string) => void;
 }
@@ -117,7 +127,13 @@ async function race(
 }
 
 export const pct = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)} %`;
-export const fmtSwap = (s: Swap) => `−1 ${s.remove} / +1 ${s.add}`;
+/** Card names for the output (set by the tool; numbers only without). */
+let cardName: (no: string) => string = (no) => no;
+export function setCardNames(name: (no: string) => string): void {
+  cardName = name;
+}
+export const fmtSwap = (s: Swap) =>
+  `−${s.n ?? 1} ${cardName(s.remove)} (${s.remove}) / +${s.n ?? 1} ${cardName(s.add)} (${s.add})`;
 
 /**
  * Hill climbing with swaps. `search` measures on the search seeds, `confirm` on fresh ones; a swap is
@@ -141,8 +157,16 @@ export async function swapSearch(
     const winner = await race(search, base, swaps, field, o);
     if (!winner) break;
     const next = applySwap(base, winner.swap);
-    const [nextR, baseR] = await confirm.blocks([next, base], field, o.confirmBlocks);
-    const confirmed = pairedDiff(nextR!, baseR!, field);
+    // Sequential: a positive but unsure result gets twice the blocks, up to maxConfirmBlocks.
+    let blocks = o.confirmBlocks;
+    let confirmed;
+    for (;;) {
+      const [nextR, baseR] = await confirm.blocks([next, base], field, blocks);
+      confirmed = pairedDiff(nextR!, baseR!, field);
+      if (confirmed.low > 0 || confirmed.diff <= 0 || blocks * 2 > (o.maxConfirmBlocks ?? 32)) break;
+      o.log?.(`  Bestätigung ${pct(confirmed.diff)} noch unsicher, ${blocks * 2} Blöcke …`);
+      blocks *= 2;
+    }
     const accepted = confirmed.low > 0;
     steps.push({ swap: winner.swap, search: winner.search, confirm: confirmed, accepted });
     o.log?.(
