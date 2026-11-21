@@ -48,6 +48,17 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
 - **Aktionsmenü** schwebt an der gewählten Karte (`menuAt`, berechnet in `placeArrows`): Hand darüber, Feld
   daneben (damit Ziele sichtbar bleiben). Die gewählte Handkarte bleibt angehoben (`.hand-card.raised`), sonst sank sie
   beim Wechsel der Maus ins Menü und das Menü rutschte mit (Nutzer, 20. Nov.).
+  Seit 21. Nov. (Nutzer, am Handy): Das Menü erscheint bei **jeder** gewählten Karte, auch ohne Aktion („Gerade
+  keine Aktion möglich“, „ⓘ Details“ öffnet am Handy die Schublade; `infoOnly`, bleibt bei KI-Schritten gewählt).
+  `menuAt` ist die linke obere Ecke, aus der gemessenen Menügröße (`menuEl`) berechnet und auf Spielfeld **und**
+  Fenster begrenzt (vorher ragte es am Rand hinaus). „▾“ klappt es zu einem kleinen Reiter ein (`menuMin`), damit
+  darunter liegende Ziele per Tipp erreichbar sind; neue Auswahl klappt es wieder auf.
+- **Alle Kopien wählbar** (21. Nov.): Die Engine bietet je Kartennummer auf der Hand nur eine Kopie an;
+  `withCopies()` erweitert die Optionen auf alle Kopien, `Engine.isCopyOfOption` nimmt sie an und spielt genau die
+  angetippte Kopie (Test `tests/engine/copies.test.ts`).
+- **KI-Angriffe werden angekündigt** (21. Nov.): Statt `stepAI` fragt die KI-Schleife erst `session.aiChoice(ai)`;
+  bei `attack` zeigt `announced` 1,1 s Pfeil, Angreifer-Markierung und „⚔ … greift … an“, erst dann läuft der Angriff
+  (vorher lief ein ganzer Kampf in einem Schritt, wenn der Mensch nicht reagieren konnte).
 - **Pfeile** (SVG-Overlay, `arrowPath` = quadratische Kurve): orange für den laufenden Kampf (`view.battle`),
   gelb beim Zielen (gewählte Karte → überfahrene Karte, `drag.over` oder Schilde über `aimPlayer`). Neu berechnet
   bei Änderung von View/Auswahl, nach 360 ms (Animationen) und per ResizeObserver.
@@ -72,7 +83,9 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
 - **Link**: Ketten-Symbol oben rechts an gelinkten Units (ersetzt das frühere „LINK“). `linkHints` (wie ExBurst):
   Überfahren/Wählen eines eigenen Piloten (auch Command mit 【Pilot】, `pairable`) markiert Units auf der Hand und
   Units ohne Piloten im Feld, mit denen er linken würde; eine Unit markiert passende Piloten auf der Hand
-  (`satisfiesLink`). Markierung: goldener Rahmen + Kette.
+  (`satisfiesLink`). Markierung: goldener Rahmen + **große Kette** (`.link-big`, halbe Kartenbreite, links in der
+  Karte, damit sie im Fächer sichtbar bleibt; vorher kleines Eck-Symbol, das am Handy verdeckt war oder durch die
+  Nachbarkarte schien, Nutzer 21. Nov.).
 
 ## Seitenleiste
 

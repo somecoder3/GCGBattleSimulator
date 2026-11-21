@@ -108,12 +108,15 @@
           <span class="hp {stats.damage ? 'hurt' : trend(stats.hp, stats.baseHp)}">{hpLeft}</span>
         </div>
       {/if}
+      {#if linkHint}
+        <!-- Large and inside the card (on the left, which stays visible in the fanned hand): the small corner
+             badge was covered by or showed through neighbouring hand cards on the phone (user, 21 Nov). -->
+        <span class="link-big" title="Würde mit der gewählten Karte linken"><KeywordIcon kw="link" /></span>
+      {/if}
     </div>
   </div>
-  {#if pilot?.link || linkHint}
-    <span class="link-badge" title={linkHint ? "Würde mit der gewählten Karte linken" : "Gelinkt"}
-      ><KeywordIcon kw="link" /></span
-    >
+  {#if pilot?.link}
+    <span class="link-badge" title="Gelinkt"><KeywordIcon kw="link" /></span>
   {/if}
   {#if keywords.length}
     <span class="kws">
@@ -327,8 +330,16 @@
       0 0 0 2px #ffd166,
       0 0 16px rgb(255 209 102 / 55%);
   }
-  .link-hint .link-badge {
+  .link-big {
+    --kw-size: calc(var(--cw, 84px) * 0.5);
+    position: absolute;
+    z-index: 3;
+    top: 22%;
+    left: 6%;
+    line-height: 0;
+    filter: drop-shadow(0 0 6px rgb(0 0 0 / 80%)) drop-shadow(0 0 10px rgb(255 209 102 / 60%));
     animation: pop 0.25s ease-out;
+    pointer-events: none;
   }
   @keyframes pop {
     from {

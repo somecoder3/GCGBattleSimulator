@@ -119,10 +119,15 @@ export class GameSession {
 
   /** Lets the AI make its pending decision. It only sees its own view. */
   stepAI(policy: Policy): LogStep {
+    return this.apply(this.aiChoice(policy));
+  }
+
+  /** What the AI would do now (without doing it; the board announces attacks before they happen). */
+  aiChoice(policy: Policy): Action {
     const pending = this.state.pending;
     if (!pending || pending.player === this.human) throw new Error("the AI has nothing to decide");
     const view = policy.usesView === false ? this.state : viewFor(this.state, pending.player);
-    return this.apply(policy.choose(view, pending));
+    return policy.choose(view, pending);
   }
 
   /** Indices of the human's own decisions (rollback points); automatic passes don't count. */

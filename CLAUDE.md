@@ -340,6 +340,11 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Ergebnis (`optionalPlay`/`chooseWithoutOptional` in `src/ai/heuristic.ts`, alt `forcedFiller`). Gleich stark
   (v1 50,2/50,6 %, Suche 49,7 %), +5 % Zeit; Nutzer-Entscheidung: übernehmen. Ein erster Versuch, solche
   Karten in Simulationen nie zu spielen, wurde verworfen. Details `docs/AI.md` „Vorausschau“.
+- **Spielfeld-Feinschliff (21. Nov., Nutzerwünsche vom Handy):** alle Kopien einer Handkarte wählbar
+  (`withCopies` im Board, `Engine.isCopyOfOption`), großes Link-Symbol in der Karte (`.link-big`), Aktionsmenü bei
+  jeder gewählten Karte (auch nur „ⓘ Details“), immer ganz im Bild (gemessen und begrenzt), einklappbar („▾“),
+  KI-Angriffe 1,1 s mit Pfeil angekündigt (`session.aiChoice`, `announced`). Im Handy-Layout mit der Partie des
+  Nutzers geprüft. Details `docs/UI.md`.
 - **Wahl von Karten verständlicher (21. Nov., vom Nutzer am Handy gefunden):** Master Gundams 【Attack】 (2
   Special Moves aus dem Trash verbannen → 5 Schaden auf die Base) wirkte nicht, weil „Fertig“ (hervorgehoben,
   Leertaste) bei „Ziel wählen“ gedrückt wurde und damit nichts gewählt war; die Engine war richtig (nachgespielt

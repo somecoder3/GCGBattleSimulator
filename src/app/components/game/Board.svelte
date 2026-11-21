@@ -10,7 +10,7 @@
   import type { CardDef } from "../../../data/types";
   import { satisfiesLink } from "../../../engine/cardlib";
   import type { Engine } from "../../../engine/engine";
-  import type { Action, CardId, GameEvent, PlayerId } from "../../../engine/types";
+  import type { Action, AttackTarget, CardId, GameEvent, PlayerId } from "../../../engine/types";
   import { HIDDEN } from "../../../engine/view";
   import type { GameSession, LogStep } from "../../../sim/session";
   import {
@@ -240,7 +240,8 @@
       ...(session.setup.start ? describeStart(session.setup.start, human) : []),
       ...describeSteps(engine, session.steps, human),
     ];
-    selected = null;
+    // A card selected only to look at it stays selected while the game goes on (AI steps).
+    if (!infoOnly || selected === null || !view.cards[selected]) selected = null;
     flashed = new Set(step && step.player !== human ? touched(step.events) : []);
     reveal(step);
     animate(step);
@@ -290,8 +291,13 @@
   let size = $state({ w: 0, h: 0 });
   type Arrow = { key: string; d: string; kind: "battle" | "aim"; x: number; y: number };
   let arrows = $state.raw<Arrow[]>([]);
-  /** Where the menu of the selected card floats (board coordinates). */
-  let menuAt = $state<{ x: number; y: number; side: "above" | "right" | "left" } | null>(null);
+  /** Where the menu of the selected card floats: its top left corner in board coordinates. */
+  let menuAt = $state<{ x: number; y: number } | null>(null);
+  let menuEl = $state<HTMLElement>();
+  /** The menu folded to a small tab, so it doesn't cover cards to click (phones; user's wish, 21 Nov). */
+  let menuMin = $state(false);
+  /** The selected card has no options: the menu only offers its details. */
+  let infoOnly = $state(false);
   /** The enemy's shield area under the pointer (aiming at the player). */
   let aimPlayer = $state(false);
 
@@ -320,7 +326,8 @@
     const card = (id: CardId) => boardEl!.querySelector(`[data-card="${id}"]`);
     const shields = (p: PlayerId) => boardEl!.querySelector(`[data-shields="${p}"] .shields`);
     const list: Arrow[] = [];
-    const b = view.battle;
+    const b =
+      view.battle ?? (announced ? { ...announced, attackerOwner: enemy as PlayerId, blocked: false } : null);
     if (b) {
       const from = centerOf(card(b.attacker), box);
       const to = centerOf(
@@ -354,26 +361,34 @@
     const el = selected !== null ? card(selected) : null;
     if (el) {
       const r = el.getBoundingClientRect();
-      const inHand = !!el.closest(".hand");
-      if (inHand) {
+      const w = menuEl?.offsetWidth || 220;
+      const h = menuEl?.offsetHeight || 150;
+      let x: number;
+      let y: number;
+      if (el.closest(".hand")) {
         // Above the hand card.
-        const x = Math.min(box.width - 110, Math.max(110, r.left + r.width / 2 - box.left));
-        menuAt = { x, y: r.top - box.top - 8, side: "above" };
+        x = r.left + r.width / 2 - box.left - w / 2;
+        y = r.top - box.top - 8 - h;
       } else {
         // Beside a card on the field, so the targets stay visible.
         const right = r.right - box.left + 12;
-        const fits = right + 230 < box.width;
-        menuAt = {
-          x: fits ? right : r.left - box.left - 12,
-          y: r.top - box.top + r.height / 2,
-          side: fits ? "right" : "left",
-        };
+        x = right + w < box.width ? right : r.left - box.left - 12 - w;
+        y = r.top - box.top + r.height / 2 - h / 2;
       }
+      // Always completely on the screen (user, 21 Nov 2026): inside the board and the window.
+      const minX = Math.max(0, -box.left) + 8;
+      const maxX = Math.min(box.width, innerWidth - box.left) - w - 8;
+      const minY = Math.max(0, -box.top) + 8;
+      const maxY = Math.min(box.height, innerHeight - box.top) - h - 8;
+      menuAt = {
+        x: Math.max(minX, Math.min(x, maxX)),
+        y: Math.max(minY, Math.min(y, maxY)),
+      };
     } else menuAt = null;
   }
 
   $effect(() => {
-    void [view, selected, hovered, aimPlayer, drag?.over];
+    void [view, selected, hovered, aimPlayer, drag?.over, menuEl, menuMin, announced];
     placeArrows();
     // Cards move with an animation (flip, rest): place again when they have settled.
     const t = setTimeout(placeArrows, 360);
@@ -384,7 +399,14 @@
     if (!boardEl) return;
     const ro = new ResizeObserver(() => placeArrows());
     ro.observe(boardEl);
+    if (menuEl) ro.observe(menuEl);
     return () => ro.disconnect();
+  });
+
+  // A new selection opens the menu unfolded.
+  $effect(() => {
+    void selected;
+    menuMin = false;
   });
 
   onMount(refresh);
@@ -403,6 +425,10 @@
     return ids;
   }
 
+  /** An attack of the AI shown before it happens (arrow and highlighted attacker). */
+  let announced = $state<{ attacker: CardId; target: AttackTarget } | null>(null);
+  const ANNOUNCE_MS = 1100;
+
   // AI turns: one decision at a time with a short pause, so the human can follow. Action steps the
   // human doesn't want to stop in are passed automatically (marked, so undo skips them).
   $effect(() => {
@@ -416,8 +442,23 @@
     if (!session.aiToAct) return;
     const kind = session.state.pending!.kind;
     const delay = kind === "mulligan" ? Math.min(speed, 300) : speed;
-    const timer = setTimeout(() => refresh(session.stepAI(ai)), delay);
-    return () => clearTimeout(timer);
+    let battle: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(() => {
+      const action = session.aiChoice(ai);
+      if (action.type !== "attack") return refresh(session.apply(action));
+      // An attack of the AI is announced: the arrow stays a moment before the battle runs (user's wish,
+      // 21 Nov 2026: without a chance to react, the whole battle happened in one step).
+      announced = { attacker: action.unit, target: action.target };
+      battle = setTimeout(() => {
+        announced = null;
+        refresh(session.apply(action));
+      }, ANNOUNCE_MS);
+    }, delay);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(battle);
+      announced = null;
+    };
   });
 
   $effect(() => {
@@ -426,7 +467,25 @@
   });
 
   const decision = $derived(!replay && view.pending && view.pending.player === human ? view.pending : null);
-  const options = $derived(decision?.options ?? []);
+  const options = $derived(withCopies(decision?.options ?? []));
+
+  /**
+   * The engine lists one copy per card number from the hand; every copy is selectable on the board (user's
+   * wish, 21 Nov 2026) and plays itself (`Engine.isCopyOfOption`).
+   */
+  function withCopies(list: Action[]): Action[] {
+    const hand = view.players[human].hand;
+    const out = [...list];
+    for (const o of list) {
+      if (!("card" in o) || view.cards[o.card]?.zone !== "hand") continue;
+      const no = view.cards[o.card]!.no;
+      for (const id of hand) {
+        if (id === o.card || view.cards[id]!.no !== no) continue;
+        out.push({ ...o, card: id } as Action);
+      }
+    }
+    return out;
+  }
   const buttons = $derived(options.filter(isButton));
   /** A running choice of cards (how many, optional): for the text and the "done" button. */
   const choice = $derived(decision ? choiceInfo(session.state) : undefined);
@@ -548,7 +607,7 @@
   }
 
   function battleRole(id: CardId): "" | "attacker" | "defender" {
-    const b = view.battle;
+    const b = view.battle ?? announced;
     if (!b) return "";
     return b.attacker === id ? "attacker" : b.target === id ? "defender" : "";
   }
@@ -587,12 +646,16 @@
     }
     const own = decision ? options.filter((o) => primaryCard(o) === id) : [];
     if (!own.length) {
-      // A card without options: clicking holds it in the detail (again: release).
-      selected = null;
-      pinned = pinned === id ? null : id;
+      // A card without options: it is selected anyway, the menu offers its details (on the phone the
+      // detail is in the drawer; user, 21 Nov 2026), and the detail holds it (again: release).
+      const again = selected === id;
+      selected = again ? null : id;
+      pinned = again ? null : id;
+      infoOnly = !again;
       return;
     }
     pinned = null;
+    infoOnly = false;
     if (own.length === 1 && immediate(own[0]!)) return act(own[0]!);
     selected = id;
   }
@@ -727,7 +790,7 @@
   const activeResources = (ids: CardId[]) => ids.filter((id) => !view.cards[id]!.rested).length;
   const detailId = $derived(hovered ?? selected ?? pinned);
   const battleInfo = $derived.by(() => {
-    const b = view.battle;
+    const b = view.battle ?? (announced ? { ...announced, attackerOwner: enemy } : null);
     if (!b) return "";
     return `${name(b.attacker)} greift ${b.target === "player" ? (b.attackerOwner === human ? "die KI" : "dich") : name(b.target)} an`;
   });
@@ -1005,25 +1068,55 @@
       {/each}
     </div>
 
-    {#if decision && selected !== null && selectedOptions.length && menuAt && !drag}
-      <div
-        class="card-menu"
-        data-side={menuAt.side}
-        style="left: {menuAt.x}px; top: {menuAt.y}px"
-        role="group"
-        aria-label="Möglichkeiten für {name(selected)}"
-        transition:fade={{ duration: 120 }}
-      >
-        <span class="menu-title">{name(selected)}</span>
-        {#each selectedOptions as o (JSON.stringify(o))}
-          <button class="opt" onclick={() => act(o)}>{actionLabel(o, name)}</button>
-        {/each}
-        <div class="menu-row">
-          <button class="opt info-button" onclick={() => (panelOpen = true)} title="Karte im Detail">ⓘ</button
-          >
-          <button class="opt ghost" onclick={() => (selected = null)}>Abbrechen</button>
+    {#if selected !== null && menuAt && !drag && view.cards[selected]}
+      {#if menuMin}
+        <button
+          class="card-menu folded"
+          bind:this={menuEl}
+          style="left: {menuAt.x}px; top: {menuAt.y}px"
+          onclick={() => (menuMin = false)}
+          title="Menü wieder aufklappen"
+          aria-label="Menü für {name(selected)} aufklappen"
+        >
+          ▴ {name(selected)}
+        </button>
+      {:else}
+        <div
+          class="card-menu"
+          bind:this={menuEl}
+          style="left: {menuAt.x}px; top: {menuAt.y}px"
+          role="group"
+          aria-label="Möglichkeiten für {name(selected)}"
+          transition:fade={{ duration: 120 }}
+        >
+          <div class="menu-head">
+            <span class="menu-title">{name(selected)}</span>
+            <button
+              class="fold"
+              onclick={() => (menuMin = true)}
+              title="Menü einklappen"
+              aria-label="Einklappen">▾</button
+            >
+          </div>
+          {#each selectedOptions as o (JSON.stringify(o))}
+            <button class="opt" onclick={() => act(o)}>{actionLabel(o, name)}</button>
+          {:else}
+            <span class="menu-note">{decision ? "Gerade keine Aktion möglich." : "Nur ansehen."}</span>
+          {/each}
+          <div class="menu-row">
+            <button class="opt info-button" onclick={() => (panelOpen = true)} title="Karte im Detail"
+              >ⓘ Details</button
+            >
+            <button
+              class="opt ghost"
+              onclick={() => {
+                selected = null;
+                pinned = null;
+              }}>{selectedOptions.length ? "Abbrechen" : "Schließen"}</button
+            >
+          </div>
         </div>
-      </div>
+      {/if}
     {/if}
 
     <svg class="arrows" width={size.w} height={size.h} aria-hidden="true">
@@ -1945,14 +2038,37 @@
     box-shadow:
       var(--shadow),
       0 0 24px rgb(255 209 102 / 12%);
-    transform: translate(-50%, -100%);
     text-align: left;
   }
-  .card-menu[data-side="right"] {
-    transform: translate(0, -50%);
+  .card-menu.folded {
+    flex-direction: row;
+    min-width: 0;
+    max-width: 200px;
+    padding: 4px 10px;
+    overflow: hidden;
+    color: #ffd166;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
-  .card-menu[data-side="left"] {
-    transform: translate(-100%, -50%);
+  .menu-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .menu-head .fold {
+    min-width: 30px;
+    min-height: 26px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg-raised);
+    color: var(--text-dim);
+  }
+  .menu-note {
+    color: var(--text-dim);
+    font-size: 13px;
   }
   .card-menu .opt {
     width: 100%;

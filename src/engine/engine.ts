@@ -118,12 +118,35 @@ export class Engine {
     return { state: s, events: c.ev };
   }
 
+  /**
+   * Is the action an option with another copy of the same card from the hand? The options list one copy per
+   * card number (2-1-1, `uniqueByNo`); the board lets the human pick any copy (user's wish, 21 Nov 2026),
+   * so that very copy is played.
+   */
+  isCopyOfOption(state: GameState, action: Action): boolean {
+    const decision = state.pending;
+    if (!decision || !("card" in action) || typeof action.card !== "number") return false;
+    const mine = state.cards[action.card];
+    if (!mine || mine.zone !== "hand" || mine.owner !== decision.player) return false;
+    const key = actionKey(action);
+    return decision.options.some((o) => {
+      if (o.type !== action.type || !("card" in o) || o.card === action.card) return false;
+      const other = state.cards[o.card];
+      return (
+        !!other &&
+        other.zone === "hand" &&
+        other.no === mine.no &&
+        actionKey({ ...o, card: action.card } as Action) === key
+      );
+    });
+  }
+
   /** Applies a legal action for the pending decision and runs to the next decision or the end. */
   apply(state: GameState, action: Action): GameEvent[] {
     const decision = state.pending;
     if (!decision) throw new Error("no decision pending");
     const key = actionKey(action);
-    if (!decision.options.some((o) => actionKey(o) === key)) {
+    if (!decision.options.some((o) => actionKey(o) === key) && !this.isCopyOfOption(state, action)) {
       throw new Error(`illegal action ${key} for ${decision.kind} of player ${decision.player}`);
     }
     const c = newCtx(this.lib, state);
