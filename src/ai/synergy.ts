@@ -22,8 +22,8 @@ export interface Synergy {
   kind: "zone" | "link";
   /** Where the effect looks (for links: the Pilot pairs with the Unit). */
   zone: SynergyZone | "link";
-  /** How the effect uses them: counts them (condition), chooses them, or names them ("Master Gundam"). */
-  use: "count" | "choose" | "link";
+  /** How the effect uses them: counts them (condition), chooses them, checks a chosen card, or links. */
+  use: "count" | "choose" | "match" | "link";
   /** Cards of the deck that match, with their copies. */
   matches: Map<string, number>;
   /** Short description of the filter, for the report. */
@@ -43,7 +43,8 @@ const FILTER_KEYS = new Set([
   "pilot",
 ]);
 
-type Found = { filter: Filter; use: "count" | "choose"; need: number };
+/** "match": a condition on a chosen or discarded card ("If you discard a (Special Move) Command card"). */
+type Found = { filter: Filter; use: "count" | "choose" | "match"; need: number };
 
 /**
  * Collects filters on friendly cards from any part of a compiled effect, with the number the effect needs:
@@ -60,7 +61,7 @@ function collect(node: unknown, key: string, out: Found[], parent?: Record<strin
     const n = key === "count" ? parent?.min : parent?.count;
     out.push({
       filter: o as Filter,
-      use: key === "count" ? "count" : "choose",
+      use: key === "count" ? "count" : parent && "varMatches" in parent ? "match" : "choose",
       need: typeof n === "number" ? n : 1,
     });
   }
@@ -116,20 +117,27 @@ export function deckCounts(deck: DeckList): Map<string, number> {
 export interface CardCombo {
   filter: Filter;
   zone: SynergyZone;
-  use: "count" | "choose";
+  use: "count" | "choose" | "match";
   label: string;
   need: number;
 }
 
 const combos = new WeakMap<EngineCard, CardCombo[]>();
+const combosWithGranted = new WeakMap<EngineCard, CardCombo[]>();
 
-/** The specific filters on own cards in the effects of a card (cached per card). */
-export function cardCombos(card: EngineCard): CardCombo[] {
-  let out = combos.get(card);
+/**
+ * The specific filters on own cards in the effects of a card (cached per card). With `granted` also the
+ * effects the card gives its Unit (a Pilot's lines other than 【Burst】, e.g. Domon Kasshu's 【When Paired】);
+ * "Passt zu" uses them, the AI's deck plan not yet (its measured behaviour stays the same).
+ */
+export function cardCombos(card: EngineCard, granted = false): CardCombo[] {
+  const cache = granted ? combosWithGranted : combos;
+  let out = cache.get(card);
   if (out) return out;
   out = [];
   const seen = new Set<string>();
-  for (const { effect, program } of card.script.compiled) {
+  const effects = granted ? [...card.script.compiled, ...card.script.compiledGranted] : card.script.compiled;
+  for (const { effect, program } of effects) {
     const found: Found[] = [];
     collect(effect, "", found);
     collect(program, "", found);
@@ -143,7 +151,7 @@ export function cardCombos(card: EngineCard): CardCombo[] {
       out.push({ filter, zone, use, label, need });
     }
   }
-  combos.set(card, out);
+  cache.set(card, out);
   return out;
 }
 

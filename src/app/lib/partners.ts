@@ -60,6 +60,8 @@ export function comboText(c: CardCombo): string {
   if (f.lvMin !== undefined && f.lvMax !== undefined) parts.push(`Lv.${f.lvMin}–${f.lvMax}`);
   else if (f.lvMin !== undefined) parts.push(`ab Lv.${f.lvMin}`);
   else if (f.lvMax !== undefined) parts.push(`bis Lv.${f.lvMax}`);
+  // A condition on a chosen or discarded card: the effect is stronger with such a card.
+  if (c.use === "match") return `Bonus mit ${parts.join(" ")}`;
   const zone = ZONE_TEXT[c.zone] ?? "";
   const need = c.need > 1 ? `${c.need}× ` : "";
   return `${c.use === "count" ? "Zählt" : "Wählt"} ${need}${parts.join(" ")}${zone ? ` ${zone}` : ""}`;
@@ -181,7 +183,7 @@ export function partners(lib: CardLib, no: string, options: PartnerOptions = {})
     });
 
   // What the effects of this card look for.
-  for (const combo of cardCombos(card)) {
+  for (const combo of cardCombos(card, true)) {
     if (!narrow(lib, combo)) continue;
     const cards = pool.filter((c) => matchesCard(c, combo.filter)).map((c) => ({ no: c.no }));
     if (cards.length) groups.push({ kind: "wants", title: comboText(combo), cards: cards.sort(rank) });
@@ -190,7 +192,7 @@ export function partners(lib: CardLib, no: string, options: PartnerOptions = {})
   // Cards whose effects look for this card.
   const wanted: PartnerCard[] = [];
   for (const other of pool) {
-    const hit = cardCombos(other).find((c) => matchesCard(card, c.filter) && narrow(lib, c));
+    const hit = cardCombos(other, true).find((c) => matchesCard(card, c.filter) && narrow(lib, c));
     if (hit) wanted.push({ no: other.no, note: comboText(hit) });
   }
   if (wanted.length) groups.push({ kind: "wanted", title: "Nutzen diese Karte", cards: wanted.sort(rank) });

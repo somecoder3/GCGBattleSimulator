@@ -19,7 +19,7 @@ const chosen =
         return d;
       });
 const name = (no: string) => lib.get(no).name;
-const USE = { count: "zählt", choose: "wählt", link: "linkt mit" };
+const USE = { count: "zählt", choose: "wählt", match: "prüft auf", link: "linkt mit" };
 for (const d of chosen) {
   const plan = deckPlan(lib, d.deck);
   console.log(`\n${d.id} ${d.name}`);

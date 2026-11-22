@@ -413,8 +413,10 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Karte“ (Effekte anderer Karten, die sie suchen) und „Oft zusammen gespielt“ (Turnierlisten des Snapshots, ab 2
   Listen und Lift ≥ 1,2). Filter, die ≥ 120 Deck-Karten treffen („1 Unit aus dem Trash“), fallen weg (`GENERIC`).
   Sortiert nach gemeinsamen Listen, dann Spielrate. Klick öffnet die Partnerkarte („← Zurück“), im Deckbau „+“
-  und „+ Ins Deck“, Häkchen „Nur Farben des Decks“. Grenze: nur was im Text steht (Kurve, Farbe nicht);
-  Abwerf-Bedingungen wie Domon Kasshus „if you discard a (Special Move)“ erkennt der Graph nicht. Tests
+  und „+ Ins Deck“, Häkchen „Nur Farben des Decks“. Grenze: nur was im Text steht (Kurve, Farbe nicht).
+  Liest auch die der Unit verliehenen Pilot-Zeilen (`cardCombos(card, true)`) und Bedingungen auf gewählte/abgeworfene
+  Karten (`use: "match"`, „Bonus mit (Special Move) Command“ bei Domon Kasshu, Hinweis des Nutzers); der Deckplan der
+  KI nutzt die verliehenen Zeilen noch nicht (Verhalten unverändert). Tests
   `tests/app/partners.test.ts`. Paar-Siegquoten aus Simulationen (Quelle 3) offen, eher fürs Labor.
 - **Trash-Bewusstsein (23. Nov., Nutzerwunsch):** Kombos kennen ihren Bedarf (`need`, `trashNeeds` in
   `synergy.ts`); v0 wirft bevorzugt Karten ab, die eigene Trash-Effekte noch brauchen (`trashAware`, Standard, alt

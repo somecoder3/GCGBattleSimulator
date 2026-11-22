@@ -43,6 +43,13 @@ describe("partners from the effects", () => {
     expect(nos(DOMON, "link")).toContain(SHINING);
   });
 
+  it("Pilot lines given to the Unit count too: Domon Kasshu discards a (Special Move) Command", () => {
+    const wants = group(DOMON, "wants");
+    expect(wants.map((g) => g.title)).toEqual(["Bonus mit (Special Move) Command"]);
+    expect(wants[0]!.cards.map((c) => c.no)).toContain(CYCLONE);
+    expect(nos(CYCLONE, "wanted")).toContain(DOMON);
+  });
+
   it("generic filters (any Unit in the trash) are left out", () => {
     for (const g of partners(lib, "ST01-005")) expect(g.cards.length).toBeLessThan(120);
     expect(group("ST01-005", "wanted")[0]!.cards.every((c) => !c.note?.startsWith("Wählt 3× Unit"))).toBe(
