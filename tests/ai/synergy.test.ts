@@ -60,9 +60,12 @@ describe("v0 discards what the own deck wants in the trash (experiment)", () => 
     return pick.type === "discard" ? s.cards[pick.card]!.no : "";
   };
 
-  it("with comboFuel the Special Move (Shining Gundam in the deck), else the first of two equal cards", () => {
+  it("with comboFuel or trash awareness (default since 23 Nov 2026) the Special Move, else the first", () => {
     expect(discard(new HeuristicPolicy(engine, { ownDeck: SHINING_DECK, comboFuel: true }))).toBe(CYCLONE);
-    expect(discard(new HeuristicPolicy(engine, { ownDeck: SHINING_DECK }))).toBe(INCIDENT);
+    expect(discard(new HeuristicPolicy(engine, { ownDeck: SHINING_DECK }))).toBe(CYCLONE);
+    expect(discard(new HeuristicPolicy(engine, { ownDeck: SHINING_DECK, plainTrashAware: true }))).toBe(
+      INCIDENT,
+    );
   });
 });
 
