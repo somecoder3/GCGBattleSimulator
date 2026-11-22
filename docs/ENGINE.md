@@ -68,7 +68,12 @@ abwechselnder Priorität; wer nur passen kann, passt automatisch.
   Spieler 2. Spieler 1 zieht im ersten Zug (die Regeln nehmen ihn nicht aus).
 - Phasen und Schritte (7), Handlimit 10 (nur der aktive Spieler), Zuglimit als Unentschieden.
 - Ausspielen: Lv. = Anzahl Ressourcen, Kosten = aktive Ressourcen ruhen (normale zuerst, EX Resource zuletzt
-  und dann aus dem Spiel). Units (7. Unit ersetzt eine gewählte, nicht „zerstört“), Bases (ersetzen die alte),
+  und dann aus dem Spiel). **Bewusst mit EX Resource zahlen** (seit 23. Nov. 2026, Nutzerwunsch): Ändert eine EX
+  Resource etwas (eigene Karte im Spiel mit „When one of your EX Resources is exiled“ wie GD05-018 Calibarn oder
+  „… Command card using an EX Resource“; die Karte selbst mit „If you use an EX Resource to play this card“ wie
+  GD05-118), gibt es zu jeder Option mit Kosten eine zweite mit `ex: 1` (`exChoices` in `engine.ts`). Sie zahlt
+  mit genau einer EX Resource und dem Rest normal (`pay(…, exCount)`), nur wenn die normalen Ressourcen allein
+  reichen würden (sonst wird ohnehin eine EX Resource verbraucht). Beschriftung „… (mit EX Resource)“. Units (7. Unit ersetzt eine gewählte, nicht „zerstört“), Bases (ersetzen die alte),
   Pilots und Commands mit 【Pilot】 als Pilot (Werte addiert, Link über Namensteil oder Trait).
 - Angriff nur mit aktiven Units, nicht im Einsatzzug außer Link Units; Ziel Spieler oder geruhte Unit;
   Base vor Schilden, Schild bei ≥ 1 Schaden zerstört, Sieg bei Schaden ohne Schilde/Base, AP 0 macht keinen

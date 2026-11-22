@@ -45,6 +45,12 @@ export function isButton(action: Action): boolean {
 }
 
 export function actionLabel(action: Action, name: (id: CardId) => string): string {
+  const label = baseLabel(action, name);
+  // Paid with an EX Resource although the normal ones would do (engine.ts exChoices).
+  return "ex" in action && action.ex ? `${label} (mit EX Resource)` : label;
+}
+
+function baseLabel(action: Action, name: (id: CardId) => string): string {
   switch (action.type) {
     case "keepHand":
       return "Behalten";

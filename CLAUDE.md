@@ -400,6 +400,11 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Zwischenspeicher): neue Archetypen ≤ 24 %, beste Nischen = M04-Abwandlungen, auf frischen Seeds aber −2 bis −4 %
   gegen M04 (Fluch des Gewinners; Endmessung jetzt auf frischen Seeds). Fazit: Werkzeuge laufen, mit der heutigen
   KI keine bestätigte Verbesserung. Details `docs/DECKSEARCH.md` Abschnitt 10.
+- **Bewusst mit EX Resource zahlen (23. Nov., Nutzerfrage zu GD05-018 Calibarn):** Vorher fragte das Spiel nie,
+  EX Resources wurden nur verbraucht, wenn normale nicht reichten. Jetzt zusätzliche Option „… (mit EX Resource)“
+  (`Action.ex`, `exChoices` in `engine.ts`), wenn eine EX Resource etwas auslöst oder verstärkt (Calibarn, Lfrith
+  Ur/Thorn, Suletta GD04-085, GD04-106/108, GD05-118); zahlt mit genau einer EX Resource, Rest normal. KI: v0 wählt
+  bei Gleichstand die Option ohne EX, v1/Suche simulieren beide. Test `tests/engine/expay.test.ts`, Fuzz ohne Fehler.
 - **Trash-Bewusstsein (23. Nov., Nutzerwunsch):** Kombos kennen ihren Bedarf (`need`, `trashNeeds` in
   `synergy.ts`); v0 wirft bevorzugt Karten ab, die eigene Trash-Effekte noch brauchen (`trashAware`, Standard, alt
   `plainTrashAware`), und holt aus dem Trash den Command zurück, der jetzt wirkt (alt `plainToHandPick`). Beides

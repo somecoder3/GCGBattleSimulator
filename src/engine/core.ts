@@ -739,20 +739,22 @@ export function canPlay(c: Ctx, p: PlayerId, id: CardId): boolean {
 }
 
 /** Pays a cost by resting active Resources; normal ones first, then EX Resources, which leave the game (5-17-3-2-3). */
-export function pay(c: Ctx, p: PlayerId, cost: number): boolean {
+export function pay(c: Ctx, p: PlayerId, cost: number, exCount = 0): boolean {
   if (cost <= 0) return false;
   const active = activeResources(c, p);
-  const used = [
-    ...active.filter((id) => !inst(c, id).token),
-    ...active.filter((id) => inst(c, id).token),
-  ].slice(0, cost);
+  const ex = active.filter((id) => inst(c, id).token);
+  const normal = active.filter((id) => !inst(c, id).token);
+  // Normal Resources first, EX Resources last (5-17-3-2-3); with `exCount` (the player chose to use EX
+  // Resources) exactly that many EX Resources and the rest normal ones.
+  const chosen = Math.min(exCount, ex.length, cost);
+  const used = [...ex.slice(0, chosen), ...normal, ...ex.slice(chosen)].slice(0, cost);
   if (used.length < cost) throw new Error("cannot pay cost");
   for (const id of used) rest(c, id);
   c.ev.push({ t: "pay", player: p, cards: used });
-  const ex = used.filter((id) => inst(c, id).token);
-  for (const id of ex) moveTo(c, id, "removal");
-  if (ex.length) raiseForPlayer(c, "exResourceExiled", p, ex[0]!); // once per payment (FAQ Q485)
-  return ex.length > 0;
+  const spent = used.filter((id) => inst(c, id).token);
+  for (const id of spent) moveTo(c, id, "removal");
+  if (spent.length) raiseForPlayer(c, "exResourceExiled", p, spent[0]!); // once per payment (FAQ Q485)
+  return spent.length > 0;
 }
 
 export function placeExResource(c: Ctx, p: PlayerId, rested = false): void {

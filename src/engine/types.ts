@@ -175,10 +175,15 @@ export interface GameResult {
 export type Action =
   | { type: "keepHand" }
   | { type: "redraw" }
-  /** `alt`/`sacrifice`: for the alternative cost, destroying that own Unit (GD01-002, EB01-039). */
-  | { type: "deployUnit"; card: CardId; replace?: CardId; alt?: boolean; sacrifice?: CardId }
-  | { type: "pair"; card: CardId; unit: CardId }
-  | { type: "deployBase"; card: CardId }
+  /**
+   * `alt`/`sacrifice`: for the alternative cost, destroying that own Unit (GD01-002, EB01-039).
+   * `ex` (also on pair, deployBase, playCommand, activate): pay with this many EX Resources although the
+   * normal ones would do, offered when an EX Resource changes something (GD05-018 Gundam Calibarn, cards
+   * with "using an EX Resource"); see `exChoices` in engine.ts.
+   */
+  | { type: "deployUnit"; card: CardId; replace?: CardId; alt?: boolean; sacrifice?: CardId; ex?: number }
+  | { type: "pair"; card: CardId; unit: CardId; ex?: number }
+  | { type: "deployBase"; card: CardId; ex?: number }
   | { type: "attack"; unit: CardId; target: AttackTarget }
   | { type: "support"; unit: CardId; target: CardId }
   | { type: "endMain" }
@@ -187,8 +192,8 @@ export type Action =
   | { type: "pass" }
   | { type: "discard"; card: CardId }
   /** `discard`: played for its alternative cost by discarding that card (ST10-014); `alt` without one. */
-  | { type: "playCommand"; card: CardId; discard?: CardId; alt?: boolean }
-  | { type: "activate"; card: CardId; effect: number }
+  | { type: "playCommand"; card: CardId; discard?: CardId; alt?: boolean; ex?: number }
+  | { type: "activate"; card: CardId; effect: number; ex?: number }
   | { type: "target"; card: CardId }
   | { type: "done" }
   | { type: "yes" }

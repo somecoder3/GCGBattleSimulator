@@ -221,6 +221,7 @@ export class Engine {
   }
   /** Would this option use up an EX Resource (normal Resources are paid first, 5-17-3-2-3)? */
   spendsEx(state: GameState, p: PlayerId, action: Action): boolean {
+    if ("ex" in action && action.ex) return true;
     const cost = this.resourceCost(state, p, action);
     if (cost <= 0) return false;
     const active = state.players[p].resources.filter((id) => !state.cards[id]!.rested);
@@ -597,7 +598,85 @@ function activateOptions(c: Ctx, p: PlayerId, timing: "main" | "action"): Action
 }
 
 function actionStepOptions(c: Ctx, p: PlayerId): Action[] {
-  return [{ type: "pass" }, ...commandOptions(c, p, "action"), ...activateOptions(c, p, "action")];
+  return exChoices(c, p, [
+    { type: "pass" },
+    ...commandOptions(c, p, "action"),
+    ...activateOptions(c, p, "action"),
+  ]);
+}
+
+/** Card numbers whose effects react to EX Resources being used (cache per card number). */
+const exAware = new Map<string, { inPlay: boolean; self: boolean }>();
+function exAwareness(c: Ctx, no: string): { inPlay: boolean; self: boolean } {
+  let a = exAware.get(no);
+  if (!a) {
+    const script = c.lib.get(no).script;
+    const own = JSON.stringify(script.compiled);
+    const all = own + JSON.stringify(script.compiledGranted);
+    a = {
+      // In play: "When one of your EX Resources is exiled" (GD05-018), "… Command card using an EX Resource".
+      inPlay: all.includes('"exResourceExiled"') || all.includes('"paidEx":true'),
+      // The card itself: "If you use an EX Resource to play this card" (GD04-106, GD04-108, GD05-118).
+      self: own.includes('"selfPaidEx"'),
+    };
+    exAware.set(no, a);
+  }
+  return a;
+}
+
+/** Resources an option costs (0 for options without a cost). */
+function optionCost(c: Ctx, p: PlayerId, o: Action): number {
+  switch (o.type) {
+    case "deployUnit": {
+      const alt = o.alt || o.sacrifice !== undefined ? altCostOf(c, o.card) : null;
+      return alt ? alt.cost : costOf(c, p, o.card);
+    }
+    case "pair":
+      return pairCostOf(c, p, o.card, o.unit);
+    case "deployBase":
+      return costOf(c, p, o.card);
+    case "playCommand": {
+      const alt = o.discard !== undefined || o.alt ? altCostOf(c, o.card) : null;
+      return alt ? alt.cost : costOf(c, p, o.card);
+    }
+    case "activate": {
+      const e = effectsOf(c, o.card)[o.effect]?.compiled.effect;
+      return e?.kind === "activated" ? (e.cost.resources ?? 0) : 0;
+    }
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Adds "the same, but paid with an EX Resource" to options with a cost, when using an EX Resource changes
+ * something (user's wish, 23 Nov 2026): an own card in play reacts to it, or the card itself has a
+ * stronger effect then. Only when the normal Resources would pay it all (otherwise an EX Resource is used
+ * anyway), and with the fewest EX Resources: one.
+ */
+function exChoices(c: Ctx, p: PlayerId, options: Action[]): Action[] {
+  const me = c.s.players[p];
+  const active = activeResources(c, p);
+  const exActive = active.filter((id) => inst(c, id).token).length;
+  if (!exActive) return options;
+  const normal = active.length - exActive;
+  const inPlay = [...me.battle, ...me.base].some((id) => {
+    const pilot = inst(c, id).pilot;
+    return (
+      exAwareness(c, inst(c, id).no).inPlay || (pilot !== null && exAwareness(c, inst(c, pilot).no).inPlay)
+    );
+  });
+  const out: Action[] = [];
+  for (const o of options) {
+    out.push(o);
+    if (!("card" in o) || !["deployUnit", "pair", "deployBase", "playCommand", "activate"].includes(o.type))
+      continue;
+    const cost = optionCost(c, p, o);
+    if (cost <= 0 || normal < cost) continue;
+    if (!inPlay && !exAwareness(c, inst(c, o.card).no).self) continue;
+    out.push({ ...o, ex: 1 } as Action);
+  }
+  return out;
 }
 
 /** 3-2-4, 3-2-6-3: a Unit can attack unless it entered the battle area this turn and is not linked. */
@@ -697,7 +776,7 @@ function mainOptions(c: Ctx): Action[] {
   }
 
   options.push({ type: "endMain" });
-  return options;
+  return exChoices(c, p, options);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -727,7 +806,7 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
     }
     case "deployUnit": {
       const alt = action.alt || action.sacrifice !== undefined ? altCostOf(c, action.card) : null;
-      const ex = pay(c, p, alt ? alt.cost : costOf(c, p, action.card));
+      const ex = pay(c, p, alt ? alt.cost : costOf(c, p, action.card), action.ex);
       if (action.sacrifice !== undefined) destroy(c, action.sacrifice, action.card);
       if (action.replace !== undefined) toTrash(c, action.replace, "overflow"); // not destroyed (11-4-2-1)
       enterBattle(c, action.card);
@@ -735,13 +814,13 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       return;
     }
     case "pair": {
-      const ex = pay(c, p, pairCostOf(c, p, action.card, action.unit));
+      const ex = pay(c, p, pairCostOf(c, p, action.card, action.unit), action.ex);
       pairPilot(c, action.card, action.unit);
       if (ex) inst(c, action.card).paidEx = true;
       return;
     }
     case "deployBase": {
-      const ex = pay(c, p, costOf(c, p, action.card));
+      const ex = pay(c, p, costOf(c, p, action.card), action.ex);
       deployBase(c, action.card);
       if (ex) inst(c, action.card).paidEx = true;
       return;
@@ -751,12 +830,12 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       let ex: boolean;
       if (action.discard !== undefined || action.alt) {
         const alt = altCostOf(c, action.card);
-        ex = pay(c, p, alt ? alt.cost : costOf(c, p, action.card));
+        ex = pay(c, p, alt ? alt.cost : costOf(c, p, action.card), action.ex);
         if (action.discard !== undefined) {
           moveTo(c, action.discard, "trash");
           c.ev.push({ t: "toTrash", card: action.discard, reason: "discard" });
         }
-      } else ex = pay(c, p, costOf(c, p, action.card));
+      } else ex = pay(c, p, costOf(c, p, action.card), action.ex);
       moveTo(c, action.card, "limbo"); // 3-4-3
       if (ex) inst(c, action.card).paidEx = true;
       c.ev.push({ t: "play", player: p, card: action.card });
@@ -777,7 +856,7 @@ function perform(c: Ctx, decision: Decision, action: Action): void {
       const e = compiled.effect;
       if (e.kind !== "activated") throw new Error("not an activated effect");
       if (e.cost.resources) {
-        pay(c, p, e.cost.resources);
+        pay(c, p, e.cost.resources, action.ex);
         const key = `paidFx:${p}:${s.turn}`;
         if (def(c, action.card).type !== "BASE") {
           s.marks[key] = (s.marks[key] ?? 0) + e.cost.resources;
