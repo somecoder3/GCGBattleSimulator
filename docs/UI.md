@@ -89,6 +89,11 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
   und Activate öffnen immer das Aktionsmenü. Sofort wirken nur Antworten auf eine Frage (`target`, `discard`,
   `block`). Vorher spielte ein Klick eine Unit mit nur einer Option direkt aus, obwohl der Nutzer die Karte nur
   ansehen wollte.
+- **Sicherheitsabfrage EX Resource** (Nutzerwunsch 23. Nov.): Verbraucht eine Aktion EX Resources, weil die
+  aktiven normalen Ressourcen nicht reichen (`forcedEx()`, aus `engine.spendsEx`/`resourceCost`), fragt `act()`
+  erst nach („EX Resource verwenden?“ mit Kosten und Level vorher/nachher, `exConfirm`). Enter bezahlt, Esc oder
+  Klick daneben bricht ab; das Kartenmenü schließt sich. Die bewusst gewählte Option „… (mit EX Resource)“ fragt
+  nicht. Autopilot und KI laufen nicht über `act()` und fragen nie.
 - **Festhalten**: Klick auf eine Karte ohne Optionen hält sie im Detail (`pinned`, Leiste „📌 Festgehalten“ mit
   „Lösen“, erneuter Klick oder Esc löst). `detailId = hovered ?? selected ?? pinned`. Wie ExBursts Pin im Inspector.
 - **Keyword-Symbole** (`keywordBadges()`): nur Units in der Battle Area, aus `engine.keywords()` (gedruckt, Pilot/

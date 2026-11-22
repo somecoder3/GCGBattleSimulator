@@ -723,8 +723,36 @@
     return "";
   }
 
-  function act(action: Action) {
+  /**
+   * A play that would spend EX Resources because the normal ones are not enough waits for a confirmation
+   * (user's wish, 23 Nov 2026: a miscounted Resource must not cost a level by accident). Choosing
+   * "… (mit EX Resource)" on purpose asks nothing.
+   */
+  let exConfirm = $state<{ action: Action; ex: number; cost: number; level: number } | null>(null);
+  $effect(() => {
+    void decision;
+    exConfirm = null;
+  });
+
+  /** EX Resources an action spends only because the normal ones are short (0 if none). */
+  function forcedEx(action: Action): number {
+    if (("ex" in action && action.ex) || !engine.spendsEx(session.state, human, action)) return 0;
+    const cost = engine.resourceCost(session.state, human, action);
+    const active = session.state.players[human].resources.filter((id) => !session.state.cards[id]!.rested);
+    const normal = active.filter((id) => !session.state.cards[id]!.token).length;
+    return Math.max(0, cost - normal);
+  }
+
+  function act(action: Action, confirmed = false) {
     if (!decision) return;
+    const ex = confirmed ? 0 : forcedEx(action);
+    if (ex > 0) {
+      const level = session.state.players[human].resources.length;
+      exConfirm = { action, ex, cost: engine.resourceCost(session.state, human, action), level };
+      selected = null; // the card's menu closes, the question is on top
+      return;
+    }
+    exConfirm = null;
     refresh(session.apply(action));
   }
 
@@ -847,6 +875,12 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
       e.preventDefault();
       undo();
+    } else if (exConfirm) {
+      if (e.key === "Escape") exConfirm = null;
+      else if (e.key === "Enter" && !e.repeat) {
+        e.preventDefault();
+        act(exConfirm.action, true);
+      }
     } else if (e.key === "Escape" && showTrash !== null) {
       showTrash = null;
     } else if (e.key === "Escape") {
@@ -1382,6 +1416,26 @@
           {/each}
         </span>
       </button>
+    {/if}
+
+    {#if exConfirm}
+      {@const c = exConfirm}
+      <div class="trash-layer ex-layer" transition:fade={{ duration: 150 }}>
+        <button class="trash-backdrop" aria-label="Abbrechen" onclick={() => (exConfirm = null)}></button>
+        <div class="trash-dialog ex-dialog" role="alertdialog" aria-label="EX Resource verwenden?">
+          <h3>EX Resource verwenden?</h3>
+          <p>
+            {primaryCard(c.action) !== null ? name(primaryCard(c.action)!) : "Das"} kostet {c.cost}, deine
+            aktiven normalen Ressourcen reichen nicht. Dafür {c.ex === 1
+              ? "wird eine EX Resource"
+              : `werden ${c.ex} EX Resources`} verbannt, dein Level sinkt von {c.level} auf {c.level - c.ex}.
+          </p>
+          <div class="ex-buttons">
+            <button class="btn" onclick={() => (exConfirm = null)}>Abbrechen</button>
+            <button class="btn primary" onclick={() => act(c.action, true)}>Mit EX Resource bezahlen</button>
+          </div>
+        </div>
+      </div>
     {/if}
 
     <!-- The trash in its own dialog over the field, so the detail panel stays free for the hovered card. -->
@@ -2586,6 +2640,25 @@
     border-radius: 14px;
     background: rgb(10 14 22 / 96%);
     box-shadow: var(--shadow);
+  }
+  .ex-layer {
+    z-index: 9;
+  }
+  .ex-dialog {
+    width: min(440px, 100%);
+  }
+  .ex-dialog h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+  .ex-dialog p {
+    margin: 0;
+    line-height: 1.45;
+  }
+  .ex-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
   .trash-head {
     display: flex;
