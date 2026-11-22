@@ -400,6 +400,9 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Zwischenspeicher): neue Archetypen ≤ 24 %, beste Nischen = M04-Abwandlungen, auf frischen Seeds aber −2 bis −4 %
   gegen M04 (Fluch des Gewinners; Endmessung jetzt auf frischen Seeds). Fazit: Werkzeuge laufen, mit der heutigen
   KI keine bestätigte Verbesserung. Details `docs/DECKSEARCH.md` Abschnitt 10.
+- **KI-Versuche 23. Nov. (alle ohne Gewinn, abgeschaltet):** Link-Warten auf Hand/Deck (`linkWaitHand/Deck`),
+  Angriff vor Einsetzen (`attackFirst`, 43,2 %), Chump-Block (`chumpBlockShields`), v1 mit gezogener Gegnerhand
+  (`sampledOpponent`, 36,8 %). Schwächste Archetypen bei v1: M08/M11 (40,6 %). Details `docs/AI.md`.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,

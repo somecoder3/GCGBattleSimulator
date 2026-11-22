@@ -86,6 +86,23 @@ export interface RuleOptions {
    */
   sampledOpponent?: boolean;
   /**
+   * Experiments (23 Nov 2026, M11 paired its Pilots mostly without link): a Pilot also waits for a link Unit
+   * of any level in the hand (`linkWaitHand`), or for one still in the own deck that is playable within two
+   * turns (`linkWaitDeck`).
+   */
+  linkWaitHand?: boolean;
+  linkWaitDeck?: boolean;
+  /**
+   * Experiment (23 Nov 2026, the search AI attacked first where v1 deployed first): Units without a 【Deploy】
+   * effect are deployed after the attacks, so resources stay open for Commands during the battles.
+   */
+  attackFirst?: boolean;
+  /**
+   * Experiment (23 Nov 2026): with at most this many Shields left (and no Base), a cheap Unit blocks an
+   * attack on the player even if it is destroyed ("chump block").
+   */
+  chumpBlockShields?: number;
+  /**
    * v1/search simulations as before 20 Nov 2026: an end-of-main-phase Command that v0 plays in the
    * simulation counts even when the turn is better without it (see optionalPlay, docs/AI.md "Vorausschau").
    */
@@ -360,10 +377,24 @@ class Ctx {
   waitsForLink(pilot: CardId): boolean {
     const level = this.s.players[this.me].resources.length;
     const p = this.card(pilot);
-    return this.s.players[this.me].hand.some((h) => {
+    const reach = this.options.linkWaitHand ? 99 : 1;
+    const inHand = this.s.players[this.me].hand.some((h) => {
       if (!this.known(h)) return false;
       const unit = this.card(h);
-      return unit.type === "UNIT" && unit.level <= level + 1 && satisfiesLink(unit, p);
+      return unit.type === "UNIT" && unit.level <= level + reach && satisfiesLink(unit, p);
+    });
+    if (inHand || !this.options.linkWaitDeck || !this.options.ownDeck) return inHand;
+    // A link Unit still in the own deck (copies of the list not seen yet), playable within two turns.
+    const seen = new Map<string, number>();
+    for (const c of this.s.cards)
+      if (c.owner === this.me && c.zone !== "deck" && c.no !== HIDDEN)
+        seen.set(c.no, (seen.get(c.no) ?? 0) + 1);
+    const inList = new Map<string, number>();
+    for (const no of this.options.ownDeck.main) inList.set(no, (inList.get(no) ?? 0) + 1);
+    return [...inList].some(([no, n]) => {
+      if (n <= (seen.get(no) ?? 0) || !this.engine.lib.has(no)) return false;
+      const unit = this.engine.lib.get(no);
+      return unit.type === "UNIT" && unit.level <= level + 2 && satisfiesLink(unit, p);
     });
   }
 
@@ -387,7 +418,14 @@ class Ctx {
       case "deployUnit": {
         const card = this.card(o.card);
         const value = card.ap + card.hp + card.level * 10;
-        if (o.replace === undefined) return 100 + value;
+        if (o.replace === undefined) {
+          const deployEffect = card.script.compiled.some(
+            (c) => c.effect.kind === "trigger" && c.effect.on === "deploy",
+          );
+          // After the attacks (score 50+), before ending the main phase.
+          if (this.options.attackFirst && !deployEffect) return 45 + value * 0.01;
+          return 100 + value;
+        }
         const gain = card.ap + card.hp - this.unitValue(o.replace);
         return gain > 3 ? 60 + gain : -1;
       }
@@ -722,6 +760,13 @@ class Ctx {
     if (lethal) return 100 + (survives ? 10 : 0);
     if (survives) return 50 + (kills ? 20 : 0);
     if (kills && this.unitValue(battle.attacker) >= this.unitValue(o.unit)) return 30;
+    if (
+      this.options.chumpBlockShields !== undefined &&
+      battle.target === "player" &&
+      me.shields.length + me.base.length <= this.options.chumpBlockShields &&
+      this.unitValue(o.unit) <= 10
+    )
+      return 10 + (10 - this.unitValue(o.unit));
     // Protect a more valuable Unit that would be destroyed.
     if (battle.target !== "player" && this.known(battle.target)) {
       const threatened = this.ap(battle.attacker) >= this.hpLeft(battle.target);

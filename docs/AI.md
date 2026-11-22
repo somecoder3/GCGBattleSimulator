@@ -449,6 +449,16 @@ v0 spielt zurückgeholte Special Moves in v1-Simulationen oft sofort ohne bleibe
   Simulation ohnehin beide ausführt); sie zeigen aber, dass v0-Regeln direkt auf v1 und die Suche wirken.
 - **v1 gegen Suche:** Am häufigsten weichen sie beim Blocken ab (22 von 54), in beide Richtungen, ohne klares
   Muster.
+- **Stand der Archetypen (23. Nov., v1, Feld 12, 4 Blöcke):** M04 58,9 %, M06 58,6 %, M10 56,6 %, M02/M03 52,7 %,
+  M12 51,8 %, M09 50,6 %, M05 49,4 %, M01 44,7 %, M07 44,5 %, M08 40,6 %, M11 40,6 %.
+- **Versuche ohne Gewinn (23. Nov., v0, 18 720 Spiele je Variante, alle abgeschaltet):**
+  - Pilot wartet auch auf eine Link-Unit beliebigen Levels auf der Hand (`linkWaitHand`) bzw. auf eine im Deck,
+    die in zwei Zügen spielbar wird (`linkWaitDeck`): 50,1 % / 49,1 %. Hilft M11 (+4 bis +5, Suletta wartet auf
+    Gundam Aerial), schadet den Kira-Decks M08/M10 (−3 bis −5, das Warten auf Strike Freedom Lv8 lohnt nicht).
+  - Units ohne 【Deploy】 erst nach den Angriffen einsetzen (`attackFirst`, Ressourcen für Konter offen halten):
+    **43,2 %**, bei fast allen Decks −6 bis −18 Punkte. Zuerst einsetzen ist für v0 richtig.
+  - Chump-Block mit einer billigen Unit bei höchstens 1/2/3 verbleibenden Schilden+Base (`chumpBlockShields`):
+    50,1 / 50,0 / 49,8 %.
 - **Versuch `sampledOpponent`:** v1 simuliert mit **einer** aus dem Feld gezogenen Hand und Deck des Gegners statt
   mit Platzhaltern (`RuleOptions.sampledOpponent`, `sampleState` aus `opponent.ts`). Ergebnis **36,8 %** gegen
   normales v1 (35,8–37,7 %, 9360 Spiele), doppelte Rechenzeit: Eine einzelne Stichprobe ist zu zufällig (auch
