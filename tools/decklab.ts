@@ -208,10 +208,14 @@ async function main() {
     const elites = [...archive.values()].sort((a, b) => b.fitness - a.fitness);
     const novel = elites.filter((e) => e.nearest.similarity < 0.5);
     const finalists = [...new Set([...novel.slice(0, Number(args.final)), ...elites.slice(0, 2)])];
-    const finalR = await search.blocks(
+    // On fresh seeds (seed + 1000): the evolution picked its elites on the search seeds, so measuring them
+    // there again would repeat their luck (first v1 run: +3 % on the search seeds, −2 to −4 % on fresh ones).
+    const fresh = new Measurer(store, workers, settings(seed + 1000));
+    measurers.push(fresh);
+    const finalR = await fresh.blocks(
       finalists.map((e) => e.deck),
       field,
-      Number(args.blocks) * 2,
+      Math.max(4, Number(args.blocks) * 2),
     );
     finalists.forEach((e, i) => (e.final = fieldRate(finalR[i]!, field)));
     log(

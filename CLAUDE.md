@@ -396,8 +396,10 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Doppel-Tauschen, erster Runde 2 Blöcke, sequenzieller Bestätigung bis 32 Blöcke; erster Lauf M01: kein Tausch
   signifikant (bester +0,7 %). **Stufe 2 und 3 gebaut (22. Nov.):** `pearls`, `values` (Ridge-Regression),
   `swaps --pearls`, `seeds`, `evolve` (MAP-Elites, `src/lab/decklab/evolve.ts`). v0 überschätzt neue Decks stark
-  (45–49 % mit v0, 15–20 % mit v1) → `--evo-ai v1`; v1-Lauf mit `--seed 2` nach Generation 5 pausiert
-  (fortsetzbar mit demselben Befehl). Details `docs/DECKSEARCH.md` Abschnitt 10.
+  (45–49 % mit v0, 15–20 % mit v1) → `--evo-ai v1`. v1-Lauf (12 Generationen, in zwei Etappen über den
+  Zwischenspeicher): neue Archetypen ≤ 24 %, beste Nischen = M04-Abwandlungen, auf frischen Seeds aber −2 bis −4 %
+  gegen M04 (Fluch des Gewinners; Endmessung jetzt auf frischen Seeds). Fazit: Werkzeuge laufen, mit der heutigen
+  KI keine bestätigte Verbesserung. Details `docs/DECKSEARCH.md` Abschnitt 10.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,

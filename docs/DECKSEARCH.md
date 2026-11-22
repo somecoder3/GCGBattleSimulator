@@ -277,10 +277,17 @@ Neue Befehle von `npm run decklab` (Kern in `src/lab/decklab/pearls.ts`, `values
   Kein konkurrenzfähiger neuer Archetyp; die drei damals gespeicherten Decks wieder gelöscht und eine
   Mindestquote eingebaut. Darum gibt es `--evo-ai v1` (gleicher `--seed` spielt aus dem Zwischenspeicher nach,
   lange Läufe gehen in Etappen).
-- Evolution mit v1 (`--evo-ai v1 --generations 12 --batch 16 --seed 2`): auf Wunsch des Nutzers nach
-  Generation 5 pausiert (23 424 Spiele, bestes Deck 64,4 %, Red/White · spät · Effekte). Fortsetzen mit genau
-  demselben Befehl; das Bisherige kommt aus dem Zwischenspeicher, solange sich Engine/KI/Karten nicht ändern
-  (Code-Version `6c06dc01ed`).
+- Evolution mit v1 (`--evo-ai v1 --generations 12 --batch 16 --seed 2`, 30 000 Spiele, in zwei Etappen: nach
+  Generation 5 pausiert, mit demselben Befehl fortgesetzt, das Bisherige kam aus dem Zwischenspeicher):
+  - Neue Archetypen bleiben schwach: bestes neues Deck (Keim Gundam Lfrith Thorn, Grün/Rot) 24 % gegen das Feld.
+  - Die besten Nischen sind Abwandlungen von White Red Zaft (M04) mit 61–65 % auf den Such-Seeds. Gepaart auf
+    frischen Seeds gegen M04 (8 Blöcke): **−4,2 %** (−9,2 … +0,8) bzw. **−2,1 %** (−6,2 … +2,1). Wieder der Fluch
+    des Gewinners. Die Endmessung lief bis dahin auf den Such-Seeds und war dadurch geschönt; jetzt auf frischen
+    (Seed + 1000).
+- **Fazit Stufe 2/3:** Die Werkzeuge arbeiten, finden aber mit der heutigen KI keine Verbesserung, die eine
+  Messung auf frischen Seeds übersteht. Die Meta-Listen sind für diese KI bereits gut, und neue Kerne aus dem
+  Kombo-Graphen sind viel schwächer. Größter Hebel bleibt die Spielstärke der KI (jede KI-Schwäche verzerrt die
+  Bewertung von Decks), dann größere Läufe mit v1 bzw. der Suche als Maßstab.
 
 ## 9. Ursprüngliche offene Fragen
 
