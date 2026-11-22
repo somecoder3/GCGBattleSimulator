@@ -24,7 +24,7 @@
 </ul>
 
 {#if selected}
-  <CardDetail card={selected} onclose={() => (selected = undefined)} />
+  <CardDetail card={selected} {pool} onclose={() => (selected = undefined)} />
 {/if}
 
 <style>

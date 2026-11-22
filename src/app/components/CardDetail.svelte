@@ -1,18 +1,49 @@
 <script lang="ts">
-  import { cardImageUrl } from "../../data/cards";
+  import { cardImageUrl, type CardPool } from "../../data/cards";
   import type { CardDef } from "../../data/types";
   import { splitCardText } from "../lib/cardtext";
   import CardImage from "./CardImage.svelte";
+  import CardPartners from "./CardPartners.svelte";
+  import { MAX_COPIES } from "../../engine/deck";
 
-  let { card, onclose }: { card: CardDef; onclose: () => void } = $props();
+  let {
+    card: start,
+    onclose,
+    pool,
+    deckColors,
+    count,
+    onadd,
+  }: {
+    card: CardDef;
+    onclose: () => void;
+    /** With the pool: "Passt zu" (partner cards; clicking one shows it here, "Zurück" returns). */
+    pool?: CardPool;
+    deckColors?: ReadonlySet<string>;
+    count?: (no: string) => number;
+    onadd?: (no: string) => void;
+  } = $props();
+
+  /** Cards opened from "Passt zu", the last one is shown. */
+  let trail = $state<CardDef[]>([]);
+  const card = $derived(trail.at(-1) ?? start);
 
   let alt = $state(0);
   let dialog: HTMLDialogElement;
 
   $effect(() => {
+    void start;
+    trail = [];
+  });
+
+  $effect(() => {
     alt = card.printings[0]?.alt ?? 0;
     if (!dialog.open) dialog.showModal();
   });
+
+  function pick(c: CardDef) {
+    trail = [...trail, c];
+    dialog.scrollTo({ top: 0 });
+  }
 
   const lines = $derived(splitCardText(card.text));
   const facts = $derived(
@@ -48,6 +79,11 @@
     </div>
     <div class="info">
       <header>
+        {#if trail.length}
+          <button class="back" onclick={() => (trail = trail.slice(0, -1))}
+            >← Zurück zu {(trail.at(-2) ?? start).name}</button
+          >
+        {/if}
         <span class="no">{card.no}</span>
         <h2>{card.name}</h2>
       </header>
@@ -68,7 +104,20 @@
           {/each}
         </div>
       {/if}
+      {#if onadd && count}
+        <div class="deck-row">
+          <span>Im Deck: <strong>{count(card.no)}</strong></span>
+          <button class="more" onclick={() => onadd(card.no)} disabled={count(card.no) >= MAX_COPIES}
+            >+ Ins Deck</button
+          >
+        </div>
+      {/if}
     </div>
+    {#if pool}
+      <div class="wide">
+        <CardPartners {card} {pool} {deckColors} {count} {onadd} onpick={pick} />
+      </div>
+    {/if}
   </div>
   <button class="close" onclick={() => dialog.close()} aria-label="Schließen">✕</button>
 </dialog>
@@ -171,6 +220,35 @@
   .keyword {
     color: #ffd166;
     font-weight: 600;
+  }
+  .wide {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .back {
+    display: block;
+    margin-bottom: 6px;
+    padding: 2px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-sunken);
+    font-size: 13px;
+  }
+  .deck-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    font-size: 14px;
+  }
+  .deck-row .more {
+    padding: 4px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-sunken);
+  }
+  .deck-row .more:disabled {
+    opacity: 0.4;
   }
   .close {
     position: absolute;

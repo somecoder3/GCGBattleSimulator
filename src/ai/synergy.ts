@@ -112,31 +112,54 @@ export function deckCounts(deck: DeckList): Map<string, number> {
   return m;
 }
 
+/** A specific filter of a card's effects on own cards (one per zone, use and filter). */
+export interface CardCombo {
+  filter: Filter;
+  zone: SynergyZone;
+  use: "count" | "choose";
+  label: string;
+  need: number;
+}
+
+const combos = new WeakMap<EngineCard, CardCombo[]>();
+
+/** The specific filters on own cards in the effects of a card (cached per card). */
+export function cardCombos(card: EngineCard): CardCombo[] {
+  let out = combos.get(card);
+  if (out) return out;
+  out = [];
+  const seen = new Set<string>();
+  for (const { effect, program } of card.script.compiled) {
+    const found: Found[] = [];
+    collect(effect, "", found);
+    collect(program, "", found);
+    for (const { filter, use, need } of found) {
+      if (!specific(filter)) continue;
+      const zone = (filter.zone ?? "battle") as SynergyZone;
+      const label = describe(filter);
+      const key = `${zone}|${use}|${label}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ filter, zone, use, label, need });
+    }
+  }
+  combos.set(card, out);
+  return out;
+}
+
 /** All combo relations of a deck. */
 export function deckSynergies(lib: CardLib, deck: DeckList): Synergy[] {
   const counts = deckCounts(deck);
   const cards = [...counts.keys()].map((no) => lib.get(no));
   const out: Synergy[] = [];
   for (const card of cards) {
-    const seen = new Set<string>();
-    for (const { effect, program } of card.script.compiled) {
-      const found: Found[] = [];
-      collect(effect, "", found);
-      collect(program, "", found);
-      for (const { filter, use, need } of found) {
-        if (!specific(filter)) continue;
-        const zone = (filter.zone ?? "battle") as SynergyZone;
-        const label = describe(filter);
-        const key = `${zone}|${use}|${label}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const matches = new Map<string, number>();
-        for (const other of cards) {
-          if (other.no === card.no && filter.other) continue;
-          if (matchesCard(other, filter)) matches.set(other.no, counts.get(other.no)!);
-        }
-        if (matches.size) out.push({ source: card.no, kind: "zone", zone, use, matches, label, need });
+    for (const { filter, zone, use, label, need } of cardCombos(card)) {
+      const matches = new Map<string, number>();
+      for (const other of cards) {
+        if (other.no === card.no && filter.other) continue;
+        if (matchesCard(other, filter)) matches.set(other.no, counts.get(other.no)!);
       }
+      if (matches.size) out.push({ source: card.no, kind: "zone", zone, use, matches, label, need });
     }
     if (card.type === "UNIT" && card.link.length) {
       const matches = new Map<string, number>();

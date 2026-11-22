@@ -407,6 +407,15 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   bei Gleichstand die Option ohne EX, v1/Suche simulieren beide. Test `tests/engine/expay.test.ts`, Fuzz ohne Fehler.
   Nachtrag (Nutzerwunsch): Sicherheitsabfrage im Spielfeld, wenn eine Karte EX Resources nur verbraucht, weil
   die normalen nicht reichen (Kosten, Level vorher/nachher; `exConfirm` in `Board.svelte`, `docs/UI.md`).
+- **„Passt zu“ (23. Nov., Nutzerwunsch):** Kartendetail im Karten-Reiter und im Deckbau (nicht im Spiel) zeigt
+  Partnerkarten (`src/app/lib/partners.ts`, `CardPartners.svelte`): Link (Unit ↔ Pilot/Command mit 【Pilot】),
+  „Wählt/Zählt …“ (Filter der eigenen Effekte aus dem Kombo-Graphen, `cardCombos` in `synergy.ts`), „Nutzen diese
+  Karte“ (Effekte anderer Karten, die sie suchen) und „Oft zusammen gespielt“ (Turnierlisten des Snapshots, ab 2
+  Listen und Lift ≥ 1,2). Filter, die ≥ 120 Deck-Karten treffen („1 Unit aus dem Trash“), fallen weg (`GENERIC`).
+  Sortiert nach gemeinsamen Listen, dann Spielrate. Klick öffnet die Partnerkarte („← Zurück“), im Deckbau „+“
+  und „+ Ins Deck“, Häkchen „Nur Farben des Decks“. Grenze: nur was im Text steht (Kurve, Farbe nicht);
+  Abwerf-Bedingungen wie Domon Kasshus „if you discard a (Special Move)“ erkennt der Graph nicht. Tests
+  `tests/app/partners.test.ts`. Paar-Siegquoten aus Simulationen (Quelle 3) offen, eher fürs Labor.
 - **Trash-Bewusstsein (23. Nov., Nutzerwunsch):** Kombos kennen ihren Bedarf (`need`, `trashNeeds` in
   `synergy.ts`); v0 wirft bevorzugt Karten ab, die eigene Trash-Effekte noch brauchen (`trashAware`, Standard, alt
   `plainTrashAware`), und holt aus dem Trash den Command zurück, der jetzt wirkt (alt `plainToHandPick`). Beides

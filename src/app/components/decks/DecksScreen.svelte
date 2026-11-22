@@ -547,7 +547,18 @@
 </section>
 
 {#if detail}
-  <CardDetail card={detail} onclose={() => (detail = undefined)} />
+  <CardDetail
+    card={detail}
+    {pool}
+    onclose={() => (detail = undefined)}
+    {...editing
+      ? {
+          deckColors: colorsInDeck,
+          count: (no: string) => editing?.counts[no] ?? 0,
+          onadd: (no: string) => change(no, 1),
+        }
+      : {}}
+  />
 {/if}
 
 <style>
