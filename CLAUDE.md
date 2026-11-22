@@ -422,6 +422,10 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   `synergy.ts`); v0 wirft bevorzugt Karten ab, die eigene Trash-Effekte noch brauchen (`trashAware`, Standard, alt
   `plainTrashAware`), und holt aus dem Trash den Command zurück, der jetzt wirkt (alt `plainToHandPick`). Beides
   neutral bis leicht positiv, an. Trash-Wert in der v1-Bewertung (`trashValue`) schadet Shining, aus. `docs/AI.md`.
+- **Abwerfen für einen Bonus (23. Nov., Nutzerwunsch):** v0 wirft bei Effekten wie Domon Kasshus „discard 1, if
+  (Special Move) … activate its 【Main】“ eine passende Karte ab, deren 【Main】 jetzt wirkt (`discardBonus`, alt
+  `plainDiscardBonus`). Shining (M01): v0 39,3 → 42,8 %, v1 42,7 → 47,3 %. Deckplan mit verliehenen Pilot-Zeilen
+  (`grantedPlan`) ohne Unterschied, aus. Details `docs/AI.md` „Abwerfen für einen Bonus“.
 - **KI-Versuche 23. Nov. (alle ohne Gewinn, abgeschaltet):** Link-Warten auf Hand/Deck (`linkWaitHand/Deck`),
   Angriff vor Einsetzen (`attackFirst`, 43,2 %), Chump-Block (`chumpBlockShields`), v1 mit gezogener Gegnerhand
   (`sampledOpponent`, 36,8 %). Schwächste Archetypen bei v1: M08/M11 (40,6 %). Details `docs/AI.md`.

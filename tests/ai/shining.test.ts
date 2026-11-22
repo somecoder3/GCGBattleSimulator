@@ -84,3 +84,30 @@ describe("v0 and Shining Gundam", () => {
     throw new Error("no choice of the Special Move");
   });
 });
+
+describe("v0 discards for Domon Kasshu's bonus", () => {
+  // Domon pairs with Shining Gundam: draw 1, discard 1; a discarded (Special Move) Command may activate its
+  // 【Main】. Darkness Finger (2 damage) now destroys the enemy GM with 1 HP left, Incident (ST01-014) has no
+  // bonus and is the card least worth keeping otherwise.
+  const DOMON = "GD05-097";
+  const INCIDENT = "ST01-014";
+  const discarded = (policy: HeuristicPolicy) => {
+    const s = scenario({
+      engine,
+      filler: "ST01-005",
+      p0: { battle: [SHINING], hand: [DOMON, DARKNESS, INCIDENT], resources: 4 },
+      p1: { battle: [{ no: "ST01-005", damage: 1 }] },
+    });
+    const pair = s.pending!.options.find((o) => o.type === "pair")!;
+    engine.apply(s, pair);
+    const pending = s.pending!;
+    expect(pending.prompt).toBe("discard");
+    const pick = policy.choose(viewFor(s, 0), pending);
+    return pick.type === "target" ? s.cards[pick.card]!.no : "";
+  };
+
+  it("the Special Move that works now, else (old rule) the card least worth keeping", () => {
+    expect(discarded(new HeuristicPolicy(engine))).toBe(DARKNESS);
+    expect(discarded(new HeuristicPolicy(engine, { plainDiscardBonus: true }))).toBe(INCIDENT);
+  });
+});

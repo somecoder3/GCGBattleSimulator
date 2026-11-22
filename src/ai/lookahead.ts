@@ -150,6 +150,8 @@ export function determinize(view: GameState): GameState {
 /** What the evaluation knows about combos, by the rule switches (docs/AI.md "Kombos"). */
 export function comboKnowledge(engine: Engine, rules: RuleOptions): ComboKnowledge {
   const plan =
-    rules.ownDeck && (rules.comboFuel || rules.trashValue) ? planFor(engine.lib, rules.ownDeck) : undefined;
+    rules.ownDeck && (rules.comboFuel || rules.trashValue)
+      ? planFor(engine.lib, rules.ownDeck, !!rules.grantedPlan)
+      : undefined;
   return { ...(plan ? { plan } : {}), links: !!rules.linkValue, trashAware: !!rules.trashValue };
 }

@@ -44,6 +44,8 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   "trash-aware": { rules: { trashAware: true } },
   "plain-trash-aware": { rules: { plainTrashAware: true } },
   "plain-to-hand": { rules: { plainToHandPick: true } },
+  "plain-discard-bonus": { rules: { plainDiscardBonus: true } },
+  "granted-plan": { rules: { grantedPlan: true } },
   "trash-value": { rules: { trashAware: true, trashValue: true } },
   "chump-1": { rules: { chumpBlockShields: 1 } },
   "chump-2": { rules: { chumpBlockShields: 2 } },

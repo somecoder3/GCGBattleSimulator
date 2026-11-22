@@ -3,12 +3,13 @@
 // M4 replaces it with an evaluation function and search within the turn.
 
 import type { Instr } from "../effects/compile";
+import type { Filter } from "../effects/dsl";
 import { satisfiesLink } from "../engine/cardlib";
 import type { Engine } from "../engine/engine";
 import type { Action, CardId, Decision, DeckList, GameState, PlayerId } from "../engine/types";
 import { HIDDEN } from "../engine/view";
 import { DEFAULT_MULLIGAN, keepHand } from "./mulligan";
-import { planFor, trashNeeds, type DeckPlan } from "./synergy";
+import { matchesCard, planFor, trashNeeds, type DeckPlan } from "./synergy";
 import type { Policy } from "./types";
 
 /** Score of "do nothing more" in the main phase; options below it are never chosen. */
@@ -95,6 +96,17 @@ export interface RuleOptions {
    */
   plainToHandPick?: boolean;
   /**
+   * Before 23 Nov 2026: discarding for an effect ignored a bonus for the discarded card (Domon Kasshu,
+   * GD05-097: "If you discard a (Special Move) Command card with this effect, you may activate its 【Main】").
+   * Now a matching card is preferred, the more its 【Main】 does now (mainCommandScore).
+   */
+  plainDiscardBonus?: boolean;
+  /**
+   * Experiment (23 Nov 2026): the deck plan also reads the Pilot lines given to the Unit (Char Aznable
+   * GD05-093: 【When Linked】 deploy a (Neo Zeon) Base from the trash), so discarding knows their trash needs.
+   */
+  grantedPlan?: boolean;
+  /**
    * With trashAware: also count the needed trash cards in v1's evaluation. Measured worse for Shining Gundam
    * (its 【Deploy】 exiles (MF) Units that the evaluation now values as fuel), so separate and off.
    */
@@ -130,6 +142,8 @@ export interface RuleOptions {
 
 /** keepValue points less for a card the own deck wants in the trash (per DeckPlan.trashFuel, at most 1). */
 const FUEL_DISCARD = 2;
+/** Points for discarding a card the effect rewards (discardBonus); plus mainCommandScore / 10 for a 【Main】. */
+const DISCARD_BONUS = 3;
 
 /**
  * When the AI may use up its EX Resource (it counts for the level until then):
@@ -386,7 +400,7 @@ class Ctx {
   /** The own deck's combo plan (src/ai/synergy.ts), if known. */
   get plan(): DeckPlan | undefined {
     if (!(this.options.comboFuel || this.trashAware) || !this.options.ownDeck) return undefined;
-    return planFor(this.engine.lib, this.options.ownDeck);
+    return planFor(this.engine.lib, this.options.ownDeck, !!this.options.grantedPlan);
   }
 
   get trashAware(): boolean {
@@ -1020,16 +1034,50 @@ class Ctx {
         return options[0]!;
       case "overflow":
         return best(options, (o) => (o.type === "target" ? 1000 - this.unitValue(o.card) : 0)) ?? options[0]!;
-      case "discard":
+      case "discard": {
+        const bonus = this.options.plainDiscardBonus ? undefined : this.discardBonus();
         return (
-          best(options, (o) => (o.type === "target" ? 1000 - this.discardKeep(o.card) : 0)) ?? options[0]!
+          best(options, (o) =>
+            o.type === "target" ? 1000 - this.discardKeep(o.card) + (bonus?.(o.card) ?? 0) : 0,
+          ) ?? options[0]!
         );
+      }
       case "lookPick":
       case "lookTop":
         return best(options, (o) => (o.type === "target" ? 1 + this.keepValue(o.card) : 0)) ?? options[0]!;
       default:
         return this.target(decision);
     }
+  }
+
+  /**
+   * A bonus of the running effect for the card it discards: a later condition on the discarded card
+   * (`varMatches`), e.g. Domon Kasshu's "if you discard a (Special Move) Command, you may activate its
+   * 【Main】". Matching cards get points, with `runMainOf` by what their 【Main】 does now.
+   */
+  discardBonus(): ((id: CardId) => number) | undefined {
+    const frame = this.s.frames[this.s.frames.length - 1];
+    if (!frame) return undefined;
+    const script = this.engine.lib.get(frame.ref.no).script;
+    const program = (frame.ref.granted ? script.compiledGranted : script.compiled)[frame.ref.idx]?.program;
+    const instr = program?.[frame.pc];
+    if (!program || instr?.op !== "discard" || !instr.as) return undefined;
+    const as = instr.as;
+    let filter: Filter | undefined;
+    let runMain = false;
+    for (const next of program.slice(frame.pc + 1)) {
+      if (next.op === "jumpUnless" && "varMatches" in next.cond && next.cond.varMatches === as)
+        filter ??= next.cond.filter;
+      if (next.op === "runMainOf" && next.t === as) runMain = true;
+    }
+    if (!filter) return undefined;
+    const f = filter;
+    return (id) => {
+      if (!this.known(id) || !matchesCard(this.card(id), f)) return 0;
+      if (!runMain) return DISCARD_BONUS;
+      const now = this.mainCommandScore(id);
+      return now > 0 ? DISCARD_BONUS + now / 10 : 0;
+    };
   }
 
   /** Picks a target by what the effect does to it: harm enemies, help friends. */

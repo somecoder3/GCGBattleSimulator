@@ -156,12 +156,12 @@ export function cardCombos(card: EngineCard, granted = false): CardCombo[] {
 }
 
 /** All combo relations of a deck. */
-export function deckSynergies(lib: CardLib, deck: DeckList): Synergy[] {
+export function deckSynergies(lib: CardLib, deck: DeckList, granted = false): Synergy[] {
   const counts = deckCounts(deck);
   const cards = [...counts.keys()].map((no) => lib.get(no));
   const out: Synergy[] = [];
   for (const card of cards) {
-    for (const { filter, zone, use, label, need } of cardCombos(card)) {
+    for (const { filter, zone, use, label, need } of cardCombos(card, granted)) {
       const matches = new Map<string, number>();
       for (const other of cards) {
         if (other.no === card.no && filter.other) continue;
@@ -221,9 +221,10 @@ export function trashNeeds(
   return { useful, missing };
 }
 
-export function deckPlan(lib: CardLib, deck: DeckList): DeckPlan {
+/** `granted`: also the Pilot lines given to the Unit (RuleOptions.grantedPlan, experiment). */
+export function deckPlan(lib: CardLib, deck: DeckList, granted = false): DeckPlan {
   const counts = deckCounts(deck);
-  const synergies = deckSynergies(lib, deck);
+  const synergies = deckSynergies(lib, deck, granted);
   const trashFuel = new Map<string, number>();
   const linksTo = new Map<string, string[]>();
   for (const s of synergies) {
@@ -243,10 +244,12 @@ export function deckPlan(lib: CardLib, deck: DeckList): DeckPlan {
 }
 
 const plans = new WeakMap<DeckList, DeckPlan>();
+const grantedPlans = new WeakMap<DeckList, DeckPlan>();
 
 /** deckPlan, computed once per deck list object. */
-export function planFor(lib: CardLib, deck: DeckList): DeckPlan {
-  let plan = plans.get(deck);
-  if (!plan) plans.set(deck, (plan = deckPlan(lib, deck)));
+export function planFor(lib: CardLib, deck: DeckList, granted = false): DeckPlan {
+  const cache = granted ? grantedPlans : plans;
+  let plan = cache.get(deck);
+  if (!plan) cache.set(deck, (plan = deckPlan(lib, deck, granted)));
   return plan;
 }

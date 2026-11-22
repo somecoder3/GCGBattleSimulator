@@ -483,6 +483,24 @@ die Engine ohnehin aus. Neu:
   Kosten seines 【Deploy】 (2 (MF) Units verbannen) zählen sonst als verlorener „Treibstoff“ für Master Asia und
   Shining selbst, also lässt v1 den Effekt eher weg. Bräuchte eine Bewertung, die Verbrauch als Nutzung erkennt.
 
+## Abwerfen für einen Bonus (23. Nov. 2026, Nutzerwunsch nach „Passt zu“)
+
+Domon Kasshu (GD05-097, 29 von 176 Turnierlisten, fast nur Shining) verleiht seiner Unit „【When Paired】Draw 1.
+Then, discard 1. If you discard a (Special Move) Command card with this effect, you may activate its 【Main】“.
+Vorher warf v0 die Karte ab, die am wenigsten wert ist, und aktivierte danach immer; ob der abgeworfene Special
+Move gerade etwas bewirkt, spielte keine Rolle.
+
+- **Neu** (`discardBonus` in `heuristic.ts`, Standard, alt `plainDiscardBonus`): Prüft das laufende Programm die
+  abgeworfene Karte später (`jumpUnless` mit `varMatches` auf die Variable des `discard`), bekommen passende Karten
+  `DISCARD_BONUS` = 3 Punkte; folgt `runMainOf`, nur wenn ihr 【Main】 jetzt wirkt, dann plus `mainCommandScore` / 10
+  (z. B. Darkness Finger gegen eine Unit mit 2 HP übrig). Test in `tests/ai/shining.test.ts`.
+- **Gemessen** (`npm run ab -- --b plain-discard-bonus --by-deck`, Meta Top 8): v0 50,3 % (50,0–50,6 %, 92 160
+  Spiele), **Shining (M01) 42,8 % statt 39,3 %**, andere Decks ±0,7; v1 50,9 % (9216 Spiele), **M01 47,3 % statt
+  42,7 %**. Übernommen.
+- **Deckplan mit verliehenen Pilot-Zeilen** (`grantedPlan`, Versuch, aus): `planFor(…, true)` liest auch
+  `compiledGranted`; betrifft unter den Meta-Karten nur Trash-Bezüge von Char Aznable (GD05-093, (Neo Zeon) Base aus
+  dem Trash, M07). v0 49,9 % (49,6–50,2 %), M07 −0,6 Punkte: kein Unterschied.
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen
