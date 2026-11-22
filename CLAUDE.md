@@ -429,6 +429,10 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
 - **KI-Versuche 23. Nov. (alle ohne Gewinn, abgeschaltet):** Link-Warten auf Hand/Deck (`linkWaitHand/Deck`),
   Angriff vor Einsetzen (`attackFirst`, 43,2 %), Chump-Block (`chumpBlockShields`), v1 mit gezogener Gegnerhand
   (`sampledOpponent`, 36,8 %). Schwächste Archetypen bei v1: M08/M11 (40,6 %). Details `docs/AI.md`.
+- **Calibarn-Deck (23. Nov., Nutzerwunsch):** Deck-Labor kann eigene Listen (`--file`, `adds`, `keep`; auch
+  `npm run game -- … --file`). 19 Listen in `data/decklab/calibarn.json` (4 echte von Limitless/ExBurst, eigene
+  Entwürfe). Beste: **CAL7** (Academy Burn V2 von ExBurst mit früherer Kurve), v1 ≈ 37 % gegen das Feld, Suche
+  33 %, als Labor-Deck `u-calibarn-rg` gespeichert; Meta-Decks liegen bei 45–58 %. Details `docs/DECKSEARCH.md` 11.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,

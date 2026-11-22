@@ -2,8 +2,10 @@
 //
 //   npm run game -- M01 M02 3      decks (meta ids or ST01 …) and seed
 //   npm run game -- M01 M02 3 --explain 13   also the values of v1's options in turn 13 (first player)
+//   npm run game -- CAL1 M04 3 --file build/calibarn.json   own lists (format of decklab --file)
 //
 // Both AIs know their own deck and the field (the two decks), as in the simulator (runner.ts).
+import { readFileSync } from "node:fs";
 import type { LookaheadPolicy } from "../src/ai/lookahead";
 import { makePolicy } from "../src/ai/registry";
 import { actionLabel } from "../src/app/lib/actions";
@@ -11,12 +13,21 @@ import { cardName } from "../src/app/lib/gamelog";
 import { describeSteps } from "../src/app/lib/gamelog";
 import { Engine } from "../src/engine/engine";
 import { STARTER_DECKS, TEST_DECKS } from "../src/data/decks";
+import { toDeckList } from "../src/meta/archetypes";
 import { metaDecks } from "../src/meta/decks";
 import { GameSession } from "../src/sim/session";
 import { loadLib, loadSnapshot } from "./lib";
 const lib = loadLib();
 const engine = new Engine(lib);
 const decks = [...metaDecks(loadSnapshot(), lib, 99, "both"), ...STARTER_DECKS, ...TEST_DECKS];
+// --file decks.json (format of `npm run decklab -- --file`): its lists by id.
+const fileArg = process.argv.indexOf("--file");
+if (fileArg > 0) {
+  const file = JSON.parse(readFileSync(process.argv[fileArg + 1]!, "utf8")) as {
+    decks: { id: string; name: string; cards: Record<string, number> }[];
+  };
+  for (const d of file.decks) decks.push({ id: d.id, name: d.name, colors: "", deck: toDeckList(d.cards) });
+}
 const [a, b, seed] = [process.argv[2] ?? "M01", process.argv[3] ?? "M02", Number(process.argv[4] ?? 1)];
 const find = (id: string) => {
   const deck = decks.find((d) => d.id === id.toUpperCase());

@@ -289,6 +289,43 @@ Neue Befehle von `npm run decklab` (Kern in `src/lab/decklab/pearls.ts`, `values
   Kombo-Graphen sind viel schwächer. Größter Hebel bleibt die Spielstärke der KI (jede KI-Schwäche verzerrt die
   Bewertung von Decks), dann größere Läufe mit v1 bzw. der Suche als Maßstab.
 
+## 11. Ein Deck um Gundam Calibarn (23. Nov. 2026, Nutzerwunsch)
+
+Neu im Deck-Labor: `--file data/decklab/calibarn.json` (eigene Listen für `measure`, `swaps`, `values`; die Listen der
+Datei gelten als „echte Listen“ für die Tauschkandidaten, `adds` als zusätzliche Kandidaten, `keep` wird nie
+entfernt) und `npm run game -- CAL7 M04 3 --file …`. Alle Listen und Kandidaten stehen in der Datei.
+
+**Ausgangslisten:** einzige Turnierliste mit Calibarn (Limitless, Platz 5 von 9, 1:1, Rot-Grün mit G-Self/First
+Contact) und drei Community-Listen von ExBurst: Academy Cali-Burn Midrange (Rot-Grün, 4 Calibarn, Lfrith-Paket;
+dort 22:16 protokolliert), Academy Burn V2 (Rot-Grün, rotes Removal) und GW Academy (Grün-Weiß). Die Engine
+versteht alle Schlüsselkarten (Skripte gegen Text gelesen).
+
+**Messungen** (v1 gegen die 12 häufigsten Archetypen nach Anteil, 6 Blöcke à 8 Spiele je Gegner):
+
+| Liste                                                                                           | v1                   | Suche (2 Blöcke) |
+| ----------------------------------------------------------------------------------------------- | -------------------- | ---------------- |
+| CAL1 Cali-Burn (ExBurst)                                                                        | 15,8 %               |                  |
+| CAL2 Academy Burn V2 (ExBurst)                                                                  | 34,1 %               | 28,6 %           |
+| CAL3 GW Academy (ExBurst)                                                                       | 11,8 %               |                  |
+| CAL4 Limitless-Turnierliste                                                                     | 18,1 %               |                  |
+| CAL5/6 eigene Rot-Grün-Entwürfe (G-Self, Grace, Jegan)                                          | 19–21 %              |                  |
+| **CAL7 = CAL2 mit Kurve** (+4 Jegan, +2 Zaku II für 4 Overcoming Hardships, 2 Airframe Seizure) | **40,8 %**           | **32,6 %**       |
+| CAL8 Nu Gundam (M03) + 3 Calibarn                                                               | 44,3 %               |                  |
+| CAL9/10 Grün-Weiß mit dem Blocker-Kern von M04                                                  | 34,5 / 21,7 %        | 24,4 %           |
+| Vergleich: M01 Shining / M03 Nu / M04 White Red Zaft                                            | 48,9 / 52,9 / 58,4 % | – / 48,0 % / –   |
+
+- Tauschsuche ab CAL7 (32 Kandidaten, Calibarn festgehalten): kein Tausch besteht die Bestätigung. Kartenwerte
+  (60 Varianten): Tendenzen (Geara Doga, Shuji's Hideout, ZZ, GFreD), auf frischen Seeds aber alle schlechter.
+  Weitere Ideen (4 Calibarn, 4 grüne Suletta, Grace statt Airframe, Rick Dom statt Zaku) auf zwei weiteren
+  Seed-Sätzen ohne bestätigten Gewinn. CAL7 auf vier Seed-Sätzen: 40,8 / 37,5 / 33,9 / 37,1 %, Mittel ≈ 37 %.
+- EX-Rampe (G-Self) schadet in der Hand der KI (CAL5 ohne G-Self +6,7 Punkte); Calibarn ins Nu-Gerüst kostet
+  8,6 Punkte. Starke Spitzen zählen: Grün-Weiß mit nur 2 Justice fällt von 34,5 auf 21,7 %.
+- Paarungen CAL7 (unvollständig gewichtet, 64 Spiele je Gegner): gut gegen M07 Char's Zaku (53 %), M11 (48 %),
+  M01 Shining (47 %), M03 Nu (44 %); schlecht gegen M04 White Red Zaft (20 %), M09/M10 Strike Freedom (19 %).
+- Gespeichert als Labor-Deck „Calibarn Rot-Grün (Academy Burn)“ (`u-calibarn-rg`).
+- **Fazit:** Mit unserer KI bleibt jedes Calibarn-Deck deutlich unter den Meta-Decks. Calibarn kommt erst um den 8. eigenen Zug und macht Partien nicht öfter zu Siegen (Siegquote mit gespieltem Calibarn kaum höher). Ob
+  Menschen die EX-Synergien (Witches from Earth, Lfrith, Suletta GD04-085) besser nutzen, misst das Labor nicht.
+
 ## 9. Ursprüngliche offene Fragen
 
 - Wie viel Rechenzeit ist in Ordnung (eine Nacht, ein Wochenende)? Nur am Desktop per CLI oder auch im Browser?

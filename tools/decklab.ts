@@ -15,7 +15,14 @@
 //
 // Common options: --ai v1|v0|search (default v1), --workers N (default half the cores: quieter fan),
 // --seed N (search seeds; confirmation uses N + 1000), --data <file> (default data-lab/lab.db).
+//
+// Own lists (23 Nov 2026, Calibarn deck): --file decks.json with
+//   { "decks": [{ "id": "CAL1", "name": "…", "cards": { "GD05-018": 4, … } }, …], "adds": ["GD04-108", …] }
+// makes its ids usable for measure, swaps and values; swaps/values on such a deck take all lists of the file as
+// the "real lists" (candidates move towards them) and "adds" as extra candidates; "keep": ["GD05-018"] are
+// never removed.
 
+import { readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -30,7 +37,9 @@ import { buildAround, cardScores, composition, evolve, seeds } from "../src/lab/
 import { COLORS } from "../src/data/types";
 import { LabStore } from "../src/lab/store";
 import { codeVersion } from "../src/lab/version";
-import { metaDecks } from "../src/meta/decks";
+import { toDeckList } from "../src/meta/archetypes";
+import { metaDecks, type MetaDeck, type MetaList } from "../src/meta/decks";
+import type { ArchetypeEntry } from "../src/meta/types";
 import { loadLib, loadSnapshot, ROOT } from "./lib";
 import { threadWorker } from "./node-pool";
 
@@ -59,12 +68,80 @@ const { values: args, positionals } = parseArgs({
     "evo-ai": { type: "string", default: "v0" },
     min: { type: "string", default: "0.5" },
     data: { type: "string" },
+    file: { type: "string" },
   },
 });
 
 const [command, ...ids] = positionals;
 const lib = loadLib();
 const snapshot = loadSnapshot();
+
+interface DeckFile {
+  decks: { id: string; name: string; cards: Record<string, number> }[];
+  adds?: string[];
+  /** Cards the swap search never removes (the card the deck is built around). */
+  keep?: string[];
+}
+const deckFile: DeckFile | undefined = args.file
+  ? (JSON.parse(readFileSync(resolve(args.file), "utf8")) as DeckFile)
+  : undefined;
+
+/** Decks of --file as meta decks: one pseudo archetype whose real lists are all decks of the file. */
+function fileDecks(): MetaDeck[] {
+  if (!deckFile) return [];
+  const tournament = {
+    id: "file",
+    name: "file",
+    date: "",
+    players: 0,
+  } as unknown as ArchetypeEntry["tournament"];
+  const entries: ArchetypeEntry[] = deckFile.decks.map((d) => ({
+    tournament,
+    placing: 1,
+    record: { wins: 0, losses: 0, ties: 0 },
+    cards: d.cards,
+    weight: 1,
+  }));
+  return deckFile.decks.map((d) => {
+    const deck = toDeckList(d.cards);
+    const size = deck.main.length;
+    if (size !== 50) throw new Error(`${d.id}: ${size} Karten statt 50`);
+    if (!legal(lib, deck)) throw new Error(`${d.id}: nicht legal (Farben, Kopien, Bannliste)`);
+    const archetype = {
+      id: d.id,
+      name: d.name,
+      share: 0,
+      lists: entries.length,
+      colors: colorsOf(deck),
+      consensus: deck,
+      best: deck,
+      bestPlacing: { tournament: "file", placing: 1 },
+      entries,
+      partial: [],
+    };
+    return {
+      id: d.id,
+      name: d.name,
+      colors: archetype.colors.join("/"),
+      deck,
+      archetype,
+      share: 0,
+      supported: true,
+      list: "consensus" as const,
+    };
+  });
+}
+
+function findDeck(id: string | undefined, list: MetaList): MetaDeck | undefined {
+  return (
+    fileDecks().find((d) => d.id === id) ?? metaDecks(snapshot, lib, Infinity, list).find((d) => d.id === id)
+  );
+}
+
+/** "adds" of --file: extra swap candidates with the support pearls get. */
+function fileAdds(deck: { main: string[] }): Map<string, number> {
+  return new Map((deckFile?.adds ?? []).filter((no) => !deck.main.includes(no)).map((no) => [no, 1.5]));
+}
 const store = new LabStore(resolve(ROOT, args.data ?? process.env.GCG_LAB_DATA ?? "data-lab/lab.db"));
 const workerCount = Number(args.workers ?? Math.max(1, Math.floor(availableParallelism() / 2)));
 const workers = Array.from({ length: workerCount }, () => threadWorker());
@@ -103,8 +180,8 @@ async function main() {
     }
     store.set(`decklab:calibrate:${new Date().toISOString()}`, { settings: settings(seed), rows });
   } else if (command === "measure") {
-    const all = metaDecks(snapshot, lib, Infinity, "both");
-    const decks = ids.map((id) => {
+    const all = [...fileDecks(), ...metaDecks(snapshot, lib, Infinity, "both")];
+    const decks = (ids.length ? ids : fileDecks().map((d) => d.id)).map((id) => {
       const d = all.find((x) => x.id === id);
       if (!d) throw new Error(`unbekanntes Deck ${id}`);
       return d;
@@ -118,7 +195,7 @@ async function main() {
       log(`${d.id} ${d.name}: ${pctAbs(fieldRate(results[i]!, field))} gegen das Feld`),
     );
   } else if (command === "swaps") {
-    const meta = metaDecks(snapshot, lib, Infinity, "consensus").find((d) => d.id === ids[0]);
+    const meta = findDeck(ids[0], "consensus");
     if (!meta) throw new Error(`unbekannter Archetyp ${ids[0] ?? "(fehlt)"}`);
     const confirm = new Measurer(store, workers, settings(seed + 1000));
     measurers.push(confirm);
@@ -128,10 +205,12 @@ async function main() {
       finalists: Number(args.finalists),
       confirmBlocks: Number(args.confirm),
       steps: Number(args.steps),
-      ...(args.pearls ? { extraAdds: pearlAdds(meta.deck) } : {}),
+      extraAdds: new Map([...(args.pearls ? pearlAdds(meta.deck) : []), ...fileAdds(meta.deck)]),
+      keep: new Set(deckFile?.keep ?? []),
       log,
     });
     log(`\n${meta.id} ${meta.name}: ${result.steps.filter((s) => s.accepted).length} Tausche übernommen`);
+    log(`Ergebnis: ${listText(result.final)}`);
     for (const s of result.steps)
       log(`  ${s.accepted ? "✓" : "✗"} ${fmtSwap(s.swap)}: ${pct(s.confirm.diff)}`);
     store.set(`decklab:swaps:${meta.id}:${new Date().toISOString()}`, {
@@ -150,12 +229,10 @@ async function main() {
           `Lv${p.level} ${String(p.color).padEnd(7)} Papier ${p.paper.toFixed(2).padStart(5)}  gespielt ${pctAbs(p.playRate)}`,
       );
   } else if (command === "values") {
-    const meta = metaDecks(snapshot, lib, Infinity, "consensus").find((d) => d.id === ids[0]);
+    const meta = findDeck(ids[0], "consensus");
     if (!meta) throw new Error(`unbekannter Archetyp ${ids[0] ?? "(fehlt)"}`);
-    const pool = rankedSwaps(lib, meta.deck, meta, args.pearls ? pearlAdds(meta.deck) : undefined).slice(
-      0,
-      80,
-    );
+    const extra = new Map([...(args.pearls ? pearlAdds(meta.deck) : []), ...fileAdds(meta.deck)]);
+    const pool = rankedSwaps(lib, meta.deck, meta, extra, new Set(deckFile?.keep ?? [])).slice(0, 80);
     const values = await cardValues(lib, meta.deck, pool, field, search, {
       variants: Number(args.variants),
       swapsPer: Number(args.per),

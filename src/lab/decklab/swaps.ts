@@ -60,6 +60,8 @@ export function rankedSwaps(
   meta: MetaDeck,
   /** More cards to try (e.g. pearls), with the support they get instead of the real lists' copies. */
   extra: Map<string, number> = new Map(),
+  /** Cards that stay (never removed), e.g. the card a deck is built around. */
+  keep: ReadonlySet<string> = new Set(),
 ): Swap[] {
   const have = counts(base);
   const entries = meta.archetype.entries;
@@ -71,6 +73,7 @@ export function rankedSwaps(
   const adds = [...avg.keys()].filter((no) => supported(no) && (have.get(no) ?? 0) < 4);
   const scored: { swap: Swap; score: number }[] = [];
   for (const remove of have.keys()) {
+    if (keep.has(remove)) continue;
     for (const add of adds) {
       if (add === remove) continue;
       const addGain = (avg.get(add) ?? 0) - (have.get(add) ?? 0);
@@ -102,6 +105,8 @@ export interface SearchOptions {
   steps: number;
   /** More cards to try as adds (pearls), see rankedSwaps. */
   extraAdds?: Map<string, number>;
+  /** Cards never removed. */
+  keep?: ReadonlySet<string>;
   log?: (text: string) => void;
 }
 
@@ -160,7 +165,7 @@ export async function swapSearch(
   let base = start;
   const steps: SwapStep[] = [];
   for (let step = 0; step < o.steps; step++) {
-    const swaps = rankedSwaps(lib, base, meta, o.extraAdds).slice(0, o.neighbours);
+    const swaps = rankedSwaps(lib, base, meta, o.extraAdds, o.keep).slice(0, o.neighbours);
     o.log?.(`Schritt ${step + 1}: ${swaps.length} Tausch-Kandidaten`);
     if (!swaps.length) break;
     const winner = await race(search, base, swaps, field, o);
