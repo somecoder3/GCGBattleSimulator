@@ -4,7 +4,7 @@
 import type { Engine } from "../engine/engine";
 import { other } from "../engine/engine";
 import type { CardId, GameState, PlayerId } from "../engine/types";
-import type { DeckPlan } from "./synergy";
+import { trashNeeds, type DeckPlan } from "./synergy";
 
 export interface Weights {
   win: number;
@@ -65,6 +65,8 @@ export const DEFAULT_WEIGHTS: Weights = {
 export interface ComboKnowledge {
   /** The own deck's plan: trash fuel. */
   plan?: DeckPlan;
+  /** Value trash cards by what the own effects still need there (trashNeeds), instead of trashFuel. */
+  trashAware?: boolean;
   /** Value linked Units (both players). */
   links?: boolean;
 }
@@ -95,7 +97,14 @@ export class Evaluator {
     v += Math.min(player.hand.length, w.handCap) * w.hand;
     if (player.deck.length <= 3) v -= (4 - player.deck.length) * w.deckLow;
     const plan = own ? this.combo.plan : undefined;
-    if (plan) {
+    if (plan && this.combo.trashAware) {
+      const trash = player.trash.map((id) => s.cards[id]!.no);
+      const spent = new Map<string, number>();
+      for (const c of s.cards)
+        if (c.owner === p && (c.zone === "trash" || c.zone === "gone"))
+          spent.set(c.no, (spent.get(c.no) ?? 0) + 1);
+      v += trashNeeds(plan, trash, spent).useful * w.fuel;
+    } else if (plan) {
       for (const id of player.trash) v += Math.min(1, plan.trashFuel.get(s.cards[id]!.no) ?? 0) * w.fuel;
     }
 

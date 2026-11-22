@@ -28,6 +28,8 @@ export interface Synergy {
   matches: Map<string, number>;
   /** Short description of the filter, for the report. */
   label: string;
+  /** How many matching cards one use of the effect needs ("choose 2", "3 or more"); 1 if not stated. */
+  need: number;
 }
 
 /** Keys of the DSL that hold a filter on cards (choose, count, conditions on Pilots and battles). */
@@ -41,21 +43,31 @@ const FILTER_KEYS = new Set([
   "pilot",
 ]);
 
-/** Collects filters on friendly cards from any part of a compiled effect. */
-function collect(node: unknown, key: string, out: { filter: Filter; use: "count" | "choose" }[]): void {
+type Found = { filter: Filter; use: "count" | "choose"; need: number };
+
+/**
+ * Collects filters on friendly cards from any part of a compiled effect, with the number the effect needs:
+ * the `count` of a choice ("choose 2") or the `min` of a count condition ("3 or more").
+ */
+function collect(node: unknown, key: string, out: Found[], parent?: Record<string, unknown>): void {
   if (Array.isArray(node)) {
-    for (const x of node) collect(x, key, out);
+    for (const x of node) collect(x, key, out, parent);
     return;
   }
   if (!node || typeof node !== "object") return;
   const o = node as Record<string, unknown>;
   if (FILTER_KEYS.has(key) && looksLikeFilter(o)) {
-    out.push({ filter: o as Filter, use: key === "count" ? "count" : "choose" });
+    const n = key === "count" ? parent?.min : parent?.count;
+    out.push({
+      filter: o as Filter,
+      use: key === "count" ? "count" : "choose",
+      need: typeof n === "number" ? n : 1,
+    });
   }
   if (typeof o.nameInTrash === "string") {
-    out.push({ filter: { zone: "trash", side: "friendly", names: [o.nameInTrash] }, use: "count" });
+    out.push({ filter: { zone: "trash", side: "friendly", names: [o.nameInTrash] }, use: "count", need: 1 });
   }
-  for (const [k, v] of Object.entries(o)) collect(v, k, out);
+  for (const [k, v] of Object.entries(o)) collect(v, k, out, o);
 }
 
 function looksLikeFilter(o: Record<string, unknown>): boolean {
@@ -108,10 +120,10 @@ export function deckSynergies(lib: CardLib, deck: DeckList): Synergy[] {
   for (const card of cards) {
     const seen = new Set<string>();
     for (const { effect, program } of card.script.compiled) {
-      const found: { filter: Filter; use: "count" | "choose" }[] = [];
+      const found: Found[] = [];
       collect(effect, "", found);
       collect(program, "", found);
-      for (const { filter, use } of found) {
+      for (const { filter, use, need } of found) {
         if (!specific(filter)) continue;
         const zone = (filter.zone ?? "battle") as SynergyZone;
         const label = describe(filter);
@@ -123,7 +135,7 @@ export function deckSynergies(lib: CardLib, deck: DeckList): Synergy[] {
           if (other.no === card.no && filter.other) continue;
           if (matchesCard(other, filter)) matches.set(other.no, counts.get(other.no)!);
         }
-        if (matches.size) out.push({ source: card.no, kind: "zone", zone, use, matches, label });
+        if (matches.size) out.push({ source: card.no, kind: "zone", zone, use, matches, label, need });
       }
     }
     if (card.type === "UNIT" && card.link.length) {
@@ -133,7 +145,7 @@ export function deckSynergies(lib: CardLib, deck: DeckList): Synergy[] {
       }
       const label = card.link.map((l) => ("pilotName" in l ? `[${l.pilotName}]` : `(${l.trait})`)).join("/");
       if (matches.size)
-        out.push({ source: card.no, kind: "link", zone: "link", use: "link", matches, label });
+        out.push({ source: card.no, kind: "link", zone: "link", use: "link", matches, label, need: 1 });
     }
   }
   return out;
@@ -150,6 +162,32 @@ export interface DeckPlan {
   /** Per Pilot number: Units of the deck it links. */
   linksTo: Map<string, string[]>;
   synergies: Synergy[];
+  /** Copies per card number in the deck list. */
+  counts: Map<string, number>;
+}
+
+/**
+ * Trash needs of the own deck in a state (23 Nov 2026, `RuleOptions.trashAware`): for each effect of an own
+ * card that uses cards from the own trash (choose/count with a trash filter), how many matching cards lie
+ * there and how many it needs; only while the source card can still be played (not all copies in the trash
+ * or gone). `useful` = the matching cards up to the need, summed over the effects.
+ */
+export function trashNeeds(
+  plan: DeckPlan,
+  trash: readonly string[],
+  spent: ReadonlyMap<string, number>,
+): { useful: number; missing: Set<string> } {
+  let useful = 0;
+  const missing = new Set<string>();
+  for (const s of plan.synergies) {
+    if (s.kind !== "zone" || s.zone !== "trash") continue;
+    if ((plan.counts.get(s.source) ?? 0) <= (spent.get(s.source) ?? 0)) continue; // no copy left to use it
+    const need = Math.min(4, Math.max(1, s.need));
+    const have = trash.filter((no) => s.matches.has(no)).length;
+    useful += Math.min(have, need);
+    if (have < need) for (const no of s.matches.keys()) missing.add(no);
+  }
+  return { useful, missing };
 }
 
 export function deckPlan(lib: CardLib, deck: DeckList): DeckPlan {
@@ -170,7 +208,7 @@ export function deckPlan(lib: CardLib, deck: DeckList): DeckPlan {
       trashFuel.set(no, (trashFuel.get(no) ?? 0) + sourceCopies / Math.max(total, 1));
     }
   }
-  return { trashFuel, linksTo, synergies };
+  return { trashFuel, linksTo, synergies, counts };
 }
 
 const plans = new WeakMap<DeckList, DeckPlan>();

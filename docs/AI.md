@@ -464,6 +464,25 @@ v0 spielt zurückgeholte Special Moves in v1-Simulationen oft sofort ohne bleibe
   normales v1 (35,8–37,7 %, 9360 Spiele), doppelte Rechenzeit: Eine einzelne Stichprobe ist zu zufällig (auch
   die eigenen Nachziehkarten werden echt). Aus.
 
+## Trash-Bewusstsein (23. Nov. 2026, Nutzerwunsch)
+
+Bedingungen, die den Trash zählen (Michaelis „4 or more Command cards“, Master Asia, Improved Technique), wertet
+die Engine ohnehin aus. Neu:
+
+- **Bedarf aus den Effekten** (`synergy.ts`): jede Kombo mit Trash-Filter hat jetzt `need` („choose 2“ → 2,
+  „3 or more“ → 3). `trashNeeds(plan, trash, spent)` zählt die passenden Trash-Karten bis zum Bedarf, nur solange
+  die Quell-Karte noch spielbar ist (nicht alle Kopien im Trash oder verbannt).
+- **Abwerfen** (`trashAware`, jetzt Standard, alt `plainTrashAware`): Karten, die eigene Trash-Effekte noch
+  brauchen, wirft v0 lieber ab (`discardKeep`). v0 50,3 % (M01 +2,2, M11 +3,4, M09 +3,8), v1 50,0 %.
+- **Zurückholen** (alt `plainToHandPick`): Kommt eine Karte aus dem eigenen Trash auf die Hand (Shining Gundams
+  【Deploy】), bekommt ein jetzt spielbarer Command mit Wirkung auf dem Feld Vorrang (`mainCommandScore`), z. B.
+  Darkness Finger gegen eine Unit mit 2 HP statt Shining Finger gegen eine schon geruhte. v0 50,1 % (M01 +1,3,
+  M11 +3,4), v1 49,9 % (M01 +0,4); die Wahl ändert selten etwas (0,9 zurückgeholte Karten pro Spiel). Beide
+  Regeln bleiben an, weil sie sinnvoll sind und nichts kosten.
+- **Trash-Wert in der v1-Bewertung** (`trashValue`, aus): v1 gesamt 50,0 %, Shining aber −4,4 Punkte. Die
+  Kosten seines 【Deploy】 (2 (MF) Units verbannen) zählen sonst als verlorener „Treibstoff“ für Master Asia und
+  Shining selbst, also lässt v1 den Effekt eher weg. Bräuchte eine Bewertung, die Verbrauch als Nutzung erkennt.
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen

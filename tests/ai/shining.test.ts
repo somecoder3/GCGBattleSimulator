@@ -55,4 +55,32 @@ describe("v0 and Shining Gundam", () => {
     expect(pick(new HeuristicPolicy(engine))).not.toBe(ASIA);
     expect(pick(new HeuristicPolicy(engine, { plainLinkKeep: true }))).toBe(ASIA);
   });
+
+  it("takes the Special Move back that does something now (Darkness Finger against a 2-HP Unit)", () => {
+    const FINGER = "GD05-120"; // Shining Finger: rest an enemy Unit (it is rested already: useless)
+    const s = scenario({
+      engine,
+      filler: "ST01-005",
+      p0: { hand: [SHINING], trash: [MAXTER, RISING, FINGER, DARKNESS], resources: 5 },
+      p1: { battle: [{ no: "ST01-005", damage: 1, rested: true }] }, // GM 2/2, 1 HP left, rested
+    });
+    engine.apply(
+      s,
+      s.pending!.options.find((o) => o.type === "deployUnit")!,
+    );
+    const v0 = new HeuristicPolicy(engine);
+    // Exile two (MF) Units, then the Special Move to take back.
+    while (s.pending?.kind === "effect" && s.pending.options.some((o) => o.type === "target")) {
+      const candidates = s.pending.options.flatMap((o) => (o.type === "target" ? [s.cards[o.card]!.no] : []));
+      if (candidates.includes(DARKNESS)) {
+        const pick = v0.choose(viewFor(s, 0), s.pending);
+        expect(pick.type === "target" && s.cards[pick.card]!.no).toBe(DARKNESS);
+        const old = new HeuristicPolicy(engine, { plainToHandPick: true }).choose(viewFor(s, 0), s.pending);
+        expect(old.type === "target" && s.cards[old.card]!.no).toBe(FINGER);
+        return;
+      }
+      engine.apply(s, v0.choose(viewFor(s, 0), s.pending));
+    }
+    throw new Error("no choice of the Special Move");
+  });
 });

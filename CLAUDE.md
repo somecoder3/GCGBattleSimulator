@@ -400,6 +400,10 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Zwischenspeicher): neue Archetypen ≤ 24 %, beste Nischen = M04-Abwandlungen, auf frischen Seeds aber −2 bis −4 %
   gegen M04 (Fluch des Gewinners; Endmessung jetzt auf frischen Seeds). Fazit: Werkzeuge laufen, mit der heutigen
   KI keine bestätigte Verbesserung. Details `docs/DECKSEARCH.md` Abschnitt 10.
+- **Trash-Bewusstsein (23. Nov., Nutzerwunsch):** Kombos kennen ihren Bedarf (`need`, `trashNeeds` in
+  `synergy.ts`); v0 wirft bevorzugt Karten ab, die eigene Trash-Effekte noch brauchen (`trashAware`, Standard, alt
+  `plainTrashAware`), und holt aus dem Trash den Command zurück, der jetzt wirkt (alt `plainToHandPick`). Beides
+  neutral bis leicht positiv, an. Trash-Wert in der v1-Bewertung (`trashValue`) schadet Shining, aus. `docs/AI.md`.
 - **KI-Versuche 23. Nov. (alle ohne Gewinn, abgeschaltet):** Link-Warten auf Hand/Deck (`linkWaitHand/Deck`),
   Angriff vor Einsetzen (`attackFirst`, 43,2 %), Chump-Block (`chumpBlockShields`), v1 mit gezogener Gegnerhand
   (`sampledOpponent`, 36,8 %). Schwächste Archetypen bei v1: M08/M11 (40,6 %). Details `docs/AI.md`.

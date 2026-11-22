@@ -8,7 +8,7 @@ import type { Engine } from "../engine/engine";
 import type { Action, CardId, Decision, DeckList, GameState, PlayerId } from "../engine/types";
 import { HIDDEN } from "../engine/view";
 import { DEFAULT_MULLIGAN, keepHand } from "./mulligan";
-import { planFor, type DeckPlan } from "./synergy";
+import { planFor, trashNeeds, type DeckPlan } from "./synergy";
 import type { Policy } from "./types";
 
 /** Score of "do nothing more" in the main phase; options below it are never chosen. */
@@ -80,6 +80,25 @@ export interface RuleOptions {
   plainTrashCost?: boolean;
   /** Before 22 Nov 2026: discarding ignored that a Pilot links a Unit in the hand (and vice versa). */
   plainLinkKeep?: boolean;
+  /**
+   * Trash awareness (23 Nov 2026, user's wish): cards in the own trash count in the evaluation as far as own
+   * effects still need them there ("choose 2 … from your trash", "3 or more … in your trash"), and
+   * discarding prefers such cards (synergy.ts `trashNeeds`).
+   */
+  trashAware?: boolean;
+  /** Before 23 Nov 2026: discarding ignored what own trash effects still need (trashAware is now the default). */
+  plainTrashAware?: boolean;
+  /**
+   * Before 23 Nov 2026: a card taken from the own trash to the hand was chosen by its general value only.
+   * Now a Command that is playable now and does something on the current board comes first (Shining
+   * Gundam's 【Deploy】: Darkness Finger when an enemy Unit has 2 HP left, user's question).
+   */
+  plainToHandPick?: boolean;
+  /**
+   * With trashAware: also count the needed trash cards in v1's evaluation. Measured worse for Shining Gundam
+   * (its 【Deploy】 exiles (MF) Units that the evaluation now values as fuel), so separate and off.
+   */
+  trashValue?: boolean;
   /**
    * v1 experiment (22 Nov 2026): simulate with one sampled hand and deck of the opponent (from the field,
    * like the search AI) instead of stand-ins that can't be played.
@@ -366,8 +385,28 @@ class Ctx {
 
   /** The own deck's combo plan (src/ai/synergy.ts), if known. */
   get plan(): DeckPlan | undefined {
-    if (!this.options.comboFuel || !this.options.ownDeck) return undefined;
+    if (!(this.options.comboFuel || this.trashAware) || !this.options.ownDeck) return undefined;
     return planFor(this.engine.lib, this.options.ownDeck);
+  }
+
+  get trashAware(): boolean {
+    return !!this.options.trashAware || !this.options.plainTrashAware;
+  }
+
+  /** Card numbers own trash effects still need (trashAware). */
+  get trashMissing(): Set<string> {
+    const plan = this.plan;
+    if (!plan || !this.trashAware) return new Set();
+    const me = this.s.players[this.me];
+    const spent = new Map<string, number>();
+    for (const c of this.s.cards)
+      if (c.owner === this.me && (c.zone === "trash" || c.zone === "gone"))
+        spent.set(c.no, (spent.get(c.no) ?? 0) + 1);
+    return trashNeeds(
+      plan,
+      me.trash.map((id) => this.s.cards[id]!.no),
+      spent,
+    ).missing;
   }
 
   /**
@@ -400,6 +439,10 @@ class Ctx {
 
   /** keepValue for discarding: a card the own deck wants in the trash is cheaper to discard. */
   discardKeep(id: CardId): number {
+    if (this.trashAware) {
+      const wanted = this.known(id) && this.trashMissing.has(this.s.cards[id]!.no);
+      return this.keepValue(id) - (wanted ? FUEL_DISCARD : 0);
+    }
     const fuel = this.known(id) ? (this.plan?.trashFuel.get(this.s.cards[id]!.no) ?? 0) : 0;
     return this.keepValue(id) - Math.min(1, fuel) * FUEL_DISCARD;
   }
@@ -1002,7 +1045,10 @@ class Ctx {
     return scored[0]!.o;
   }
 
-  targetScore(o: Action, intent: { kind: Intent; damage: number; ap?: number; rest?: boolean }): number {
+  targetScore(
+    o: Action,
+    intent: { kind: Intent; damage: number; ap?: number; rest?: boolean; toHand?: boolean },
+  ): number {
     if (o.type === "done") return 0; // stop choosing unless a target is worth it
     if (o.type !== "target") return -1;
     const card = this.s.cards[o.card]!;
@@ -1010,6 +1056,23 @@ class Ctx {
     const inPlay = card.zone === "battle";
     const value = inPlay ? this.unitValue(o.card) : this.keepValue(o.card);
     if (intent.kind === "neutral") return friendly ? 1 + value : 0.5;
+    if (
+      friendly &&
+      card.zone === "trash" &&
+      intent.toHand &&
+      !this.options.plainToHandPick &&
+      this.known(o.card)
+    ) {
+      // Back to the hand: a Command that can be played now and does something on this board first.
+      const c = this.card(o.card);
+      const me = this.s.players[this.me];
+      const active = me.resources.filter((r) => !this.s.cards[r]!.rested).length;
+      const now =
+        c.type === "COMMAND" && c.level <= me.resources.length && c.cost <= active
+          ? this.mainCommandScore(o.card)
+          : -1;
+      return 1 + value + (now > 0 ? now / 5 : 0);
+    }
     // Own trash cards an effect exiles are its cost ("… from your trash. Exile them. If you do, …"):
     // cheap, the least valuable first.
     if (friendly && card.zone === "trash" && intent.kind === "harm" && !this.options.plainTrashCost) {
@@ -1101,7 +1164,7 @@ class Ctx {
     return undefined;
   }
 
-  intent(): { kind: Intent; damage: number; ap?: number; rest?: boolean } {
+  intent(): { kind: Intent; damage: number; ap?: number; rest?: boolean; toHand?: boolean } {
     const frame = this.s.frames[this.s.frames.length - 1];
     if (!frame) return { kind: "neutral", damage: 0 };
     const script = this.engine.lib.get(frame.ref.no).script;
@@ -1127,7 +1190,14 @@ function safe<T>(value: () => T, fallback: () => T): T {
   }
 }
 
-function classify(instr: Instr): { kind: Intent; damage: number; ap?: number; rest?: boolean } {
+function classify(instr: Instr): {
+  kind: Intent;
+  damage: number;
+  ap?: number;
+  rest?: boolean;
+  toHand?: boolean;
+} {
+  if (instr.op === "toHand") return { kind: "help", damage: 0, toHand: true };
   if (instr.op === "damage") return { kind: "harm", damage: instr.amount };
   if (instr.op === "rest") return { kind: "harm", damage: 0, rest: true };
   if (HARMFUL.has(instr.op)) return { kind: "harm", damage: 0 };
