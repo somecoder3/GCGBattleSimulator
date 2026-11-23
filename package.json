@@ -31,6 +31,7 @@
     "mulligan": "tsx tools/mulligan.ts",
     "first": "tsx tools/first.ts",
     "combos": "tsx tools/combos.ts",
+    "ramp": "tsx tools/ramp.ts",
     "ab": "tsx tools/ab.ts",
     "play": "tsx tools/play.ts",
     "decklab": "tsx tools/decklab.ts"

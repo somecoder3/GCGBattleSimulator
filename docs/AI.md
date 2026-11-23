@@ -501,6 +501,102 @@ Move gerade etwas bewirkt, spielte keine Rolle.
   `compiledGranted`; betrifft unter den Meta-Karten nur Trash-Bezüge von Char Aznable (GD05-093, (Neo Zeon) Base aus
   dem Trash, M07). v0 49,9 % (49,6–50,2 %), M07 −0,6 Punkte: kein Unterschied.
 
+## Ressourcen und EX Resources (`src/ai/ramp.ts`, `npm run ramp`, 23. Nov. 2026, Nutzerwunsch)
+
+Frage des Nutzers: Kennt der Kombo-Graph eine Abhängigkeit über EX Resources, und spielt die KI Karten, die
+(EX) Resources bringen, lieber, wenn das Deck sie braucht? Vorher nicht: `synergy.ts` las nur Kartenfilter
+(Trait/Name/Typ) und Links, v0 behandelte „Place 1 EX Resource“ wie Ziehen (neutral), und die v1-Bewertung
+zählte Ressourcen gar nicht (eine liegende EX Resource war für sie wertlos, eine dauerhafte Resource auch).
+
+**Karten** (alle 1123 gelesen, `rampRole` aus den übersetzten Effekten):
+
+- _EX Resource platzieren_ (17 Karten): grün fast alle. Wing: Wing Gundam (Bird Mode) ST02-002 【Deploy】. London
+  Bell: Re-GZ BWS GD05-023 【Deploy】, Nu Gundam GD05-020 【Deploy】 bei 2+ (Londo Bell) im Trash. AGE: Gundam AGE-1
+  Normal GD02-021 (Unit abwerfen), AGE-2 Normal GD03-019 【When Linked】, AGE Device GD02-103 【Main】 (mit (AGE
+  System) Unit). Academy: Calibarn GD05-018 (3 Stück), Gundvölva, Pharact GD04-018, Suletta GD04-085; G Generation:
+  G-Self EB01-038, Tallgeese Ⅱ EB01-025; Duel Gundam (Assault Shroud) ST14-009 【Destroyed】, Garma GD04-086; als
+  【Burst】 First Contact GD01-107, Battlefield Emotions ST14-015, Interwoven Blessings GD05-107.
+- _Resource platzieren_ (dauerhaft, 5 Karten): First Contact 【Main】, Mutual Attraction GD05-106 (Wahl), Battlefield
+  Emotions 【Main】, Gundam Deathscythe GD01-025 【When Paired･(Operation Meteor) Pilot】, Build Strike Gundam (Full
+  Package) EB01-021.
+- _EX Resources nutzen_: beim Platzieren G-Exes GD02-022 (Breach 2), G-Bouncer GD03-023 (High-Maneuver), 9th
+  Tactical Testing Sector GD04-124 (AP+2); beim Verbrauchen Calibarn, Lfrith Ur/Thorn, Suletta GD04-085; „If you use
+  an EX Resource to play this card“ GD04-106, GD04-108, GD05-118.
+- _Level-Ziele_ („while you are Lv.7 or higher“): AGE-1 Titus GD02-031, Spallow GD02-023, Genoace Custom, AGE-1
+  Normal (Ziehen), Diva GD02-124 – alles AGE.
+- Im Meta (Snapshot 21. Nov.) fast nicht gespielt: Nu Gundam GD05-020 in M03 (2×), Duel Gundam AS in M17; unter
+  allen 176 Turnierlisten haben nur sechs vier oder mehr solche Karten. Darum **Testdecks** (`TEST_DECKS`): `WINGX`
+  (ST02 mit First Contact, Deathscythe GD01-025, Mutual Attraction, 4× Wing Gundam), `AGEX` (grünes AGE-Deck mit
+  allen EX-/Level-Karten), `LBX` (echte Nu-Gundam-Liste mit 3× Re-GZ BWS) und `ACAX` (echte Liste mit G-Self,
+  Calibarn, Suletta GD04-085, First Contact).
+
+**Gebaut:**
+
+1. _Kombo-Graph_ (`deckSynergies`): Art `ex` (EX-Nutzer ← Karten des Decks, die EX Resources platzieren) und
+   `level` (Karte mit „Lv.N or higher“ ← alle Ressourcen-Erzeuger); `DeckPlan.ramp` (`RampPlan`: Erzeuger, Nutzer,
+   Ziel-Level = höchste Karte oder Level-Bedingung, höchste Unit). `npm run combos` zeigt sie, „Passt zu“ hat die
+   Gruppen „Platzieren EX Resources“, „Bringen schneller Lv.N“ und „Nutzen EX Resources“.
+2. _v0_ (`RuleOptions.ramp`): `rampWorth` rechnet platzierte Ressourcen in Level-Punkte um (Resource 1, EX
+   Resource 0,6, solange das Level unter dem Ziel des Decks liegt, darüber 0,3/0,2; +0,3 je EX Resource, wenn das
+   Deck EX-Nutzer hat, +0,5 je EX-Nutzer im Spiel, der aufs Platzieren reagiert). Bedingungen prüft die Engine auf
+   dem jetzigen Zustand (`Engine.condHolds`, z. B. Nu Gundams Trash-Zählung; unbekannt zählt halb). Einsetzen bekommt
+   10 Punkte je Level-Punkt, **+40, wenn dadurch eine weitere Handkarte in diesem Zug spielbar wird** (`unlocks`:
+   Bird Mode vor Sandrock, dann Wing Gundam Lv.5 mit der neuen EX Resource; Test `tests/ai/ramp.test.ts`), ebenso
+   Pair/Link (Deathscythe, AGE-2 Normal). Ressourcen-Commands (First Contact …) spielt v0 vor dem Ende der Main Phase
+   (95 + Punkte), nicht nur als Füller. `exPay`: Zahlen mit EX Resource auf Wunsch (`Action.ex`) wählt v0, wenn es
+   etwas bewirkt (`exPayHelps`), und die EX-Regel prüft dabei nur „hand“ statt „deck“ (vorher filterte „deck“ diese
+   Optionen bis zur höchsten Unit fast immer weg, z. B. Calibarn-Decks bis Lv.9).
+3. _v1-Bewertung_ (`resourceValue`, `Weights.resource` 1,5 je Resource bis zum Ziel-Level, `resourceOver` 0,3
+   darüber, `exResource` −0,5 Abschlag je EX Resource, `exUser` +0,5 je EX Resource bei EX-Nutzern im Deck; Gegner
+   mit Ziel `ENEMY_GOAL` = 7, weil sein Deck unbekannt ist).
+
+**Gemessen** (`npm run ab -- --decks ST02,WINGX,ST14,AGEX,LBX,ACAX,M03,M17,M01,M02 --workers 5`, Anteil der neuen
+Regel gegen den Standard):
+
+| Variante               | v0 (18 040 Spiele)      | v1 (8360 Spiele)                                |
+| ---------------------- | ----------------------- | ----------------------------------------------- |
+| `ramp`                 | 49,9 % (49,1–50,6)      | 50,3 % (49,2–51,4)                              |
+| `ex-pay`               | 50,0 % (fast nie aktiv) |                                                 |
+| `resource-value`       |                         | 50,5 % (49,5–51,6)                              |
+| `ramp-all` (alle drei) |                         | 50,5 %; Seed 99: **50,1 %** (49,4–50,9, 16 280) |
+
+Je Deck höchstens ±2 Punkte (AGEX/WINGX leicht vorn, M01/M03 leicht hinten), im Rauschen. **Alles aus** (Optionen
+bleiben zum Messen); Kombo-Graph, „Passt zu“ und `Engine.condHolds` bleiben.
+
+**Warum kaum Wirkung** (`npm run ramp`, v1, Level zu Beginn der eigenen Main Phase): Das Level steigt ohnehin um 1
+pro Zug (Zug 7: Lv. 7,1–7,2 ohne Ramp-Karten). Ramp-Decks liegen nur 0,2–0,7 Level darüber; pro Spiel entstehen
+1,2–1,8 EX Resources durch Effekte (ACAX mit Calibarn 4,6) und 0–0,7 Resources. Spiele sind nach etwa 7 eigenen
+Zügen entschieden, ein Level früher bringt also höchstens einen Zug. Etwa 0,5 EX Resources pro Spiel bleiben am Ende
+liegen (meist die des zweiten Spielers, die die EX-Regel für die höchste Unit aufhebt), bei ACAX 1,2.
+
+**Karten einzeln** (`npm run ramp -- --decks <Deck>+<alt>><neu> --field M01,M02,M03,M04,M05,M06 --games 32`: je 384
+Spiele gegen dasselbe Meta-Feld, gleiche Seeds; Standard-Regeln / mit `ramp-all`; ± etwa 2 Punkte):
+
+| Deck und Tausch                                  | Siege vorher → nachher        |
+| ------------------------------------------------ | ----------------------------- |
+| ST02: Tragos → First Contact                     | 7,6 → 4,7 % / 6,8 → 5,2 %     |
+| ST02: Corsica Base → Mutual Attraction           | 7,6 → 3,1 % / 6,8 → 3,1 %     |
+| ST02: Aries → Gundam Deathscythe GD01-025        | 7,6 → 9,9 %                   |
+| ST02: Tallgeese → Wing Gundam (4×)               | 7,6 → 9,1 %                   |
+| ST02 → WINGX (alle vier)                         | 7,6 → 1,8 %                   |
+| AGEX: First Contact → AGE-1 Normal (ohne Effekt) | 13,3 → 17,4 % / 11,5 → 15,6 % |
+| AGEX: AGE Device → AGE-1 Flat (ohne Effekt)      | 13,3 → 16,9 % / 11,5 → 13,8 % |
+| LBX: Re-GZ BWS → Kayra's Jegan                   | 38,8 → 41,4 % / 40,1 → 41,4 % |
+| ACAX: First Contact → Darkness Finger            | 15,1 → 17,7 % / 16,4 → 18,8 % |
+
+Einheitlich: **Jeder Kartenplatz für Ressourcen kostet eher Siege.** Ressourcen-Commands (First Contact, Mutual
+Attraction: 3 Kosten für eine geruhte Resource) kosten einen ganzen Zug ohne Wirkung aufs Feld; EX-Units (Re-GZ BWS,
+AGE Device) sind etwas schwächer als gleich teure Units ohne Effekt. Deathscythe gewinnt eher als Unit (Lv.6, 5/5)
+denn durch die Resource. Mit den neuen Regeln gleich, es liegt also an den Karten, nicht an der Bedienung durch die
+KI. Grenze: v1 spielt Ramp-Pläne über mehrere Züge nicht gezielt (Vorausschau bis zur nächsten eigenen Main Phase),
+und Calibarn-/Academy-Decks (EX-Nutzer) haben im Meta keine Vorbilder außer ACAX.
+
+**Nebenbefund zur Messmethode:** Die Spalten von `npm run ab -- --by-deck` vergleichen A und B mit einem Deck in
+_verschiedenen_ Spielen. Auch „default gegen default“ zeigt dort je Deck bis ±4,5 Punkte (v0, 18 040 Spiele: WINGX
++4,5, M17 −4,2), und weil die Seeds gleich bleiben, erscheint dasselbe Muster bei jeder Variante. Unterschiede je
+Deck darum gegen einen Lauf „default gegen default“ mit gleichem Seed lesen (oder mit `npm run ramp --field` gepaart
+messen). Frühere Angaben je Deck (z. B. Shining +3,5/+4,6 beim Abwerfen) enthalten diese Streuung.
+
 ## Mulligan (`src/ai/mulligan.ts`, `npm run mulligan`)
 
 Alle KIs (v0, v1, Suche) behalten ihre Starthand nur mit **mindestens zwei Units bis Lv.4**, sonst ziehen

@@ -167,4 +167,82 @@ export const TEST_DECKS: NamedDeck[] = [
     { "ST12-015": "ST12-013", "ST12-001": "GD05-055" },
     "Raging Onslaught + Final Victor ×4 + Destiny ×2",
   ),
+  // Resources and EX Resources (docs/AI.md "Ressourcen und EX Resources", 23 Nov 2026).
+  // ST02 with more Resources: First Contact (Tragos), Gundam Deathscythe GD01-025 (Aries), Mutual Attraction
+  // (Corsica Base, at most 2× under the banlist), Wing Gundam ×4 (Tallgeese).
+  swapped(
+    "WINGX",
+    "ST02",
+    { "ST02-009": "GD01-107", "ST02-008": "GD01-025", "ST02-016": "GD05-106", "ST02-006": "ST02-001" },
+    "Wings of Advance + First Contact, Deathscythe, Mutual Attraction",
+  ),
+  {
+    id: "AGEX",
+    name: "AGE (Test, EX Resources)",
+    colors: "Green",
+    deck: list({
+      "GD02-021": 4, // AGE-1 Normal: discard → EX Resource
+      "GD02-022": 3, // G-Exes: EX placed → Breach 2
+      "GD02-023": 3, // Spallow: Lv.7 → First Strike
+      "GD02-026": 2, // Genoace Custom: Lv.7 → AP+2
+      "GD02-027": 3,
+      "GD02-031": 3, // Titus: Lv.7 → AP+2
+      "GD03-019": 4, // AGE-2 Normal: linked → EX Resource
+      "GD03-023": 3, // G-Bouncer: EX placed → High-Maneuver
+      "GD03-031": 3,
+      "GD05-021": 2,
+      "GD05-024": 2,
+      "GD02-088": 4, // Flit Asuno
+      "GD03-088": 4, // Asemu Asuno
+      "GD02-103": 4, // AGE Device: EX Resource
+      "GD01-107": 2, // First Contact
+      "GD02-124": 4, // Diva: Lv.7
+    }),
+  },
+  {
+    // Tournament list (Limitless, Nu Gundam, 7th place, snapshot 2026-11-21): Re-GZ BWS and Nu Gundam GD05-020.
+    id: "LBX",
+    name: "Nu Gundam mit Re-GZ BWS (Turnierliste)",
+    colors: "Green/Blue",
+    deck: list({
+      "GD01-008": 4,
+      "GD05-027": 4,
+      "GD05-029": 4,
+      "GD05-028": 3,
+      "GD05-023": 3,
+      "GD01-030": 3,
+      "GD05-019": 4,
+      "ST01-001": 4,
+      "GD05-020": 3,
+      "GD05-017": 4,
+      "ST01-010": 4,
+      "GD05-085": 4,
+      "GD01-100": 2,
+      "GD05-125": 4,
+    }),
+  },
+  {
+    // Tournament list (Limitless, "Other", 5th place, snapshot 2026-11-21): G-Self, Calibarn, First Contact.
+    id: "ACAX",
+    name: "Calibarn/G-Self (Turnierliste)",
+    colors: "Green/Red",
+    deck: list({
+      "ST13-009": 2,
+      "EB01-038": 4,
+      "GD05-025": 3,
+      "ST13-006": 3,
+      "GD05-022": 2,
+      "GD05-018": 3,
+      "ST13-012": 4,
+      "GD04-085": 2,
+      "GD05-111": 4,
+      "GD05-108": 4,
+      "GD03-109": 4,
+      "GD01-107": 3,
+      "GD05-110": 4,
+      "GD02-107": 2,
+      "GD04-109": 2,
+      "GD05-126": 4,
+    }),
+  },
 ];

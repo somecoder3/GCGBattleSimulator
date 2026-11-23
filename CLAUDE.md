@@ -429,6 +429,18 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
 - **KI-Versuche 23. Nov. (alle ohne Gewinn, abgeschaltet):** Link-Warten auf Hand/Deck (`linkWaitHand/Deck`),
   Angriff vor Einsetzen (`attackFirst`, 43,2 %), Chump-Block (`chumpBlockShields`), v1 mit gezogener Gegnerhand
   (`sampledOpponent`, 36,8 %). Schwächste Archetypen bei v1: M08/M11 (40,6 %). Details `docs/AI.md`.
+- **Ressourcen und EX Resources (23. Nov., Nutzerwunsch):** `src/ai/ramp.ts` liest Erzeuger (EX Resource/Resource
+  platzieren), EX-Nutzer (beim Platzieren, Verbrauchen, „using an EX Resource“) und Level-Ziele („Lv.7 or
+  higher“, AGE). Kombo-Graph mit Arten `ex`/`level` und `DeckPlan.ramp`, „Passt zu“ mit drei neuen Gruppen,
+  `Engine.condHolds`. KI-Regeln `ramp` (v0: Level-Punkte, Erzeuger zuerst, wenn das eine Handkarte freischaltet),
+  `exPay` (Zahlen mit EX Resource auf Wunsch, EX-Regel dann „hand“), `resourceValue` (v1-Bewertung): **alle
+  gleich stark** (v1 alle drei 50,1 %, 16 280 Spiele) → aus. `npm run ramp` (Level je Zug, EX durch Effekte,
+  Deck-Varianten `ST02+alt>neu` gegen ein festes `--field`, gepaart): Ramp-Decks liegen nur 0,2–0,7 Level vorn, jeder
+  Kartenplatz für Ressourcen (First Contact, Mutual Attraction, AGE Device, Re-GZ BWS) kostet eher Siege. Testdecks
+  `WINGX`, `AGEX`, `LBX`, `ACAX` (die letzten zwei echte Turnierlisten). `npm run ab -- --workers N` begrenzt die
+  Threads (Nutzer will bei Messungen höchstens 1/4 der CPU, 5 Threads). **Methode:** Spalten je Deck von
+  `ab --by-deck` streuen auch bei gleichen KIs um bis ±4,5 Punkte (gleiches Muster bei jedem Lauf mit gleichem Seed),
+  darum gegen „default gegen default“ lesen. Details `docs/AI.md` „Ressourcen und EX Resources“.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,

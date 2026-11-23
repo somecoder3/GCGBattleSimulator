@@ -7,8 +7,10 @@ import type { Filter } from "../effects/dsl";
 import { satisfiesLink } from "../engine/cardlib";
 import type { Engine } from "../engine/engine";
 import type { Action, CardId, Decision, DeckList, GameState, PlayerId } from "../engine/types";
+import { LIMITS } from "../engine/engine";
 import { HIDDEN } from "../engine/view";
 import { DEFAULT_MULLIGAN, keepHand } from "./mulligan";
+import { rampConds, rampIn, rampRole } from "./ramp";
 import { matchesCard, planFor, trashNeeds, type DeckPlan } from "./synergy";
 import type { Policy } from "./types";
 
@@ -138,6 +140,21 @@ export interface RuleOptions {
    * simulation counts even when the turn is better without it (see optionalPlay, docs/AI.md "Vorausschau").
    */
   forcedFiller?: boolean;
+  /**
+   * Resources and EX Resources (23 Nov 2026, user's wish; docs/AI.md "Ressourcen und EX Resources"): v0 values
+   * effects that place them (Wing Gundam Bird Mode, Re-GZ BWS, First Contact, Gundam Deathscythe GD01-025 …)
+   * by the level the own deck still wants (`rampWorth`), plays them first when that makes another hand card
+   * playable this turn, and plays ramp Commands in the main phase.
+   */
+  ramp?: boolean;
+  /**
+   * Paying with an EX Resource on purpose (`Action.ex`, Calibarn, Lfrith, GD04-106 …): v0 takes such an
+   * option when it does something (the card's "if you use an EX Resource", or an own card in play that
+   * reacts), and the EX rule only keeps it from stranding a Unit in the hand (rule "hand" instead of "deck").
+   */
+  exPay?: boolean;
+  /** v1/search evaluation values Resources and EX Resources (evaluate.ts `resources`). */
+  resourceValue?: boolean;
 }
 
 /** keepValue points less for a card the own deck wants in the trash (per DeckPlan.trashFuel, at most 1). */
@@ -207,8 +224,10 @@ export class HeuristicPolicy implements Policy {
     if (cmdLevel !== undefined && o.type === "playCommand" && me.resources.length >= cmdLevel) return true;
     if (this.exLink && o.type === "pair" && links(this.engine, s, o.unit, o.card)) return true;
     const after = me.resources.length - 1; // the level once it is used up
-    // Without the own deck list (tests, hand-built states) "deck" looks at the hand.
-    const rule = this.ex === "deck" && this.topLevel === undefined ? "hand" : this.ex;
+    // Without the own deck list (tests, hand-built states) "deck" looks at the hand. Paying with an EX
+    // Resource on purpose (exPay) only must not strand a Unit in the hand.
+    const deliberate = this.options.exPay && "ex" in o && !!o.ex && this.ex !== "never";
+    const rule = deliberate || (this.ex === "deck" && this.topLevel === undefined) ? "hand" : this.ex;
     switch (rule) {
       case "never":
         return false;
@@ -470,6 +489,12 @@ class Ctx {
   // Main phase
 
   mainScore(o: Action): number {
+    if ("ex" in o && o.ex) {
+      // Paying with an EX Resource on purpose: only better than the same option without it (exPay).
+      const { ex: _ex, ...plain } = o;
+      const base = this.mainScore(plain as Action);
+      return this.options.exPay && base > 0 && this.exPayHelps(o.card) ? base + 1 : base;
+    }
     const me = this.s.players[this.me];
     switch (o.type) {
       case "deployUnit": {
@@ -481,7 +506,7 @@ class Ctx {
           );
           // After the attacks (score 50+), before ending the main phase.
           if (this.options.attackFirst && !deployEffect) return 45 + value * 0.01;
-          return 100 + value;
+          return 100 + value + (this.options.ramp ? this.rampScore(o, "deploy") : 0);
         }
         const gain = card.ap + card.hp - this.unitValue(o.replace);
         return gain > 3 ? 60 + gain : -1;
@@ -492,7 +517,8 @@ class Ctx {
         // A Command with 【Pilot】 is usually better used as a Command unless it links.
         if (pilot.type === "COMMAND" && !link) return 20;
         if (!link && !this.options.pairAnyPilot && this.waitsForLink(o.card)) return -1;
-        return 90 + pilot.level * 10 + (link ? 30 : 0) + this.unitValue(o.unit) * 0.5;
+        const ramp = this.options.ramp ? this.rampScore(o, link ? "linked" : "paired") : 0;
+        return 90 + pilot.level * 10 + (link ? 30 : 0) + this.unitValue(o.unit) * 0.5 + ramp;
       }
       case "deployBase": {
         const gain = this.baseSwapGain(o.card);
@@ -530,6 +556,128 @@ class Ctx {
       default:
         return 0;
     }
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Resources and EX Resources (RuleOptions.ramp, exPay; docs/AI.md "Ressourcen und EX Resources")
+
+  /** Does paying this card with an EX Resource do something (its own condition, or an own card reacting)? */
+  exPayHelps(card: CardId): boolean {
+    if (rampRole(this.card(card)).exUses.includes("selfPaid")) return true;
+    return this.ownInPlay().some((x) => rampRole(this.card(x)).exUses.includes("spent"));
+  }
+
+  /** Own known Units, Bases and Pilots in play. */
+  ownInPlay(): CardId[] {
+    const me = this.s.players[this.me];
+    const out: CardId[] = [];
+    for (const id of [...me.battle, ...me.base]) {
+      if (this.known(id)) out.push(id);
+      const pilot = this.s.cards[id]!.pilot;
+      if (pilot !== null && this.known(pilot)) out.push(pilot);
+    }
+    return out;
+  }
+
+  /** The level the own deck wants (highest card or "Lv.N or higher"); without the list, the hand's best. */
+  goalLevel(): number {
+    if (this.options.ownDeck) return planFor(this.engine.lib, this.options.ownDeck).ramp.goal;
+    const hand = this.s.players[this.me].hand.filter((h) => this.known(h));
+    return Math.max(0, ...hand.map((h) => this.card(h).level));
+  }
+
+  /**
+   * Level points of placing `res` Resources and `ex` EX Resources now: 1 per Resource and 0.6 per EX
+   * Resource while the level is below the deck's goal (0.3 / 0.2 above it), plus a bonus for own cards
+   * that use EX Resources (in the deck, and more for those in play that react to placing one).
+   */
+  rampWorth(ex: number, res: number): number {
+    const me = this.s.players[this.me];
+    const goal = this.goalLevel();
+    let level = me.resources.length;
+    const exNow = me.resources.filter((id) => this.s.cards[id]!.token).length;
+    let v = 0;
+    for (let i = 0; i < res && level < LIMITS.resources; i++, level++) v += level < goal ? 1 : 0.3;
+    let placed = 0;
+    for (let i = 0; i < ex && level < LIMITS.resources && exNow + i < LIMITS.exResources; i++, level++) {
+      v += level < goal ? 0.6 : 0.2;
+      placed++;
+    }
+    if (!placed) return v;
+    if (this.options.ownDeck && planFor(this.engine.lib, this.options.ownDeck).ramp.exUsers.size)
+      v += 0.3 * placed;
+    const reacting = this.ownInPlay().filter((x) => rampRole(this.card(x)).exUses.includes("placed")).length;
+    return v + 0.5 * Math.min(3, reacting);
+  }
+
+  /**
+   * What an option places, by its effects of that kind (`when`): the card's 【Deploy】 or 【Main】, or for a
+   * pair the Unit's 【When Paired】 (also 【When Linked】 when it links; with the Pilot's qualification) and
+   * the Pilot's lines. Conditions are checked on the current state; one that can't be told counts half.
+   */
+  rampOf(
+    o: Action,
+    when: "deploy" | "main" | "paired" | "linked",
+  ): { ex: number; exActive: number; res: number } {
+    const out = { ex: 0, exActive: 0, res: 0 };
+    const add = (holder: CardId, granted: boolean, pilot?: CardId) => {
+      const card = this.card(holder);
+      for (const src of rampRole(card).sources) {
+        if (src.granted !== granted) continue;
+        if (src.when !== when && !(when === "linked" && src.when === "paired")) continue;
+        const compiled = (granted ? card.script.compiledGranted : card.script.compiled)[src.idx]!;
+        const effect = compiled.effect;
+        if (pilot !== undefined && effect.kind === "trigger" && effect.pilot) {
+          if (!matchesCard(this.card(pilot), effect.pilot)) continue;
+        }
+        let share = 1;
+        const conds = [...rampConds(compiled.program)];
+        if ("cond" in effect && effect.cond) conds.push(effect.cond);
+        for (const cond of conds) {
+          const holds = this.engine.condHolds(this.s, cond, holder, this.me);
+          if (holds === false) share = 0;
+          else if (holds === undefined) share *= 0.5;
+        }
+        const found = rampIn(compiled.program);
+        out.ex += found.ex * share;
+        out.exActive += found.exActive * share;
+        out.res += found.res * share;
+      }
+    };
+    if (o.type === "pair") {
+      add(o.unit, false, o.card);
+      add(o.card, true, o.card);
+    } else if ("card" in o) add(o.card, false);
+    return out;
+  }
+
+  /** Would another known hand card become playable this turn only thanks to the placed (EX) Resources? */
+  unlocks(o: Action, gain: { ex: number; exActive: number; res: number }): boolean {
+    const me = this.s.players[this.me];
+    const up = Math.floor(gain.ex) + Math.floor(gain.res);
+    if (!up) return false;
+    const level = me.resources.length;
+    const active = me.resources.filter((id) => !this.s.cards[id]!.rested).length;
+    const left = active - this.engine.resourceCost(this.s, this.me, o);
+    const exActive = Math.floor(gain.exActive);
+    const played = "card" in o ? o.card : undefined;
+    return me.hand.some((h) => {
+      if (h === played || !this.known(h)) return false;
+      const c = this.card(h);
+      if (c.type !== "UNIT" && c.type !== "BASE" && c.type !== "COMMAND") return false;
+      const before = c.level <= level && c.cost <= left;
+      const after = c.level <= level + up && c.cost <= left + exActive;
+      return !before && after;
+    });
+  }
+
+  /** Points for an option that places Resources: 10 per level point (rampWorth), +40 if it unlocks a card. */
+  rampScore(o: Action, when: "deploy" | "main" | "paired" | "linked"): number {
+    const gain = this.rampOf(o, when);
+    const total = gain.ex + gain.res;
+    if (total <= 0) return 0;
+    const worth = this.rampWorth(Math.ceil(gain.ex), Math.ceil(gain.res)) * Math.min(1, total);
+    return worth * 10 + (this.unlocks(o, gain) ? 40 : 0);
   }
 
   /** Shields a Base's 【Deploy】 moves to the hand ("Add 1 of your Shields to your hand"). */
@@ -660,6 +808,12 @@ class Ctx {
     if (best > 0) return best;
     if (!neutral) return -1;
     this.neutralCommand = true;
+    if (this.options.ramp) {
+      // A Command that places Resources (First Contact, Battlefield Emotions, AGE Device): before ending
+      // the main phase while the deck still climbs, first if it makes another card playable now.
+      const ramp = this.rampScore({ type: "playCommand", card: id }, "main");
+      if (ramp >= 5) return 95 + ramp;
+    }
     // Drawing is urgent with a small hand (first, for more choices this turn), or with no Unit in play
     // and none to deploy (to find one to defend with).
     const draws = program.some((i) => i.op === "draw");
@@ -834,6 +988,11 @@ class Ctx {
 
   /** Uses Commands and activated effects whenever it can; passing is the fallback. */
   actionScore(o: Action): number {
+    if ("ex" in o && o.ex) {
+      const { ex: _ex, ...plain } = o;
+      const base = this.actionScore(plain as Action);
+      return this.options.exPay && base > 0 && this.exPayHelps(o.card) ? base + 1 : base;
+    }
     if (o.type === "playCommand") {
       const play = this.options.eagerCommands || this.commandMatters(o.card);
       return play ? 50 + this.card(o.card).level : 0;

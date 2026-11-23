@@ -6,12 +6,16 @@
 // trash. Links between Units and Pilots of the deck are relations as well. Generic filters ("1 of your
 // Units") are left out: every card matches them, they say nothing about the deck.
 //
+// Resources (src/ai/ramp.ts): cards that use EX Resources want the deck's EX Resource makers ("ex"), cards
+// with "Lv.N or higher" want everything that places Resources or EX Resources ("level").
+//
 // The relations are static (deck list only) and feed the AI's card values (DeckPlan).
 
 import type { Filter } from "../effects/dsl";
 import type { CardLib, EngineCard } from "../engine/cardlib";
 import { satisfiesLink } from "../engine/cardlib";
 import type { DeckList } from "../engine/types";
+import { makesEx, makesResource, rampRole, type ExUse } from "./ramp";
 
 export type SynergyZone =
   "trash" | "hand" | "battle" | "field" | "pilots" | "base" | "shieldArea" | "resources";
@@ -19,11 +23,14 @@ export type SynergyZone =
 export interface Synergy {
   /** The card whose effect looks for the others. */
   source: string;
-  kind: "zone" | "link";
-  /** Where the effect looks (for links: the Pilot pairs with the Unit). */
+  kind: "zone" | "link" | "ex" | "level";
+  /** Where the effect looks (for links: the Pilot pairs with the Unit; "ex"/"level": "resources"). */
   zone: SynergyZone | "link";
-  /** How the effect uses them: counts them (condition), chooses them, checks a chosen card, or links. */
-  use: "count" | "choose" | "match" | "link";
+  /**
+   * How the effect uses them: counts them (condition), chooses them, checks a chosen card, links, uses the
+   * EX Resources they place ("ex") or needs the level they raise ("level").
+   */
+  use: "count" | "choose" | "match" | "link" | "ex" | "level";
   /** Cards of the deck that match, with their copies. */
   matches: Map<string, number>;
   /** Short description of the filter, for the report. */
@@ -178,9 +185,35 @@ export function deckSynergies(lib: CardLib, deck: DeckList, granted = false): Sy
       if (matches.size)
         out.push({ source: card.no, kind: "link", zone: "link", use: "link", matches, label, need: 1 });
     }
+    const role = rampRole(card);
+    if (role.exUses.length) {
+      const matches = new Map<string, number>();
+      for (const other of cards) if (makesEx(other)) matches.set(other.no, counts.get(other.no)!);
+      const label = `EX Resource (${role.exUses.map((u) => EX_USE[u]).join(", ")})`;
+      if (matches.size)
+        out.push({ source: card.no, kind: "ex", zone: "resources", use: "ex", matches, label, need: 1 });
+    }
+    if (role.levelGoal !== undefined) {
+      const matches = new Map<string, number>();
+      for (const other of cards)
+        if (makesEx(other) || makesResource(other)) matches.set(other.no, counts.get(other.no)!);
+      const label = `Lv.${role.levelGoal}+`;
+      if (matches.size)
+        out.push({
+          source: card.no,
+          kind: "level",
+          zone: "resources",
+          use: "level",
+          matches,
+          label,
+          need: 1,
+        });
+    }
   }
   return out;
 }
+
+const EX_USE: Record<ExUse, string> = { placed: "platziert", spent: "verbraucht", selfPaid: "zum Bezahlen" };
 
 /**
  * What the AI takes from the relations: how much a card is worth in the trash for this deck (fuel for
@@ -195,6 +228,38 @@ export interface DeckPlan {
   synergies: Synergy[];
   /** Copies per card number in the deck list. */
   counts: Map<string, number>;
+  /** Resources and EX Resources of the deck (src/ai/ramp.ts). */
+  ramp: RampPlan;
+}
+
+/**
+ * What the deck does with Resources: copies of cards that place EX Resources / Resources, cards that use EX
+ * Resources, and the level the deck wants to reach (`goal`: its highest card or "Lv.N or higher" condition).
+ */
+export interface RampPlan {
+  exMakers: number;
+  resMakers: number;
+  /** Card numbers whose effects use EX Resources (placed, spent, to pay). */
+  exUsers: Set<string>;
+  /** Highest Lv. of a card in the deck, or of a "Lv.N or higher" condition, whichever is higher. */
+  goal: number;
+  /** Highest Lv. of a Unit in the deck (0 without Units). */
+  topUnit: number;
+}
+
+export function rampPlan(lib: CardLib, deck: DeckList): RampPlan {
+  const plan: RampPlan = { exMakers: 0, resMakers: 0, exUsers: new Set(), goal: 0, topUnit: 0 };
+  for (const [no, n] of deckCounts(deck)) {
+    if (!lib.has(no)) continue;
+    const card = lib.get(no);
+    const role = rampRole(card);
+    if (makesEx(card)) plan.exMakers += n;
+    if (makesResource(card)) plan.resMakers += n;
+    if (role.exUses.length) plan.exUsers.add(no);
+    plan.goal = Math.max(plan.goal, card.level, role.levelGoal ?? 0);
+    if (card.type === "UNIT") plan.topUnit = Math.max(plan.topUnit, card.level);
+  }
+  return plan;
 }
 
 /**
@@ -240,7 +305,7 @@ export function deckPlan(lib: CardLib, deck: DeckList, granted = false): DeckPla
       trashFuel.set(no, (trashFuel.get(no) ?? 0) + sourceCopies / Math.max(total, 1));
     }
   }
-  return { trashFuel, linksTo, synergies, counts };
+  return { trashFuel, linksTo, synergies, counts, ramp: rampPlan(lib, deck) };
 }
 
 const plans = new WeakMap<DeckList, DeckPlan>();
