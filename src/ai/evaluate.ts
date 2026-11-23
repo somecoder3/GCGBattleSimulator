@@ -4,7 +4,7 @@
 import type { Engine } from "../engine/engine";
 import { other } from "../engine/engine";
 import type { CardId, GameState, PlayerId } from "../engine/types";
-import { trashNeeds, type DeckPlan } from "./synergy";
+import { trashNeeds, type DeckPlan, type RampPlan } from "./synergy";
 
 export interface Weights {
   win: number;
@@ -34,6 +34,15 @@ export interface Weights {
   fuel: number;
   /** Per Unit in play that is linked (its 【During Link】 effects and link bonuses last beyond the horizon). */
   linked: number;
+  /**
+   * Resources (ComboKnowledge.ramp): per Resource up to the level the deck wants (`RampPlan.goal`), per
+   * Resource above it, per EX Resource (on top of counting as a Resource), and per EX Resource while the own
+   * deck has cards that use them.
+   */
+  resource: number;
+  resourceOver: number;
+  exResource: number;
+  exUser: number;
 }
 
 export const DEFAULT_WEIGHTS: Weights = {
@@ -59,7 +68,14 @@ export const DEFAULT_WEIGHTS: Weights = {
   deckLow: 3,
   fuel: 1,
   linked: 1.5,
+  resource: 1.5,
+  resourceOver: 0.3,
+  exResource: -0.5,
+  exUser: 0.5,
 };
+
+/** The level an opponent's deck is assumed to want (its list is unknown to the AI). */
+export const ENEMY_GOAL = 7;
 
 /** Combo knowledge of the evaluation (docs/AI.md "Kombos"); experiments, off by default (not better). */
 export interface ComboKnowledge {
@@ -69,6 +85,8 @@ export interface ComboKnowledge {
   trashAware?: boolean;
   /** Value linked Units (both players). */
   links?: boolean;
+  /** Value Resources and EX Resources (both players; the own deck's plan, ENEMY_GOAL for the opponent). */
+  ramp?: RampPlan;
 }
 
 export class Evaluator {
@@ -108,6 +126,8 @@ export class Evaluator {
       for (const id of player.trash) v += Math.min(1, plan.trashFuel.get(s.cards[id]!.no) ?? 0) * w.fuel;
     }
 
+    if (this.combo.ramp) v += this.resources(s, p, own);
+
     // Units that will stay rested while the enemy can attack them are worth less: the active player's
     // rested Units face all enemy Units next turn, the other player's rested Units face the active
     // player's Units that are still active now.
@@ -128,6 +148,23 @@ export class Evaluator {
       const attackers = player.battle.filter((id) => this.engine.ap(s, id) > 0).length;
       v += Math.max(0, attackers - blockers) * w.lethalPressure;
     }
+    return v;
+  }
+
+  /**
+   * Resources below the deck's goal level are worth more than above it (they let higher cards come sooner);
+   * an EX Resource counts as one and is gone once used to pay, so `exResource` is usually negative.
+   */
+  private resources(s: GameState, p: PlayerId, own: boolean): number {
+    const w = this.w;
+    const plan = this.combo.ramp!;
+    const goal = own ? plan.goal : ENEMY_GOAL;
+    const all = s.players[p].resources;
+    let ex = 0;
+    for (const id of all) if (s.cards[id]!.token) ex++;
+    const n = all.length;
+    let v = Math.min(n, goal) * w.resource + Math.max(0, n - goal) * w.resourceOver + ex * w.exResource;
+    if (own && plan.exUsers.size) v += ex * w.exUser;
     return v;
   }
 

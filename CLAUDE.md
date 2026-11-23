@@ -429,6 +429,23 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
 - **KI-Versuche 23. Nov. (alle ohne Gewinn, abgeschaltet):** Link-Warten auf Hand/Deck (`linkWaitHand/Deck`),
   Angriff vor Einsetzen (`attackFirst`, 43,2 %), Chump-Block (`chumpBlockShields`), v1 mit gezogener Gegnerhand
   (`sampledOpponent`, 36,8 %). Schwächste Archetypen bei v1: M08/M11 (40,6 %). Details `docs/AI.md`.
+- **Ressourcen und EX Resources (23. Nov., Nutzerwunsch):** `src/ai/ramp.ts` liest Erzeuger (EX Resource/Resource
+  platzieren), EX-Nutzer (beim Platzieren, Verbrauchen, „using an EX Resource“) und Level-Ziele („Lv.7 or
+  higher“, AGE). Kombo-Graph mit Arten `ex`/`level` und `DeckPlan.ramp`, „Passt zu“ mit drei neuen Gruppen,
+  `Engine.condHolds`. KI-Regeln `ramp` (v0: Level-Punkte, Erzeuger zuerst, wenn das eine Handkarte freischaltet),
+  `exPay` (Zahlen mit EX Resource auf Wunsch, EX-Regel dann „hand“), `resourceValue` (v1-Bewertung): **alle
+  gleich stark** (v1 alle drei 50,1 %, 16 280 Spiele) → aus. `npm run ramp` (Level je Zug, EX durch Effekte,
+  Deck-Varianten `ST02+alt>neu` gegen ein festes `--field`, gepaart): Ramp-Decks liegen nur 0,2–0,7 Level vorn, jeder
+  Kartenplatz für Ressourcen (First Contact, Mutual Attraction, AGE Device, Re-GZ BWS) kostet eher Siege. Testdecks
+  `WINGX`, `AGEX`, `LBX`, `ACAX` (die letzten zwei echte Turnierlisten). `npm run ab -- --workers N` begrenzt die
+  Threads (Nutzer will bei Messungen höchstens 1/4 der CPU, 5 Threads). **Methode:** Spalten je Deck von
+  `ab --by-deck` streuen auch bei gleichen KIs um bis ±4,5 Punkte (gleiches Muster bei jedem Lauf mit gleichem Seed),
+  darum gegen „default gegen default“ lesen. Details `docs/AI.md` „Ressourcen und EX Resources“.
+  - Nachtrag (Nutzerfrage): **ST14 ohne Ressourcen-Karten** (Duel Gundam AS → Rick Dias, Battlefield Emotions →
+    Overflowing Affection; Testdeck `ST14X`) gegen Starter 50,3 → 67,8 %, gegen Meta M01–M06 9,4 → 17,3 % (v1,
+    bestätigt mit neuem Seed). **ST02** gewinnt mit Rick Dom/Strike Rouge statt Bird Mode etwa +3,5 Punkte, verliert
+    aber genauso viel, weil ein geänderter ST02 nur 2× Corsica Base spielen darf → Original gleich gut.
+    `npm run ramp` tauscht auch n Kopien (`alt>neu:n`) und prüft die Bannliste.
 - **Calibarn-Deck (23. Nov., Nutzerwunsch):** Deck-Labor kann eigene Listen (`--file`, `adds`, `keep`; auch
   `npm run game -- … --file`). 19 Listen in `data/decklab/calibarn.json` (4 echte von Limitless/ExBurst, eigene
   Entwürfe). Beste: **CAL7** (Academy Burn V2 von ExBurst mit früherer Kurve), v1 ≈ 37 % gegen das Feld, Suche

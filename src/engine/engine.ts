@@ -54,7 +54,7 @@ import {
 import { answer, canStart, chooseOrder, effectDraw, startEffect, stepFrame } from "./interpret";
 import type { Program } from "../effects/compile";
 import { seedRng, shuffle } from "./rng";
-import type { Effect } from "../effects/dsl";
+import type { Cond, Effect } from "../effects/dsl";
 import type {
   Action,
   CardId,
@@ -189,6 +189,19 @@ export class Engine {
   }
   level(state: GameState, p: PlayerId): number {
     return state.players[p].resources.length;
+  }
+  /**
+   * Does a condition of an effect hold now (for the AI: "If there are 2 or more (Londo Bell) cards in your
+   * trash, place 1 EX Resource")? undefined if it can't be told outside a running effect (variables) or
+   * on the view (hidden cards).
+   */
+  condHolds(state: GameState, cond: Cond, source: CardId, controller: PlayerId): boolean | undefined {
+    if (JSON.stringify(cond).includes('"var')) return undefined;
+    try {
+      return evalCond(newCtx(this.lib, state), cond, source, controller);
+    } catch {
+      return undefined;
+    }
   }
   /** Resources a main/action option rests to pay its cost (0 for options without a Resource cost). */
   resourceCost(state: GameState, p: PlayerId, action: Action): number {

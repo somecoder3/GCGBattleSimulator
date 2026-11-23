@@ -19,16 +19,29 @@ const chosen =
         return d;
       });
 const name = (no: string) => lib.get(no).name;
-const USE = { count: "zählt", choose: "wählt", match: "prüft auf", link: "linkt mit" };
+const USE = {
+  count: "zählt",
+  choose: "wählt",
+  match: "prüft auf",
+  link: "linkt mit",
+  ex: "nutzt",
+  level: "braucht",
+};
 for (const d of chosen) {
   const plan = deckPlan(lib, d.deck);
   console.log(`\n${d.id} ${d.name}`);
   for (const s of plan.synergies) {
     const total = [...s.matches.values()].reduce((a, b) => a + b, 0);
-    const where = s.zone === "link" ? "" : ` in ${s.zone}`;
+    const where =
+      s.zone === "link" ? "" : s.kind === "ex" ? " von" : s.kind === "level" ? ", Erzeuger" : ` in ${s.zone}`;
     const list = [...s.matches].map(([no, n]) => `${n}× ${name(no)}`).join(", ");
     console.log(`  ${name(s.source)} ${USE[s.use]} ${s.label}${where}: ${total} Karten (${list})`);
   }
+  const r = plan.ramp;
+  if (r.exMakers || r.resMakers || r.exUsers.size)
+    console.log(
+      `  Ressourcen: ${r.exMakers} Karten mit EX Resource, ${r.resMakers} mit Resource, ${r.exUsers.size} Sorten nutzen EX; Ziel Lv.${r.goal} (höchste Unit Lv.${r.topUnit})`,
+    );
   const fuel = [...plan.trashFuel].sort((a, b) => b[1] - a[1]);
   if (fuel.length)
     console.log(`  Im Trash nützlich: ${fuel.map(([no, v]) => `${name(no)} ${v.toFixed(2)}`).join(", ")}`);

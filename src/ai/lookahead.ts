@@ -153,5 +153,11 @@ export function comboKnowledge(engine: Engine, rules: RuleOptions): ComboKnowled
     rules.ownDeck && (rules.comboFuel || rules.trashValue)
       ? planFor(engine.lib, rules.ownDeck, !!rules.grantedPlan)
       : undefined;
-  return { ...(plan ? { plan } : {}), links: !!rules.linkValue, trashAware: !!rules.trashValue };
+  const ramp = rules.ownDeck && rules.resourceValue ? planFor(engine.lib, rules.ownDeck).ramp : undefined;
+  return {
+    ...(plan ? { plan } : {}),
+    ...(ramp ? { ramp } : {}),
+    links: !!rules.linkValue,
+    trashAware: !!rules.trashValue,
+  };
 }

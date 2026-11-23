@@ -8,6 +8,7 @@
 //
 // Shown in the card detail of the Cards tab and the deck builder, not in the game.
 
+import { makesEx, makesResource, rampRole } from "../../ai/ramp";
 import { cardCombos, matchesCard, type CardCombo } from "../../ai/synergy";
 import type { CardLib, EngineCard } from "../../engine/cardlib";
 import { satisfiesLink } from "../../engine/cardlib";
@@ -187,6 +188,27 @@ export function partners(lib: CardLib, no: string, options: PartnerOptions = {})
     if (!narrow(lib, combo)) continue;
     const cards = pool.filter((c) => matchesCard(c, combo.filter)).map((c) => ({ no: c.no }));
     if (cards.length) groups.push({ kind: "wants", title: comboText(combo), cards: cards.sort(rank) });
+  }
+
+  // Resources (ai/ramp.ts): EX Resource users want the makers, "Lv.N or higher" wants all Resource makers.
+  const role = rampRole(card);
+  if (role.exUses.length) {
+    const cards = pool.filter(makesEx).map((c) => ({ no: c.no }));
+    if (cards.length)
+      groups.push({ kind: "wants", title: "Platzieren EX Resources", cards: cards.sort(rank) });
+  }
+  if (role.levelGoal !== undefined) {
+    const cards = pool.filter((c) => makesEx(c) || makesResource(c)).map((c) => ({ no: c.no }));
+    if (cards.length)
+      groups.push({
+        kind: "wants",
+        title: `Bringen schneller Lv.${role.levelGoal} (Resources/EX Resources)`,
+        cards: cards.sort(rank),
+      });
+  }
+  if (makesEx(card)) {
+    const cards = pool.filter((c) => rampRole(c).exUses.length > 0).map((c) => ({ no: c.no }));
+    if (cards.length) groups.push({ kind: "wanted", title: "Nutzen EX Resources", cards: cards.sort(rank) });
   }
 
   // Cards whose effects look for this card.

@@ -5,6 +5,7 @@
 //   npm run ab -- --ai v1 --a default --b mulligan-basic
 //   npm run ab -- --ai v0 --a default --b plain-rest --by-deck   also the share of A per deck of A
 //   npm run ab -- --ai v1 --b plain-fights --decks ST12,ST12X,ST01,ST02   starter decks and test lists
+//   npm run ab -- --a ramp --b default --workers 5                      fewer threads (machine in use)
 
 import { availableParallelism } from "node:os";
 import { parseArgs } from "node:util";
@@ -78,6 +79,11 @@ const VARIANTS: Record<string, { mulligan?: MulliganRule; rules?: RuleOptions }>
   "ex-cmd8": { rules: { ex: "deck", exLink: true, exCommandLevel: 8 } },
   "ex-cmd9": { rules: { ex: "deck", exLink: true, exCommandLevel: 9 } },
   "plain-fights": { rules: { plainFights: true } },
+  // Resources and EX Resources (23 Nov 2026, docs/AI.md "Ressourcen und EX Resources").
+  ramp: { rules: { ramp: true } },
+  "ex-pay": { rules: { exPay: true } },
+  "resource-value": { rules: { resourceValue: true } },
+  "ramp-all": { rules: { ramp: true, exPay: true, resourceValue: true } },
   "mulligan-basic": { mulligan: "basic" },
   "mulligan-never": { mulligan: "never" },
 };
@@ -92,6 +98,8 @@ const { values: args } = parseArgs({
     decks: { type: "string", default: "8" },
     "by-deck": { type: "boolean", default: false },
     list: { type: "string", default: "consensus" },
+    /** Worker threads (default: all cores but one). */
+    workers: { type: "string" },
   },
 });
 const a = VARIANTS[args.a];
@@ -122,7 +130,8 @@ const job: SimJob = {
   games: fullRounds({ decks }, Number(args.games)),
   seed: Number(args.seed),
 };
-const workers = Array.from({ length: Math.max(1, availableParallelism() - 1) }, threadWorker);
+const threads = args.workers ? Number(args.workers) : Math.max(1, availableParallelism() - 1);
+const workers = Array.from({ length: threads }, threadWorker);
 const started = performance.now();
 const games = await runPool(job, workers, {
   onProgress: (done, total) => process.stderr.write(`\r${done}/${total} Spiele   `),
