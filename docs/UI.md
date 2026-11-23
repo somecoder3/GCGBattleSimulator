@@ -97,8 +97,8 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
 - **Zerstörung** (`blasts`): An der Stelle jeder zerstörten Karte ein kurzer Blitz mit Ring und Funken (gelesen
   aus dem DOM, bevor das Feld sich ändert), zusätzlich zum Ausblenden.
 - **Trash:** Die Engine legt neue Karten vorn in die Liste (`moveTo`, Position `top`), die erste ist die neueste.
-  Der Stapel zeigt `trash[0]`, der Dialog die Liste in dieser Reihenfolge (vorher zeigten beide die älteste
-  Karte zuerst; Test `tests/engine/trashorder.test.ts`).
+  Der Stapel zeigt `trash[0]` (vorher die älteste Karte; Test `tests/engine/trashorder.test.ts`). Der Dialog
+  bleibt umgedreht: älteste links, neueste rechts (Nutzer, wie man liest).
 
 ## Bedienung, Keywords, Links (Nutzerwunsch 20. Nov.)
 

@@ -1679,7 +1679,7 @@
 
     <!-- The trash in its own dialog over the field, so the detail panel stays free for the hovered card. -->
     {#if showTrash !== null}
-      {@const trash = view.players[showTrash].trash}
+      {@const trash = [...view.players[showTrash].trash].reverse()}
       <div class="trash-layer" transition:fade={{ duration: 150 }}>
         <button class="trash-backdrop" aria-label="Trash schließen" onclick={() => (showTrash = null)}
         ></button>

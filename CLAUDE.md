@@ -453,7 +453,7 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
 - **Spielfeld 23. Nov. (Nutzerwünsche):** Commands erscheinen im Spotlight zwischen Hand und Battle Area, zeigen
   mit lila Pfeilen auf ihre Ziele (Feld bleibt so lange auf dem Stand davor, alle warten) und fliegen dann zum
   Trash bzw. zur Unit; zerstörte Karten zeigen einen Blitz. Trash-Stapel zeigt jetzt die neueste Karte (`trash[0]`,
-  die Engine legt vorn ab; vorher die älteste), Dialog neueste zuerst. Details `docs/UI.md`.
+  die Engine legt vorn ab; vorher die älteste), Dialog weiter älteste links, neueste rechts. Details `docs/UI.md`.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,
