@@ -1689,7 +1689,7 @@
               Trash {showTrash === human ? "(du)" : "(KI)"} · {trash.length}
               {trash.length === 1 ? "Karte" : "Karten"}
             </h3>
-            <span class="hint">neueste zuerst · Überfahren zeigt das Detail, Klick hält es fest</span>
+            <span class="hint">älteste zuerst · Überfahren zeigt das Detail, Klick hält es fest</span>
             <button class="btn ghost small" onclick={() => (showTrash = null)} aria-label="Schließen"
               >✕</button
             >
