@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { flip } from "svelte/animate";
   import { crossfade, fade, fly } from "svelte/transition";
   import { cardImageUrl } from "../../../data/cards";
@@ -266,7 +266,198 @@
     later(3500, () => (exportNote = undefined));
   }
 
+  // Commands in the spotlight (user's wish, 23 Nov 2026: a Unit destroyed by an enemy Command went by
+  // unnoticed): a played Command shows in the middle of its player's side (between hand and battle area)
+  // while it resolves; when it is done it points at the cards it changed on the board as it was before,
+  // then the board moves on and the Command flies to the trash (or to the Unit it pairs with).
+  type Spot = {
+    id: CardId;
+    card: CardDef;
+    owner: PlayerId;
+    targets: CardId[];
+    leaving: boolean;
+    dest: "trash" | CardId;
+    n: number;
+  };
+  let spot = $state.raw<Spot | null>(null);
+  /** The board still shows the state before the last step (the Command points at its targets). */
+  let holding = $state(false);
+  /** Where the spotlight card stands and where it flies, in board coordinates. */
+  let spotAt = $state<{ x: number; y: number; dx: number; dy: number } | null>(null);
+  let spotN = 0;
+  const SPOT_HOLD_AI = 1300;
+  const SPOT_HOLD_HUMAN = 800;
+  const SPOT_LEAVE = 520;
+  /** Steps of the session already shown (the spotlight looks at the new ones). */
+  let processed = -1;
+
+  // Destroyed cards burst where they stood (user's wish: always a small animation).
+  type Blast = { key: number; x: number; y: number; w: number; h: number };
+  let blasts = $state.raw<Blast[]>([]);
+
+  const isCommand = (id: CardId) => {
+    const no = session.state.cards[id]?.no;
+    return !!no && pool.get(no)?.type === "COMMAND";
+  };
+
+  /** Follows the Command of the new steps: still resolving, done (with targets and destination) or none. */
+  function followCommand(fresh: LogStep[]): (Spot & { resolved: boolean }) | null {
+    let cur = spot && !spot.leaving ? { ...spot, targets: [...spot.targets], resolved: false } : null;
+    for (const st of fresh) {
+      for (const e of st.events) {
+        if (e.t === "play" && isCommand(e.card)) {
+          const card = pool.get(session.state.cards[e.card]!.no)!;
+          cur = {
+            id: e.card,
+            card,
+            owner: e.player,
+            targets: [],
+            leaving: false,
+            dest: "trash",
+            n: ++spotN,
+            resolved: false,
+          };
+          continue;
+        }
+        if (!cur) continue;
+        if (e.t === "pair" && e.card === cur.id) {
+          cur.dest = e.unit;
+          cur.resolved = true;
+          continue;
+        }
+        if (cur.resolved) continue;
+        if (e.t === "toTrash" && e.card === cur.id) {
+          cur.resolved = true;
+          continue;
+        }
+        const target =
+          e.t === "damage" ||
+          e.t === "destroyed" ||
+          e.t === "rest" ||
+          e.t === "modifier" ||
+          e.t === "recover" ||
+          e.t === "toHand" ||
+          e.t === "toDeck"
+            ? e.card
+            : null;
+        const zone = target !== null ? view.cards[target]?.zone : undefined;
+        if (target !== null && target !== cur.id && (zone === "battle" || zone === "base"))
+          if (!cur.targets.includes(target)) cur.targets.push(target);
+      }
+    }
+    return cur;
+  }
+
+  /** The spotlight's place: middle of the owner's side between hand and battle area; and the way to its goal. */
+  function placeSpot(sp: Spot) {
+    if (!boardEl) return;
+    const box = boardEl.getBoundingClientRect();
+    const mat = boardEl.querySelector(sp.owner === human ? ".mat.mine" : ".mat:not(.mine)");
+    const battle = mat?.querySelector(".battlezone")?.getBoundingClientRect();
+    const hand =
+      sp.owner === human
+        ? boardEl.querySelector(".hand")?.getBoundingClientRect()
+        : boardEl.querySelector(".enemy-plate")?.getBoundingClientRect();
+    const x = battle ? battle.left + battle.width / 2 - box.left : box.width / 2;
+    let y = box.height / 2;
+    if (battle && hand)
+      y =
+        sp.owner === human
+          ? (battle.bottom + hand.top) / 2 - box.top
+          : (hand.bottom + battle.top) / 2 - box.top;
+    // The whole card stays on the board (its size as in the CSS of .spot).
+    const w = Math.min(140, Math.max(84, innerWidth * 0.09));
+    const half = (w * 837) / 600 / 2 + 6;
+    y = Math.max(half, Math.min(y, box.height - half));
+    const goal =
+      sp.dest === "trash"
+        ? boardEl.querySelector(`[data-trash="${sp.owner}"]`)
+        : boardEl.querySelector(`[data-card="${sp.dest}"]`);
+    const g = goal?.getBoundingClientRect();
+    spotAt = {
+      x,
+      y,
+      dx: g ? g.left + g.width / 2 - box.left - x : 0,
+      dy: g ? g.top + g.height / 2 - box.top - y : 0,
+    };
+  }
+
+  /** Bursts at the places of cards that are destroyed by the new steps (read before the board changes). */
+  function blastsFor(fresh: LogStep[]) {
+    if (!boardEl) return;
+    const box = boardEl.getBoundingClientRect();
+    const next: Blast[] = [];
+    for (const st of fresh)
+      for (const e of st.events) {
+        if (e.t !== "destroyed") continue;
+        const r = boardEl.querySelector(`[data-card="${e.card}"]`)?.getBoundingClientRect();
+        if (r)
+          next.push({ key: ++effectN, x: r.left - box.left, y: r.top - box.top, w: r.width, h: r.height });
+      }
+    if (!next.length) return;
+    blasts = [...blasts, ...next];
+    const keys = new Set(next.map((b) => b.key));
+    later(900, () => (blasts = blasts.filter((b) => !keys.has(b.key))));
+  }
+
   function refresh(step?: LogStep) {
+    const all = session.steps;
+    // First call (also each step of a replay, which builds the board anew) and rollbacks: nothing to animate.
+    if (processed < 0 || all.length < processed) {
+      processed = all.length;
+      spot = null;
+      holding = false;
+      return commit(step);
+    }
+    const fresh = all.slice(processed);
+    processed = all.length;
+    const cmd = fresh.length ? followCommand(fresh) : null;
+    if (!cmd) {
+      blastsFor(fresh);
+      return commit(step);
+    }
+    const sp: Spot = {
+      id: cmd.id,
+      card: cmd.card,
+      owner: cmd.owner,
+      targets: cmd.targets,
+      leaving: false,
+      dest: cmd.dest,
+      n: cmd.n,
+    };
+    spot = sp;
+    if (cmd.resolved && cmd.targets.length) {
+      // Point at the targets on the board as it was, then show what happened.
+      holding = true;
+      void tick().then(() => placeSpot(sp));
+      later(cmd.owner === human ? SPOT_HOLD_HUMAN : SPOT_HOLD_AI, () => {
+        blastsFor(fresh);
+        holding = false;
+        commit(step);
+        leave(sp);
+      });
+      return;
+    }
+    blastsFor(fresh);
+    commit(step);
+    void tick().then(() => placeSpot(sp));
+    // Without targets on the board (drawing …): shown a moment, then to the trash.
+    if (cmd.resolved) later(cmd.owner === human ? 450 : 900, () => leave(sp));
+  }
+
+  function leave(sp: Spot) {
+    if (spot?.n !== sp.n) return;
+    void tick().then(() => {
+      if (spot?.n !== sp.n) return;
+      placeSpot(sp);
+      spot = { ...sp, leaving: true };
+      later(SPOT_LEAVE, () => {
+        if (spot?.n === sp.n) spot = null;
+      });
+    });
+  }
+
+  function commit(step?: LogStep) {
     view = session.view();
     lines = [
       ...(session.setup.start ? describeStart(session.setup.start, human) : []),
@@ -321,7 +512,7 @@
 
   let boardEl = $state<HTMLElement>();
   let size = $state({ w: 0, h: 0 });
-  type Arrow = { key: string; d: string; kind: "battle" | "aim"; x: number; y: number };
+  type Arrow = { key: string; d: string; kind: "battle" | "aim" | "effect"; x: number; y: number };
   let arrows = $state.raw<Arrow[]>([]);
   /** Where the menu of the selected card floats: its top left corner in board coordinates. */
   let menuAt = $state<{ x: number; y: number } | null>(null);
@@ -369,6 +560,16 @@
       if (from && to) {
         const { d, mid } = arrowPath(from, to);
         list.push({ key: `b${b.attacker}`, d, kind: "battle", x: mid.x, y: mid.y });
+      }
+    }
+    if (spot && !spot.leaving && spot.targets.length) {
+      const from = centerOf(boardEl.querySelector("[data-spot]"), box);
+      for (const t of spot.targets) {
+        const to = centerOf(card(t), box);
+        if (from && to) {
+          const { d, mid } = arrowPath(from, to);
+          list.push({ key: `e${spot.n}-${t}`, d, kind: "effect", x: mid.x, y: mid.y });
+        }
       }
     }
     if (selected !== null) {
@@ -420,7 +621,7 @@
   }
 
   $effect(() => {
-    void [view, selected, hovered, aimPlayer, drag?.over, menuEl, menuMin, announced];
+    void [view, selected, hovered, aimPlayer, drag?.over, menuEl, menuMin, announced, spot, spotAt];
     placeArrows();
     // Cards move with an animation (flip, rest): place again when they have settled.
     const t = setTimeout(placeArrows, 360);
@@ -470,6 +671,8 @@
     // While destroyed Shields are shown, nobody acts: neither the AI nor the autopilot nor automatic passes
     // (user's wish, 21 Nov 2026). The overlay closes after 2.8 s or with a click; then the game goes on.
     if (revealed.length) return;
+    // A Command points at its targets: everybody waits until the board shows what happened.
+    if (holding || spot?.leaving) return;
     if (autopilot && !session.over && session.state.pending?.player === human) {
       // The autopilot also closes the cards put under the deck after a moment.
       if (under.length) {
@@ -516,7 +719,7 @@
   });
 
   const decision = $derived(
-    !replay && !autopilot && view.pending && view.pending.player === human ? view.pending : null,
+    !replay && !autopilot && !holding && view.pending && view.pending.player === human ? view.pending : null,
   );
   // The game is over: the autopilot stops.
   $effect(() => {
@@ -953,7 +1156,8 @@
 
 {#snippet mat(p: PlayerId)}
   {@const player = view.players[p]}
-  {@const top = player.trash.length ? def(player.trash[player.trash.length - 1]!) : undefined}
+  <!-- The engine puts new cards at the front of the trash (moveTo, position "top"): the first one is the newest. -->
+  {@const top = player.trash.length ? def(player.trash[0]!) : undefined}
   <div
     class="mat"
     class:mine={p === human}
@@ -1084,6 +1288,7 @@
       </div>
       <button
         class="pile"
+        data-trash={p}
         class:open={showTrash === p}
         onclick={() => (showTrash = showTrash === p ? null : p)}
         title="Trash ansehen ({player.trash.length})"
@@ -1322,6 +1527,17 @@
         >
           <path d="M0,0 L10,5 L0,10 z" fill="#ffd166" />
         </marker>
+        <marker
+          id="head-effect"
+          viewBox="0 0 10 10"
+          refX="6"
+          refY="5"
+          markerWidth="5"
+          markerHeight="5"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" fill="#c792ff" />
+        </marker>
       </defs>
       {#each arrows as a (a.key)}
         <g class="arrow {a.kind}" in:fade={{ duration: 180 }}>
@@ -1330,6 +1546,29 @@
         </g>
       {/each}
     </svg>
+
+    {#if spot && spotAt}
+      {#key spot.n}
+        <div
+          class="spot"
+          class:leaving={spot.leaving}
+          data-spot
+          style="left: {spotAt.x}px; top: {spotAt.y}px; --dx: {spotAt.dx}px; --dy: {spotAt.dy}px"
+          in:fly={{ y: spot.owner === human ? 40 : -40, duration: 260 }}
+          role="img"
+          aria-label="{spot.owner === human ? 'Du spielst' : 'Die KI spielt'} {spot.card.name}"
+        >
+          <CardImage card={spot.card} src={cardImageUrl(spot.card, "full")} eager />
+        </div>
+      {/key}
+    {/if}
+    {#each blasts as b (b.key)}
+      <span
+        class="blast"
+        style="left: {b.x}px; top: {b.y}px; width: {b.w}px; height: {b.h}px"
+        aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span
+      >
+    {/each}
 
     {#if drag && def(drag.id)}
       <div
@@ -1440,7 +1679,7 @@
 
     <!-- The trash in its own dialog over the field, so the detail panel stays free for the hovered card. -->
     {#if showTrash !== null}
-      {@const trash = [...view.players[showTrash].trash].reverse()}
+      {@const trash = view.players[showTrash].trash}
       <div class="trash-layer" transition:fade={{ duration: 150 }}>
         <button class="trash-backdrop" aria-label="Trash schließen" onclick={() => (showTrash = null)}
         ></button>
@@ -2464,6 +2703,123 @@
   }
   .arrow.aim .glow {
     opacity: 0.35;
+  }
+  .arrow.effect path {
+    stroke: #c792ff;
+  }
+  .arrow.effect .glow {
+    opacity: 0.4;
+  }
+  /* The Command in the spotlight; it stands between hand and battle area and flies off when done. */
+  .spot {
+    position: absolute;
+    z-index: 5;
+    width: clamp(84px, 9vw, 140px);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    border-radius: var(--radius-card);
+    box-shadow:
+      0 0 0 2px #c792ff,
+      0 0 28px 6px rgb(199 146 255 / 55%),
+      var(--shadow);
+    transition:
+      transform 0.5s cubic-bezier(0.5, 0, 0.75, 0),
+      opacity 0.5s ease-in;
+  }
+  .spot.leaving {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.3) rotate(-8deg);
+    opacity: 0.25;
+  }
+  /* A destroyed card: a flash, a ring and a few sparks where it stood. */
+  .blast {
+    position: absolute;
+    z-index: 5;
+    pointer-events: none;
+    border-radius: var(--radius-card);
+    animation: blast-flash 0.85s ease-out forwards;
+  }
+  .blast::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 120%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 3px solid #ff7a3d;
+    transform: translate(-50%, -50%) scale(0.2);
+    animation: blast-ring 0.7s ease-out forwards;
+  }
+  .blast i {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ffd166;
+    box-shadow: 0 0 8px #ff7a3d;
+    animation: blast-spark 0.75s ease-out forwards;
+  }
+  .blast i:nth-child(1) {
+    --sx: -46px;
+    --sy: -38px;
+  }
+  .blast i:nth-child(2) {
+    --sx: 44px;
+    --sy: -40px;
+  }
+  .blast i:nth-child(3) {
+    --sx: -52px;
+    --sy: 18px;
+  }
+  .blast i:nth-child(4) {
+    --sx: 50px;
+    --sy: 22px;
+  }
+  .blast i:nth-child(5) {
+    --sx: -6px;
+    --sy: -58px;
+  }
+  .blast i:nth-child(6) {
+    --sx: 6px;
+    --sy: 56px;
+  }
+  @keyframes blast-flash {
+    0% {
+      background: rgb(255 240 200 / 90%);
+      box-shadow: 0 0 40px 14px rgb(255 122 61 / 80%);
+    }
+    100% {
+      background: rgb(255 122 61 / 0%);
+      box-shadow: 0 0 0 0 rgb(255 122 61 / 0%);
+    }
+  }
+  @keyframes blast-ring {
+    to {
+      transform: translate(-50%, -50%) scale(1.4);
+      opacity: 0;
+    }
+  }
+  @keyframes blast-spark {
+    from {
+      transform: translate(-50%, -50%);
+      opacity: 1;
+    }
+    to {
+      transform: translate(calc(-50% + var(--sx)), calc(-50% + var(--sy))) scale(0.3);
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spot {
+      transition: none;
+    }
+    .blast,
+    .blast::after,
+    .blast i {
+      animation-duration: 0.01s;
+    }
   }
   @keyframes march {
     to {

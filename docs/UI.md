@@ -83,6 +83,23 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
   `--chrome` = Höhe von Kopfzeile (+ Replay-Leiste). ≤ 1000 px eine Spalte, ≤ 700 px Handy-Layout (Matte
   `"res res piles" / "sh bat bat"`, Seitenleiste als Schublade „☰ Log & Details“).
 
+## Commands im Spotlight, Zerstörung, Trash (Nutzerwunsch 23. Nov.)
+
+- **Spotlight** (`spot`, `followCommand`, `placeSpot` in `Board.svelte`): Ein gespielter Command (Ereignis `play`)
+  steht groß in der Mitte der Seite seines Spielers zwischen Hand und Battle Area (KI: zwischen ihrer Hand oben
+  und ihrer Battle Area, immer ganz im Spielfeld), solange er wirkt. Ist er fertig (`toTrash` mit `resolved`),
+  zeigen lila Pfeile (`kind: "effect"`) auf die Karten, die er auf dem Feld verändert hat (Schaden, Zerstörung,
+  Resten, AP/HP, auf die Hand/ins Deck). Dafür bleibt das Spielfeld kurz auf dem Stand **vor** dem Schritt
+  (`holding`, KI 1,3 s, Mensch 0,8 s); KI, Autopilot und Eingaben warten so lange. Danach wirkt der Schritt und der
+  Command fliegt zum Trash (`data-trash`) bzw. zur Unit, mit der er sich paart (Cyclone Punch). Ohne Ziel auf dem
+  Feld steht er kurz da und fliegt dann. `processed` merkt sich die gezeigten Schritte; beim ersten Aufbau (auch
+  jedem Replay-Schritt) und nach Rücksprüngen wird nichts abgespielt.
+- **Zerstörung** (`blasts`): An der Stelle jeder zerstörten Karte ein kurzer Blitz mit Ring und Funken (gelesen
+  aus dem DOM, bevor das Feld sich ändert), zusätzlich zum Ausblenden.
+- **Trash:** Die Engine legt neue Karten vorn in die Liste (`moveTo`, Position `top`), die erste ist die neueste.
+  Der Stapel zeigt `trash[0]`, der Dialog die Liste in dieser Reihenfolge (vorher zeigten beide die älteste
+  Karte zuerst; Test `tests/engine/trashorder.test.ts`).
+
 ## Bedienung, Keywords, Links (Nutzerwunsch 20. Nov.)
 
 - **Klick auf eine Karte spielt nie von selbst** (`immediate()` in `Board.svelte`): Einsetzen, Paaren, Commands
