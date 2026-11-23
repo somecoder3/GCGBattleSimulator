@@ -441,6 +441,11 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   Threads (Nutzer will bei Messungen höchstens 1/4 der CPU, 5 Threads). **Methode:** Spalten je Deck von
   `ab --by-deck` streuen auch bei gleichen KIs um bis ±4,5 Punkte (gleiches Muster bei jedem Lauf mit gleichem Seed),
   darum gegen „default gegen default“ lesen. Details `docs/AI.md` „Ressourcen und EX Resources“.
+  - Nachtrag (Nutzerfrage): **ST14 ohne Ressourcen-Karten** (Duel Gundam AS → Rick Dias, Battlefield Emotions →
+    Overflowing Affection; Testdeck `ST14X`) gegen Starter 50,3 → 67,8 %, gegen Meta M01–M06 9,4 → 17,3 % (v1,
+    bestätigt mit neuem Seed). **ST02** gewinnt mit Rick Dom/Strike Rouge statt Bird Mode etwa +3,5 Punkte, verliert
+    aber genauso viel, weil ein geänderter ST02 nur 2× Corsica Base spielen darf → Original gleich gut.
+    `npm run ramp` tauscht auch n Kopien (`alt>neu:n`) und prüft die Bannliste.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,

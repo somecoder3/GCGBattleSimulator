@@ -591,6 +591,40 @@ denn durch die Resource. Mit den neuen Regeln gleich, es liegt also an den Karte
 KI. Grenze: v1 spielt Ramp-Pläne über mehrere Züge nicht gezielt (Vorausschau bis zur nächsten eigenen Main Phase),
 und Calibarn-/Academy-Decks (EX-Nutzer) haben im Meta keine Vorbilder außer ACAX.
 
+**ST02 und ST14 ohne ihre Ressourcen-Karten** (Nutzerfrage, 23. Nov.): `npm run ramp -- --decks <Variante> --field
+…`, v1. Starter-Feld ST01, ST03–ST08, ST10 (je Variante 1024 Spiele, dann Bestätigung mit Seed 5000 und 2048), Meta-
+Feld M01–M06 (768, dann 1536). Ein **geänderter** Starter muss der Bannliste folgen: ST02 darf dann nur 2× Corsica
+Base spielen (die dritte wird Underground Desert Base GD01-126); `npm run ramp` prüft das (`alt>neu:n` tauscht n
+Kopien). Werte: erste Runde / Bestätigung.
+
+| Variante                                                                  | Starter-Feld  | Meta-Feld     |
+| ------------------------------------------------------------------------- | ------------- | ------------- |
+| ST14 (Original)                                                           | 47,6 / 50,3 % | 9,4 / 9,4 %   |
+| Duel Gundam (AS) → Gundam Lfrith GD01-086 (Blocker 2/4, Kosten 2)         | 60,1 / 60,9 % | 12,6 / 12,4 % |
+| Duel Gundam (AS) → Rick Dias GD02-079 (Blocker 3/3, Kosten 2)             | 59,2 %        | 8,9 %         |
+| Duel Gundam (AS) → Rick Dom GD01-030                                      | 54,6 %        | 9,5 %         |
+| Battlefield Emotions → Overflowing Affection GD01-118                     | 55,2 / 56,3 % | 13,3 / 13,2 % |
+| Battlefield Emotions → Unforeseen Incident ST01-014                       | 52,4 %        | 10,2 %        |
+| Duel → Rick Dias, Emotions → Unforeseen Incident                          | 62,1 %        | 10,8 %        |
+| Duel → Lfrith, Emotions → Overflowing Affection                           | 68,5 %        | 16,2 %        |
+| **Duel → Rick Dias, Emotions → Overflowing Affection** (Testdeck `ST14X`) | **67,8 %**    | **17,3 %**    |
+| ST02 (Original, 3× Corsica Base)                                          | 46,3 / 45,2 % | 8,1 / 8,7 %   |
+| ST02 legal geändert (2× Corsica Base)                                     | 42,9 / 41,7 % | 7,2 / 8,3 %   |
+| … + Bird Mode → Rick Dom GD01-030                                         | 45,7 / 45,2 % | 7,3 / 9,0 %   |
+| … + Bird Mode → Rick Dom (nur 2)                                          | 46,1 / 42,5 % | 8,5 / 7,8 %   |
+| … + Bird Mode → Kira's Strike Rouge GD05-010                              | 46,1 / 45,9 % | 6,8 / 7,6 %   |
+| … + Bird Mode → Dom Trooper GD06-016 / A Show of Resolve                  | 42,7 / 41,5 % | 6,9 / 4,6 %   |
+
+- **ST14 wird deutlich stärker**: beide Tausche zusammen +18 Punkte gegen die Starter, gegen das Meta fast doppelt so
+  viele Siege. Duel Gundam (AS) ist für 3 Kosten 3/2 und bringt seine EX Resource erst beim Zerstören; eine Unit mit
+  Blocker für 2 schützt besser. Battlefield Emotions kostet 4 für eine Resource (eine wird wieder aktiv), Overflowing
+  Affection kostet 1 und bessert die Hand.
+- **ST02 nicht**: Wing Gundam (Bird Mode) gegen Rick Dom oder Strike Rouge bringt etwa +3,5 Punkte, aber genau so
+  viel kostet die Pflicht, eine Corsica Base abzugeben. Unverändert ist ST02 also so stark wie die beste geänderte
+  Fassung. Bird Mode verbindet sich außerdem mit Heero (Link), das Original nutzt das.
+- Grenze: gemessen mit v1, die Ramp-Pläne nicht gezielt über mehrere Züge spielt; ein Mensch holt aus Battlefield
+  Emotions vielleicht mehr heraus.
+
 **Nebenbefund zur Messmethode:** Die Spalten von `npm run ab -- --by-deck` vergleichen A und B mit einem Deck in
 _verschiedenen_ Spielen. Auch „default gegen default“ zeigt dort je Deck bis ±4,5 Punkte (v0, 18 040 Spiele: WINGX
 +4,5, M17 −4,2), und weil die Seeds gleich bleiben, erscheint dasselbe Muster bei jeder Variante. Unterschiede je

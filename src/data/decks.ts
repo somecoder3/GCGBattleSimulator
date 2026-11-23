@@ -168,6 +168,14 @@ export const TEST_DECKS: NamedDeck[] = [
     "Raging Onslaught + Final Victor ×4 + Destiny ×2",
   ),
   // Resources and EX Resources (docs/AI.md "Ressourcen und EX Resources", 23 Nov 2026).
+  // ST14 without its Resource cards: Rick Dias (Blocker 3/3, cost 2) for Duel Gundam (Assault Shroud), Overflowing
+  // Affection for Battlefield Emotions; v1 against the starters 50.3 → 67.8 %, against Meta M01–M06 9.4 → 17.3 %.
+  swapped(
+    "ST14X",
+    "ST14",
+    { "ST14-009": "GD02-079", "ST14-015": "GD01-118" },
+    "Heavy Dominion + Rick Dias, Overflowing Affection (ohne Ressourcen-Karten)",
+  ),
   // ST02 with more Resources: First Contact (Tragos), Gundam Deathscythe GD01-025 (Aries), Mutual Attraction
   // (Corsica Base, at most 2× under the banlist), Wing Gundam ×4 (Tallgeese).
   swapped(

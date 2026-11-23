@@ -3,7 +3,7 @@
 //
 //   npm run ramp -- --decks ST02,WINGX,AGEX,LBX,M01 --games 16      every pairing 16 games, v1
 //   npm run ramp -- --decks ST02,WINGX --ai v0 --rules ramp,exPay,resourceValue
-//   npm run ramp -- --decks ST02,ST02+ST02-009>GD01-107 --field M01,M02,M03,M04 --games 64
+//   npm run ramp -- --decks ST02,ST02+ST02-009>GD01-107,ST02+ST02-016>GD01-126:1 --field M01,M02 --games 64
 //       a deck with swaps (all copies of ST02-009 become GD01-107) against a fixed field; every deck plays
 //       the same seeds against each field deck, so the rows compare pairwise
 //
@@ -16,6 +16,7 @@ import { rampPlan } from "../src/ai/synergy";
 import { STARTER_DECKS, TEST_DECKS } from "../src/data/decks";
 import { Engine } from "../src/engine/engine";
 import type { DeckList, GameEvent, GameState, PlayerId, Step } from "../src/engine/types";
+import { banlistProblems } from "../src/meta/banlist";
 import { metaDecks } from "../src/meta/decks";
 import { playMatch } from "../src/sim/match";
 import { loadLib, loadSnapshot } from "./lib";
@@ -37,14 +38,35 @@ const lib = loadLib();
 const engine = new Engine(lib);
 const meta = metaDecks(loadSnapshot(), lib, Infinity, "consensus");
 const known = [...meta, ...STARTER_DECKS, ...TEST_DECKS];
-/** "ST02" or "ST02+ST02-009>GD01-107+…" (swap every copy). */
+/**
+ * "ST02" or "ST02+ST02-009>GD01-107+…": swap every copy, or only n copies with "ST02-016>GD01-126:1".
+ * A changed list must follow the banlist (unchanged starters are legal as printed); problems are an error.
+ */
 function deckOf(spec: string): { id: string; deck: DeckList } {
   const [base, ...swaps] = spec.split("+");
   const d = known.find((x) => x.id === base!.toUpperCase());
   if (!d) throw new Error(`unknown deck ${base}`);
-  const map = Object.fromEntries(swaps.map((x) => x.toUpperCase().split(">") as [string, string]));
-  for (const no of Object.values(map)) if (!lib.has(no)) throw new Error(`unknown card ${no}`);
-  return { id: spec, deck: { ...d.deck, main: d.deck.main.map((no) => map[no] ?? no) } };
+  const main = [...d.deck.main];
+  for (const swap of swaps) {
+    const m = swap.toUpperCase().match(/^([^>]+)>([^:]+)(?::(\d+))?$/);
+    if (!m) throw new Error(`swap ${swap}: old>new or old>new:count`);
+    const [, from, to, count] = m;
+    if (!lib.has(to!)) throw new Error(`unknown card ${to}`);
+    let left = count ? Number(count) : Infinity;
+    for (let i = 0; i < main.length && left > 0; i++)
+      if (main[i] === from) {
+        main[i] = to!;
+        left--;
+      }
+    if (left > 0 && left !== Infinity) throw new Error(`swap ${swap}: not enough copies of ${from}`);
+  }
+  const counts: Record<string, number> = {};
+  for (const no of main) counts[no] = (counts[no] ?? 0) + 1;
+  const problems = banlistProblems(counts, (no) => (lib.has(no) ? lib.get(no) : undefined));
+  const over = Object.entries(counts).filter(([, n]) => n > 4);
+  if (problems.length || over.length)
+    throw new Error(`${spec}: ${[...problems, ...over.map(([no, n]) => `${no} ${n}×`)].join(", ")}`);
+  return { id: spec, deck: { ...d.deck, main } };
 }
 const decks = args.decks.split(",").map(deckOf);
 const fieldDecks = args.field ? args.field.split(",").map(deckOf) : undefined;
