@@ -69,9 +69,24 @@ Browser ──HTTP──▶ tools/lab.ts (127.0.0.1:5180)
   und löscht sie danach im Browser.
 - **Meta:** Ansehen in beiden; „Neu von Limitless laden“ nur im Labor (schreibt Daten, Speicher `kv.meta`).
 
-## Später: Synchronisierung in der Cloud
+## Synchronisierung in der Cloud
 
 Wunsch des Nutzers (21. Nov. 2026): eigene Decks überall dabei (Handy und Desktop), Decks mit dem Sohn
-tauschen und teilen, irgendwann Mehrspieler. Favorit: **Cloudflare Workers + D1** (kostenloser Plan). Erst
-nach dem Labor; Konto anlegen nur mit Zustimmung, Anmeldedaten gibt der Nutzer selbst ein. Rechnen bleibt
-lokal im Labor (kostenlose Server sind dafür zu schwach).
+tauschen und teilen, irgendwann Mehrspieler. Rechnen bleibt lokal im Labor.
+
+**Entscheidung (24. Nov.):** eigener Server statt Cloudflare Workers + D1 (früherer Favorit). Mehrspieler per
+WebSocket ist auf einem normalen Server einfacher als mit Durable Objects, und der Dienst nutzt dieselbe Technik
+wie das Labor (`node:sqlite`). Anmeldung mit Google, nur freigeschaltete Konten. Umgesetzt: **`docs/SYNC.md`**.
+
+**Server (24. Nov. eingerichtet):** IONOS VPS 1-1-20 (1 vCPU, ~830 MB RAM, 20 GB), Ubuntu 26.04 mit
+vorinstalliertem Docker (ungenutzt). Hostname von IONOS (`*.cserverhost.cloud`) reicht für ein Zertifikat.
+
+- 1 GB Swap (`/swapfile`, `vm.swappiness=10`), Pakete aktuell, automatische Sicherheitsupdates an.
+- Benutzer `gcg` mit SSH-Schlüssel des Nutzers und sudo ohne Passwort (`/etc/sudoers.d/90-gcg`).
+- SSH: nur Schlüssel, kein Root-Login, nur `gcg` (`/etc/ssh/sshd_config.d/00-hardening.conf`; Dateien dort
+  gelten nach „erster Treffer“, die IONOS-Datei `50-cloud-init.conf` erlaubte vorher Passwörter). `fail2ban`
+  mit Jail `sshd` (Backend systemd).
+- Firewall `ufw`: eingehend nur 22, 80, 443. Achtung: Docker umgeht `ufw` bei veröffentlichten Ports.
+  Zusätzlich gibt es eine Firewall-Richtlinie im IONOS-Panel.
+- Notfall-Konsole im IONOS-Panel: Anmeldung als root mit Passwort geht dort weiter (nur SSH ist gesperrt);
+  Einfügen funktioniert nicht, Passwort tippen; Konsole hat US-Tastaturbelegung.

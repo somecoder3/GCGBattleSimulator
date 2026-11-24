@@ -1,0 +1,17 @@
+# Caddy in front of the sync server (docs/SYNC.md). Installed as /etc/caddy/Caddyfile.
+# Caddy gets the HTTPS certificate for the host by itself (Let's Encrypt, ports 80 and 443).
+
+1bwv2ku.cserverhost.cloud {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8790
+	}
+	handle {
+		respond "GCG Battle Simulator sync" 404
+	}
+}

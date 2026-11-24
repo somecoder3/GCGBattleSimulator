@@ -6,6 +6,7 @@ import { STARTER_DECKS, TEST_DECKS, type NamedDeck } from "../../data/decks";
 import { CardLib } from "../../engine/cardlib";
 import { metaDecks, newestSnapshot, type MetaDeck, type MetaList } from "../../meta/decks";
 import type { MetaSnapshot } from "../../meta/types";
+import type { SyncDeck } from "../../sync/types";
 import type { UserDeck } from "./db";
 
 const files = import.meta.glob<MetaSnapshot>("../../../data/meta/*.json", { eager: true, import: "default" });
@@ -32,6 +33,16 @@ export function setLabDecks(decks: UserDeck[]): void {
   LAB_DECKS = decks;
 }
 
+/** Decks of other signed-in users (cloud sync, read-only; src/app/lib/sync.ts). */
+let SHARED_DECKS: SyncDeck[] = [];
+
+export function setSharedDecks(decks: SyncDeck[]): void {
+  SHARED_DECKS = decks;
+}
+
+/** Id of another user's deck among the deck choices. */
+export const sharedId = (id: string) => `s:${id}`;
+
 /**
  * Tournament lists picked in the Meta tab for a game or a simulation (id "M03T5" = 5th list of M03).
  * Only kept in memory; they show up among the meta decks until the page is reloaded.
@@ -55,7 +66,7 @@ export function cardLib(pool: CardPool): CardLib {
 }
 
 export interface DeckChoice extends NamedDeck {
-  group: "meta" | "starter" | "test" | "user" | "lab";
+  group: "meta" | "starter" | "test" | "user" | "lab" | "shared";
   /** Meta share (0–1) for meta decks. */
   share?: number;
   supported: boolean;
@@ -86,8 +97,19 @@ export function deckChoices(pool: CardPool, list: MetaList = "consensus"): DeckC
     group: "lab",
     supported: d.deck.main.every((no) => lib.has(no) && lib.get(no).script.status !== "partial"),
   }));
-  return [...meta, ...PICKED, ...starters, ...tests, ...own, ...fromLab];
+  const shared: DeckChoice[] = SHARED_DECKS.map((d) => ({
+    id: sharedId(d.id),
+    name: `${d.name} (${d.ownerName})`,
+    colors: deckColors(lib, d.deck.main),
+    deck: d.deck,
+    group: "shared",
+    supported: d.deck.main.every((no) => lib.has(no) && lib.get(no).script.status !== "partial"),
+  }));
+  return [...meta, ...PICKED, ...starters, ...tests, ...own, ...fromLab, ...shared];
 }
+
+/** Decks shown by name only (no id in front). */
+export const namedOnly = (d: DeckChoice) => d.group === "user" || d.group === "lab" || d.group === "shared";
 
 export function deckColors(lib: CardLib, nos: readonly string[]): string {
   const colors = new Set<string>();
@@ -100,6 +122,6 @@ export function deckColors(lib: CardLib, nos: readonly string[]): string {
 
 export function deckLabel(d: DeckChoice): string {
   const share = d.share !== undefined ? ` · ${(d.share * 100).toFixed(1)} %` : "";
-  const title = d.group === "user" || d.group === "lab" ? d.name : `${d.id} ${d.name}`;
+  const title = namedOnly(d) ? d.name : `${d.id} ${d.name}`;
   return `${title} (${d.colors})${share}${d.supported ? "" : " · unvollständig"}`;
 }

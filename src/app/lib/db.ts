@@ -23,6 +23,10 @@ export interface UserDeck {
   deck: DeckList;
   updatedAt: string;
   note?: string;
+  /** Account (Google id) the deck belongs to once it was synced (src/app/lib/sync.ts). */
+  owner?: string;
+  /** Another user's deck this one was copied from. */
+  copiedFrom?: string;
 }
 
 const DB_NAME = "gcg-battle-simulator";
@@ -91,6 +95,7 @@ const browserDb = {
 export const db = {
   /** Simulation runs of older versions in this browser (moved to the lab, see App.svelte). */
   runs: browserDb.runs,
+  /** Own decks in this browser; synced with the cloud when signed in (src/app/lib/sync.ts). */
   decks: __LAB__ ? lab.decks : browserDb.decks,
   meta: __LAB__ ? lab.meta : browserDb.meta,
 };

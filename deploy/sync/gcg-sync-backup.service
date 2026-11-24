@@ -1,0 +1,8 @@
+# Daily copy of the sync database, the last 14 kept (docs/SYNC.md). With gcg-sync-backup.timer.
+[Unit]
+Description=Backup of the GCG sync database
+
+[Service]
+Type=oneshot
+User=gcgsync
+ExecStart=/bin/sh -c 'sqlite3 /var/lib/gcg-sync/sync.db ".backup /var/lib/gcg-sync/backup/sync-$$(date +%%F).db" && ls -1t /var/lib/gcg-sync/backup/sync-*.db | tail -n +15 | xargs -r rm --'

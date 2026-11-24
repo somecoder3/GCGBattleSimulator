@@ -16,7 +16,9 @@
   import { banlistProblems } from "../../../meta/banlist";
   import type { MetaDeck } from "../../../meta/decks";
   import { db, type UserDeck } from "../../lib/db";
-  import { cardLib, deckChoices, deckColors, preset, setUserDecks } from "../../lib/decks";
+  import { cardLib, deckChoices, deckColors, preset, setUserDecks, sharedId } from "../../lib/decks";
+  import { deckDeleted, onSync, sync, syncAvailable } from "../../lib/sync";
+  import type { SyncDeck } from "../../../sync/types";
   import CardImage from "../CardImage.svelte";
   import HoverTip from "../HoverTip.svelte";
   import CardDetail from "../CardDetail.svelte";
@@ -32,7 +34,8 @@
   import { satisfiesLink } from "../../../engine/cardlib";
   import DeckStats from "./DeckStats.svelte";
 
-  // Own decks: import, build, check, save (IndexedDB), export, and use them in the game and simulator.
+  // Own decks: import, build, check, save (IndexedDB, synced with the cloud when signed in), export, and
+  // use them in the game and simulator. Decks of other signed-in users can be viewed and copied.
 
   let { pool }: { pool: CardPool } = $props();
 
@@ -44,7 +47,23 @@
   const deckCards = pool.cards.filter((c) => MAIN_TYPES.has(c.type) && !c.token);
 
   let decks = $state.raw<UserDeck[]>([]);
-  let editing = $state<{ id: string; name: string; counts: Record<string, number> } | null>(null);
+  let editing = $state<{
+    id: string;
+    name: string;
+    counts: Record<string, number>;
+    /** Another user's deck: view, play and copy only. */
+    readonly?: boolean;
+    ownerName?: string;
+    copiedFrom?: string;
+  } | null>(null);
+  /** Decks of the other signed-in users (cloud sync). */
+  let shared = $state.raw<SyncDeck[]>([]);
+  const sharedByOwner = $derived(
+    [...new Set(shared.map((d) => d.ownerName))].map((owner) => ({
+      owner,
+      decks: shared.filter((d) => d.ownerName === owner),
+    })),
+  );
   let dirty = $state(false);
   let filter = $state<CardFilter>(emptyFilter());
   let ordering = $state<Ordering>({ key: "level", desc: false });
@@ -72,7 +91,18 @@
     (metaTemplates.find((d) => d.id === copyFrom) as (MetaDeck & { group: "meta" }) | undefined)?.archetype,
   );
 
-  onMount(load);
+  onMount(() => {
+    void load();
+    // After each cloud sync: own decks may have come from another device.
+    let seen: Date | null = null;
+    return onSync((s) => {
+      shared = s.shared;
+      if (s.lastSync !== seen) {
+        seen = s.lastSync;
+        if (seen) void load();
+      }
+    });
+  });
 
   async function load() {
     try {
@@ -90,16 +120,38 @@
     resources: Array<string>(RESOURCE_DECK_SIZE).fill(DEFAULT_RESOURCE),
   });
 
-  function newDeck(name = "Neues Deck", counts: Record<string, number> = {}) {
-    editing = { id: `u-${Date.now().toString(36)}`, name, counts };
+  function newDeck(name = "Neues Deck", counts: Record<string, number> = {}, copiedFrom?: string) {
+    editing = { id: `u-${Date.now().toString(36)}`, name, counts, ...(copiedFrom ? { copiedFrom } : {}) };
     dirty = true;
     message = undefined;
   }
 
   function edit(d: UserDeck) {
-    editing = { id: d.id, name: d.name, counts: countsOf(d.deck.main) };
+    editing = {
+      id: d.id,
+      name: d.name,
+      counts: countsOf(d.deck.main),
+      ...(d.copiedFrom ? { copiedFrom: d.copiedFrom } : {}),
+    };
     dirty = false;
     message = undefined;
+  }
+
+  function viewShared(d: SyncDeck) {
+    editing = {
+      id: d.id,
+      name: d.name,
+      counts: countsOf(d.deck.main),
+      readonly: true,
+      ownerName: d.ownerName,
+    };
+    dirty = false;
+    message = undefined;
+  }
+
+  function copyShared() {
+    if (!editing?.readonly) return;
+    newDeck(`${editing.name} (Kopie)`, { ...editing.counts }, editing.id);
   }
 
   function copyTemplate() {
@@ -139,7 +191,7 @@
   }
 
   function change(no: string, delta: number) {
-    if (!editing) return;
+    if (!editing || editing.readonly) return;
     const n = Math.max(0, Math.min(MAX_COPIES, (editing.counts[no] ?? 0) + delta));
     const counts = { ...editing.counts };
     if (n) counts[no] = n;
@@ -149,26 +201,32 @@
   }
 
   async function save() {
-    if (!editing) return;
+    if (!editing || editing.readonly) return;
+    const before = decks.find((d) => d.id === editing?.id);
     const deck: UserDeck = {
       id: editing.id,
       name: editing.name.trim() || "Ohne Namen",
       deck: toList(editing.counts),
       updatedAt: new Date().toISOString(),
+      ...(before?.owner ? { owner: before.owner } : {}),
+      ...(editing.copiedFrom ? { copiedFrom: editing.copiedFrom } : {}),
     };
     try {
       await db.decks.put(deck);
       dirty = false;
       message = "Gespeichert.";
       await load();
+      void sync();
     } catch (e) {
       message = `Speichern fehlgeschlagen: ${String(e)}`;
     }
   }
 
   async function remove() {
-    if (!editing) return;
+    if (!editing || editing.readonly) return;
+    const deck = decks.find((d) => d.id === editing?.id);
     await db.decks.delete(editing.id).catch(() => undefined);
+    if (deck) deckDeleted(deck);
     editing = null;
     await load();
   }
@@ -221,7 +279,8 @@
   async function useIn(where: "play" | "sim") {
     if (dirty) await save();
     if (!editing) return;
-    if (where === "play") preset.play = editing.id;
+    if (editing.readonly) preset.play = sharedId(editing.id);
+    else if (where === "play") preset.play = editing.id;
     else preset.gauntlet = editing.id;
     location.hash = where === "play" ? "#play" : "#sim";
   }
@@ -327,7 +386,9 @@
   <div class="panel side">
     <h1>Decks</h1>
     <p class="lead">
-      Eigene Decks, im Browser gespeichert. Sie stehen in Spiel und Simulator unter „Eigene Decks“.
+      Eigene Decks, im Browser gespeichert{syncAvailable
+        ? " und nach der Anmeldung (oben rechts) auf allen Geräten"
+        : ""}. Sie stehen in Spiel und Simulator unter „Eigene Decks“.
     </p>
     <div class="actions">
       <button class="btn primary" onclick={() => newDeck()}>Neues Deck</button>
@@ -346,6 +407,20 @@
     {:else}
       <p class="hint">Noch keine eigenen Decks.</p>
     {/if}
+
+    {#each sharedByOwner as g (g.owner)}
+      <h2 class="owner">Decks von {g.owner}</h2>
+      <ul class="list">
+        {#each g.decks as d (d.id)}
+          <li>
+            <button class:active={editing?.id === d.id} onclick={() => viewShared(d)}>
+              {d.name}
+              <small>{deckColors(lib, d.deck.main) || "–"} · {d.deck.main.length} Karten</small>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/each}
 
     <details>
       <summary>Aus Meta-, Starter-{labTemplates.length ? " oder Labor-" : " "}Deck kopieren</summary>
@@ -397,20 +472,30 @@
   <div class="panel main">
     {#if editing}
       <header>
-        <input
-          class="name"
-          bind:value={editing.name}
-          oninput={() => (dirty = true)}
-          aria-label="Name des Decks"
-        />
+        {#if editing.readonly}
+          <h2 class="name readonly">{editing.name} <small>von {editing.ownerName}</small></h2>
+        {:else}
+          <input
+            class="name"
+            bind:value={editing.name}
+            oninput={() => (dirty = true)}
+            aria-label="Name des Decks"
+          />
+        {/if}
         <div class="actions">
-          <button class="btn primary" onclick={save} disabled={!dirty}>Speichern</button>
+          {#if editing.readonly}
+            <button class="btn primary" onclick={copyShared}>Kopieren und bearbeiten</button>
+          {:else}
+            <button class="btn primary" onclick={save} disabled={!dirty}>Speichern</button>
+          {/if}
           <button class="btn" onclick={() => useIn("play")} disabled={problems.length > 0}
             >Gegen die KI spielen</button
           >
-          <button class="btn" onclick={() => useIn("sim")} disabled={problems.length > 0}
-            >Gegen das Feld simulieren</button
-          >
+          {#if __LAB__}
+            <button class="btn" onclick={() => useIn("sim")} disabled={problems.length > 0}
+              >Gegen das Feld simulieren</button
+            >
+          {/if}
           <span class="export">
             <select
               value={exportFormat}
@@ -421,7 +506,7 @@
             </select>
             <button class="btn" onclick={copyExport}>Liste kopieren</button>
           </span>
-          <button class="btn danger" onclick={remove}>Löschen</button>
+          {#if !editing.readonly}<button class="btn danger" onclick={remove}>Löschen</button>{/if}
         </div>
       </header>
       {#if message}<p class="hint">{message}</p>{/if}
@@ -443,7 +528,7 @@
         {/if}
       </div>
 
-      <div class="editor">
+      <div class="editor" class:single={editing.readonly}>
         <div class="deck">
           <div class="tabs" role="tablist" aria-label="Ansicht des Decks">
             <button role="tab" aria-selected={view === "list"} onclick={() => (view = "list")}>Liste</button>
@@ -466,16 +551,20 @@
                 <ul>
                   {#each g.cards as c (c.no)}
                     <li>
-                      <button class="minus" onclick={() => change(c.no, -1)} aria-label="Eine weniger"
-                        >−</button
-                      >
-                      <span class="n">{c.n}</span>
-                      <button
-                        class="plus"
-                        onclick={() => change(c.no, 1)}
-                        aria-label="Eine mehr"
-                        disabled={c.n >= MAX_COPIES}>+</button
-                      >
+                      {#if editing.readonly}
+                        <span class="n">{c.n}×</span>
+                      {:else}
+                        <button class="minus" onclick={() => change(c.no, -1)} aria-label="Eine weniger"
+                          >−</button
+                        >
+                        <span class="n">{c.n}</span>
+                        <button
+                          class="plus"
+                          onclick={() => change(c.no, 1)}
+                          aria-label="Eine mehr"
+                          disabled={c.n >= MAX_COPIES}>+</button
+                        >
+                      {/if}
                       <button
                         class="cardname"
                         onclick={() => (detail = c.card)}
@@ -509,36 +598,36 @@
             </HoverTip>
           {/if}
         </div>
-        <div class="search">
-          <CardFilters cards={deckCards} bind:filter bind:ordering count={results.length} id="deck" />
-          <label class="only">
-            <input type="checkbox" bind:checked={deckColorsOnly} />
-            Nur Farben des Decks{colorsInDeck.size ? ` (${[...colorsInDeck].join("/")})` : ""}
-          </label>
-          <div class="results">
-            {#each results.slice(0, shown) as c (c.no)}
-              <div class="result">
-                <button class="img" onclick={() => (detail = c)} title={c.name}>
-                  <CardImage card={c} src={cardImageUrl(c, "small")} />
-                </button>
-                <button
-                  class="add"
-                  onclick={() => change(c.no, 1)}
-                  disabled={(editing.counts[c.no] ?? 0) >= MAX_COPIES}
-                >
-                  + {editing.counts[c.no] ? `(${editing.counts[c.no]})` : ""}
-                </button>
-              </div>
-            {:else}
-              <p class="hint">Keine Treffer.</p>
-            {/each}
-          </div>
-          {#if results.length > shown}
-            <button class="more" onclick={() => (shown += SHOW_STEP)}>
-              Weitere anzeigen ({results.length - shown})
-            </button>
-          {/if}
-        </div>
+        {#if !editing.readonly}<div class="search">
+            <CardFilters cards={deckCards} bind:filter bind:ordering count={results.length} id="deck" />
+            <label class="only">
+              <input type="checkbox" bind:checked={deckColorsOnly} />
+              Nur Farben des Decks{colorsInDeck.size ? ` (${[...colorsInDeck].join("/")})` : ""}
+            </label>
+            <div class="results">
+              {#each results.slice(0, shown) as c (c.no)}
+                <div class="result">
+                  <button class="img" onclick={() => (detail = c)} title={c.name}>
+                    <CardImage card={c} src={cardImageUrl(c, "small")} />
+                  </button>
+                  <button
+                    class="add"
+                    onclick={() => change(c.no, 1)}
+                    disabled={(editing.counts[c.no] ?? 0) >= MAX_COPIES}
+                  >
+                    + {editing.counts[c.no] ? `(${editing.counts[c.no]})` : ""}
+                  </button>
+                </div>
+              {:else}
+                <p class="hint">Keine Treffer.</p>
+              {/each}
+            </div>
+            {#if results.length > shown}
+              <button class="more" onclick={() => (shown += SHOW_STEP)}>
+                Weitere anzeigen ({results.length - shown})
+              </button>
+            {/if}
+          </div>{/if}
       </div>
     {:else}
       <p class="hint">Ein Deck auswählen, neu anlegen, kopieren oder importieren.</p>
@@ -551,7 +640,7 @@
     card={detail}
     {pool}
     onclose={() => (detail = undefined)}
-    {...editing
+    {...editing && !editing.readonly
       ? {
           deckColors: colorsInDeck,
           count: (no: string) => editing?.counts[no] ?? 0,
@@ -729,6 +818,22 @@
     display: grid;
     grid-template-columns: minmax(260px, 380px) minmax(0, 1fr);
     gap: 16px;
+  }
+  .editor.single {
+    grid-template-columns: minmax(0, 560px);
+  }
+  .owner {
+    margin: 14px 0 0;
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+  .name.readonly {
+    margin: 0;
+  }
+  .name.readonly small {
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 400;
   }
   .tabs {
     display: flex;

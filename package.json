@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "vite",
     "lab": "tsx tools/lab.ts",
+    "sync": "tsx tools/sync-server.ts",
+    "sync:build": "esbuild tools/sync-server.ts --bundle --platform=node --format=esm --target=node22 --outfile=build/sync/server.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",

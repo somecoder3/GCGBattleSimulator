@@ -46,7 +46,7 @@
   // Which groups are open, kept across reloads (user's wish, 19 Nov 2026).
   const OPENED_KEY = "gcg-battle-simulator.sim-groups";
   function loadOpened(): Record<DeckChoice["group"], boolean> {
-    const fallback = { user: true, meta: false, starter: false, test: false, lab: false };
+    const fallback = { user: true, meta: false, starter: false, test: false, lab: false, shared: false };
     try {
       const saved = JSON.parse(localStorage.getItem(OPENED_KEY) ?? "null") as unknown;
       return saved && typeof saved === "object" ? { ...fallback, ...saved } : fallback;

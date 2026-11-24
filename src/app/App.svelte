@@ -10,6 +10,8 @@
   import { db, type SavedRun } from "./lib/db";
   import { BUNDLED_SNAPSHOT, setLabDecks, setSnapshot, setUserDecks } from "./lib/decks";
   import { fetchLabDecks, lab, labConnect } from "./lib/lab";
+  import { startSync, syncAvailable } from "./lib/sync";
+  import AccountMenu from "./components/AccountMenu.svelte";
 
   // The simulator and replays of simulated games are part of the lab only (`npm run lab`).
   const labScreens = __LAB__ ? import("./labscreens") : undefined;
@@ -64,6 +66,8 @@
     } catch {
       // IndexedDB (or the lab) unavailable: bundled data only.
     }
+    // Cloud sync of own decks (signed in with Google); runs in the background.
+    startSync();
     if (labConnect()) {
       const decks = await fetchLabDecks();
       if (decks) {
@@ -107,6 +111,7 @@
       <a href="#{key}" class:current={tab === key} aria-current={tab === key ? "page" : undefined}>{label}</a>
     {/each}
   </nav>
+  {#if syncAvailable}<div class="account"><AccountMenu /></div>{/if}
 </header>
 
 {#if oldRuns.length || moveNote}
@@ -265,11 +270,20 @@
   .error {
     color: var(--danger);
   }
+  .account {
+    margin-left: auto;
+  }
   @media (max-width: 600px) {
     .top {
       flex-direction: column;
       align-items: stretch;
       gap: 8px;
+    }
+    /* Beside the name of the app, top right. */
+    .account {
+      position: absolute;
+      top: 6px;
+      right: max(16px, env(safe-area-inset-right));
     }
   }
 </style>

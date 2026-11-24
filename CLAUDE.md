@@ -386,6 +386,16 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   nur im Labor. Browser-Web-Worker (`src/sim/worker.ts`, `simworkers.ts`) entfernt. Tests `tests/lab/`.
   Beschreibung **`docs/LAB.md`**. **Später:** Cloud-Synchronisierung (Decks überall, mit dem Sohn tauschen,
   irgendwann Mehrspieler), Favorit Cloudflare Workers + D1; erst nach dem Labor.
+- **Server für die Cloud-Synchronisierung (24. Nov., Nutzerwunsch):** IONOS-VPS (Ubuntu 26.04, 1 vCPU,
+  ~830 MB RAM) statt Cloudflare. Zugang per `ssh gcg@<host>` mit dem Schlüssel des Nutzers (Adresse in der
+  Memory, nicht im öffentlichen Repo), sudo ohne Passwort. Grundsicherung fertig (Swap, Updates, SSH nur
+  Schlüssel, fail2ban, ufw 22/80/443), Details `docs/LAB.md`.
+  - **Sync-Dienst gebaut (24. Nov.):** Anmeldung mit Google (Nutzerwunsch, Client-Id in `src/sync/config.ts`),
+    nur Konten aus `SYNC_ALLOWED` auf dem Server (Nutzer und Sohn); eigene Decks auf allen Geräten, fremde
+    ansehen/spielen/kopieren. Server `src/sync/` + `tools/sync-server.ts` (`npm run sync`, `sync:build`), läuft
+    als systemd-Dienst hinter Caddy (HTTPS), tägliche Sicherung; Dateien in `deploy/sync/`. App
+    `src/app/lib/sync.ts`, Kontomenü oben rechts (`AccountMenu.svelte`, Nutzerwunsch), Gruppe `shared`. Nicht im Labor. Beschreibung **`docs/SYNC.md`**,
+    Tests `tests/sync/`. Nebenbei: „Gegen das Feld simulieren“ erscheint nur noch im Labor (PWA hat keinen Simulator).
 - **Neue Decks finden:** Überlegungen in **`docs/DECKSEARCH.md`**. Antworten des Nutzers (21. Nov.): keine
   Nachtläufe (Lüfter), erst v1, eigentlich Suche; nur Bannliste; Bo1; KI-Schwächen zuerst. **Stufe 0 und 1
   gebaut:** `npm run decklab` (`calibrate`, `measure`, `swaps`; `src/lab/decklab/`), Achterblöcke mit gemeinsamen

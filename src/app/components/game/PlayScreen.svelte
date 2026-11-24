@@ -3,7 +3,7 @@
   import { cardImageUrl, type CardPool } from "../../../data/cards";
   import { AI_LABELS, DIFFICULTIES, type AiName } from "../../../ai/registry";
   import { Engine } from "../../../engine/engine";
-  import { SNAPSHOT, cardLib, deckChoices, deckLabel, preset } from "../../lib/decks";
+  import { SNAPSHOT, cardLib, deckChoices, deckLabel, namedOnly, preset } from "../../lib/decks";
   import type { PlayerId } from "../../../engine/types";
   import { GameSession, type SavedSession } from "../../../sim/session";
   import { rollForStart, type StartRoll } from "../../../sim/start";
@@ -24,6 +24,7 @@
     { key: "test", label: "Testdecks" },
     { key: "user", label: "Eigene Decks" },
     { key: "lab", label: "Labor-Decks" },
+    { key: "shared", label: "Decks der anderen" },
   ] as const;
 
   let session = $state.raw<GameSession>();
@@ -190,13 +191,7 @@
             <span class="who">{v.who}</span>
           </div>
           <div class="deck-info">
-            <strong
-              >{v.deck
-                ? v.deck.group === "user" || v.deck.group === "lab"
-                  ? v.deck.name
-                  : `${v.deck.id} ${v.deck.name}`
-                : ""}</strong
-            >
+            <strong>{v.deck ? (namedOnly(v.deck) ? v.deck.name : `${v.deck.id} ${v.deck.name}`) : ""}</strong>
             <span class="colors">
               {#each (v.deck?.colors ?? "").split("/").filter(Boolean) as c (c)}
                 <i class="dot" data-color={c.trim().toLowerCase()}></i>{c.trim()}
