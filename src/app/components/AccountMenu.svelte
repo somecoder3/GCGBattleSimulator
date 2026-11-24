@@ -50,6 +50,7 @@
     class="trigger"
     class:signed={!!status.user}
     aria-haspopup="true"
+    aria-label={status.user ? `Konto: ${status.user.name}` : "Anmelden"}
     aria-expanded={open}
     onclick={() => (open = !open)}
   >
@@ -205,10 +206,13 @@
     color: var(--danger);
   }
   @media (max-width: 600px) {
-    .name {
-      max-width: 9em;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    /* Signed in: only the round symbol (the name is in the menu). */
+    .signed .name,
+    .signed .caret {
+      display: none;
+    }
+    .trigger.signed {
+      padding: 3px;
     }
   }
 </style>

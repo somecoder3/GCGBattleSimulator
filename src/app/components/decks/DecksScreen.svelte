@@ -3,6 +3,7 @@
   // GCGDB's list formats (plain JS module, no types).
   import { formatList, parseList, resolveNames } from "../../../../gcgdb/js/lists.js";
   import { cardImageUrl, type CardPool } from "../../../data/cards";
+  import { cardSrc } from "../../lib/cardimages";
   import type { CardDef } from "../../../data/types";
   import {
     DEFAULT_RESOURCE,
@@ -572,10 +573,10 @@
                         onpointerleave={() => (hovered = null)}
                       >
                         <span class="thumb" data-color={c.card.color?.toLowerCase() ?? "none"}>
+                          <!-- use:cardSrc: in the build the images are encrypted (cardimages.ts). -->
                           <img
-                            src={cardImageUrl(c.card, "small")}
+                            use:cardSrc={cardImageUrl(c.card, "small")}
                             alt=""
-                            loading="lazy"
                             decoding="async"
                             onerror={(e) =>
                               ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
