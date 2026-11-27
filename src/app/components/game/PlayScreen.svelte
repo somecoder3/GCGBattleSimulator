@@ -3,7 +3,11 @@
   import { cardImageUrl, type CardPool } from "../../../data/cards";
   import { AI_LABELS, DIFFICULTIES, type AiName } from "../../../ai/registry";
   import { Engine } from "../../../engine/engine";
-  import { SNAPSHOT, cardLib, deckChoices, deckLabel, namedOnly, preset } from "../../lib/decks";
+  import { onMount } from "svelte";
+  import { SNAPSHOT, cardLib, deckChoices, deckTitle, preset, type DeckChoice } from "../../lib/decks";
+  import { faceCard, groupDecks, groupOf, playable, randomDeck } from "../../lib/deckgroups";
+  import { onSync } from "../../lib/sync";
+  import DeckPicker from "../DeckPicker.svelte";
   import type { PlayerId } from "../../../engine/types";
   import { GameSession, type SavedSession } from "../../../sim/session";
   import { rollForStart, type StartRoll } from "../../../sim/start";
@@ -14,32 +18,83 @@
   let { pool }: { pool: CardPool } = $props();
 
   const STORAGE_KEY = "gcg-battle-simulator.game";
+  const DECK_KEY = "gcg-battle-simulator.play-deck";
   // svelte-ignore state_referenced_locally
-  const engine = new Engine(cardLib(pool));
+  const lib = cardLib(pool);
+  const engine = new Engine(lib);
   // svelte-ignore state_referenced_locally
-  const DECKS = deckChoices(pool);
-  const groups = [
-    { key: "meta", label: SNAPSHOT ? `Meta (Turniere bis ${SNAPSHOT.to})` : "Meta" },
-    { key: "starter", label: "Starter-Decks" },
-    { key: "test", label: "Testdecks" },
-    { key: "user", label: "Eigene Decks" },
-    { key: "lab", label: "Labor-Decks" },
-    { key: "shared", label: "Decks der anderen" },
-  ] as const;
+  let DECKS = $state.raw<DeckChoice[]>(deckChoices(pool));
+  const META_LABEL = SNAPSHOT ? `Meta (Turniere bis ${SNAPSHOT.to})` : "Meta";
+  const groups = $derived(groupDecks(DECKS, META_LABEL));
+  const find = (id: string) => DECKS.find((d) => d.id === id);
+  const canPlay = (d: DeckChoice) => playable(lib, d);
+  /** Why a deck cannot be played (picker). */
+  function unavailable(d: DeckChoice): string | undefined {
+    if (canPlay(d)) return undefined;
+    if (!d.supported) return "Effekte nicht vollständig";
+    return `${d.deck.main.length} von 50 Karten`;
+  }
 
   let session = $state.raw<GameSession>();
   let saved = $state.raw<SavedSession | undefined>(load());
 
-  // A deck chosen in the Meta or Decks tab ("play against the AI").
-  let myDeck = $state(preset.play && DECKS.some((d) => d.id === preset.play) ? preset.play : DECKS[0]!.id);
+  // A deck chosen in the Meta or Decks tab ("play against the AI"), else the last one played, else the
+  // first own deck, else the first playable one.
+  let myDeck = $state(firstDeck());
   preset.play = null;
-  let aiDeck = $state(DECKS[1]!.id);
+  /** The AI's deck: random (a group, then a deck in it) until chosen. */
+  // svelte-ignore state_referenced_locally
+  let aiDeck = $state(randomDeck(groupDecks(DECKS), canPlay)?.id ?? DECKS[0]!.id);
+  /** The open deck picker. */
+  let picking = $state<"mine" | "theirs" | null>(null);
+  /** Counts new random decks (the dice on the AI's panel turn). */
+  let rolled = $state(0);
+
+  function firstDeck(): string {
+    if (preset.play && find(preset.play)) return preset.play;
+    let last: string | null = null;
+    try {
+      last = localStorage.getItem(DECK_KEY);
+    } catch {
+      // Storage may be unavailable (private window).
+    }
+    const usable = DECKS.filter(canPlay);
+    const d =
+      (last ? usable.find((x) => x.id === last) : undefined) ??
+      usable.find((x) => x.group === "user") ??
+      usable[0] ??
+      DECKS[0]!;
+    return d.id;
+  }
+
+  function chooseMine(d: DeckChoice) {
+    myDeck = d.id;
+    try {
+      localStorage.setItem(DECK_KEY, d.id);
+    } catch {
+      // Not remembered then.
+    }
+  }
+
+  function rollAiDeck() {
+    const d = randomDeck(groups, canPlay);
+    if (d) aiDeck = d.id;
+    rolled++;
+  }
+
+  // Own and shared decks may arrive later (cloud sync).
+  onMount(() =>
+    onSync(() => {
+      const next = deckChoices(pool);
+      if (next.length !== DECKS.length || next.some((d, i) => d.id !== DECKS[i]?.id)) DECKS = next;
+    }),
+  );
   let starter = $state<"roll" | "me" | "ai">("roll");
   /** The die roll before the game, while the winner chooses who goes first. */
   let roll = $state.raw<StartRoll>();
   let aiName = $state<AiName>("search");
   // What the AI expects you to play: the meta by share, starter decks a little.
-  const field = DECKS.map((d) => ({ deck: d.deck, weight: d.share ?? 0.01 }));
+  const field = $derived(DECKS.map((d) => ({ deck: d.deck, weight: d.share ?? 0.01 })));
   let seed = $state(randomSeed());
 
   function randomSeed(): number {
@@ -76,18 +131,18 @@
 
   /** The AI's choice after winning the roll (src/ai/turnorder.ts). */
   function aiChoice(): PlayerId {
-    return aiWantsFirst(DECKS.find((d) => d.id === aiDeck)!.deck) ? AI : HUMAN;
+    return aiWantsFirst(find(aiDeck)!.deck) ? AI : HUMAN;
   }
 
   function launch(firstPlayer: PlayerId) {
-    const mine = DECKS.find((d) => d.id === myDeck)!;
-    const theirs = DECKS.find((d) => d.id === aiDeck)!;
+    const mine = find(myDeck)!;
+    const theirs = find(aiDeck)!;
     session = new GameSession(engine, {
       decks: [mine.deck, theirs.deck],
       options: { seed: seed >>> 0, firstPlayer },
       human: HUMAN,
       ai: aiName,
-      deckNames: [`${mine.id} ${mine.name}`, `${theirs.id} ${theirs.name}`],
+      deckNames: [deckTitle(mine), deckTitle(theirs)],
       ...(roll ? { start: { ...roll, first: firstPlayer } } : {}),
     });
     roll = undefined;
@@ -108,27 +163,11 @@
     { value: "ai", label: "KI" },
   ] as const;
 
-  /** The deck's face: its highest-level Unit (the most copies first). */
-  function faceCard(main: readonly string[]) {
-    // A local tally, not state.
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const counts = new Map<string, number>();
-    for (const no of main) counts.set(no, (counts.get(no) ?? 0) + 1);
-    let best: { card: NonNullable<ReturnType<CardPool["get"]>>; score: number } | undefined;
-    for (const [no, n] of counts) {
-      const card = pool.get(no);
-      if (!card || card.type !== "UNIT") continue;
-      const score = (card.level ?? 0) * 10 + n;
-      if (!best || score > best.score) best = { card, score };
-    }
-    return best?.card;
-  }
-
   const sides = $derived(
     [
-      { who: "Du", side: "mine", deck: DECKS.find((d) => d.id === myDeck) },
-      { who: "KI", side: "theirs", deck: DECKS.find((d) => d.id === aiDeck) },
-    ].map((s) => ({ ...s, face: s.deck ? faceCard(s.deck.deck.main) : undefined })),
+      { who: "Du", side: "mine" as const, deck: find(myDeck) },
+      { who: "KI", side: "theirs" as const, deck: find(aiDeck) },
+    ].map((s) => ({ ...s, face: s.deck ? faceCard(pool, s.deck.deck.main) : undefined })),
   );
 
   function resume() {
@@ -160,17 +199,25 @@
     saved = load();
     session = undefined;
     seed = randomSeed();
+    rollAiDeck();
   }
 </script>
 
-{#snippet deckOptions()}
-  {#each groups.filter((g) => DECKS.some((d) => d.group === g.key)) as g (g.key)}
-    <optgroup label={g.label}>
-      {#each DECKS.filter((d) => d.group === g.key) as d (d.id)}<option value={d.id}>{deckLabel(d)}</option
-        >{/each}
-    </optgroup>
-  {/each}
-{/snippet}
+{#if picking}
+  {@const mine = picking === "mine"}
+  {@const current = mine ? myDeck : aiDeck}
+  <DeckPicker
+    title={mine ? "Dein Deck" : "Deck der KI"}
+    {pool}
+    {groups}
+    selected={current}
+    open={mine && groups.some((g) => g.key === "user") ? ["user"] : [groupOf(groups, current) ?? ""]}
+    {unavailable}
+    onpick={(d) => (mine ? chooseMine(d) : (aiDeck = d.id))}
+    onclose={() => (picking = null)}
+    {...mine ? {} : { onrandom: rollAiDeck }}
+  />
+{/if}
 
 {#if session}
   <Board {engine} {pool} {session} opponentField={field} onsave={save} onnew={newGame} />
@@ -186,25 +233,41 @@
       {#each sides as v, i (v.side)}
         {#if i === 1}<span class="vs" aria-hidden="true">VS</span>{/if}
         <div class="deck-panel {v.side}">
-          <div class="art">
-            {#if v.face}<img use:cardSrc={cardImageUrl(v.face, "full")} alt="" />{/if}
-            <span class="who">{v.who}</span>
-          </div>
-          <div class="deck-info">
-            <strong>{v.deck ? (namedOnly(v.deck) ? v.deck.name : `${v.deck.id} ${v.deck.name}`) : ""}</strong>
-            <span class="colors">
-              {#each (v.deck?.colors ?? "").split("/").filter(Boolean) as c (c)}
-                <i class="dot" data-color={c.trim().toLowerCase()}></i>{c.trim()}
-              {/each}
-              {#if v.deck?.share !== undefined}<span>· {(v.deck.share * 100).toFixed(1)} % der Meta</span
-                >{/if}
+          <button
+            class="pick"
+            onclick={() => (picking = v.side)}
+            aria-label={v.side === "mine" ? "Dein Deck wählen" : "Deck der KI wählen"}
+          >
+            <span class="art">
+              {#key v.face?.no}
+                {#if v.face}<img use:cardSrc={cardImageUrl(v.face, "full")} alt="" />{/if}
+              {/key}
+              <span class="who">{v.who}</span>
             </span>
-            {#if v.side === "mine"}
-              <select bind:value={myDeck} aria-label="Dein Deck">{@render deckOptions()}</select>
-            {:else}
-              <select bind:value={aiDeck} aria-label="Deck der KI">{@render deckOptions()}</select>
-            {/if}
-          </div>
+            <span class="deck-info">
+              <strong>{v.deck ? deckTitle(v.deck) : ""}</strong>
+              <span class="colors">
+                {#each (v.deck?.colors ?? "").split("/").filter(Boolean) as c (c)}
+                  <i class="dot" data-color={c.trim().toLowerCase()}></i>{c.trim()}
+                {/each}
+                {#if v.deck?.share !== undefined}<span
+                    >· {(v.deck.share * 100).toFixed(1).replace(".", ",")} % der Meta</span
+                  >{/if}
+              </span>
+              <span class="change">Deck ändern <span aria-hidden="true">›</span></span>
+            </span>
+          </button>
+          {#if v.side === "theirs"}
+            {#key rolled}
+              <button
+                class="reroll"
+                class:spin={rolled > 0}
+                onclick={rollAiDeck}
+                title="Zufälliges Deck für die KI"
+                aria-label="Zufälliges Deck für die KI">🎲</button
+              >
+            {/key}
+          {/if}
         </div>
       {/each}
     </div>
@@ -364,6 +427,7 @@
   }
   .deck-panel {
     --tone: 79 195 255;
+    position: relative;
     overflow: hidden;
     border: 1px solid rgb(var(--tone) / 40%);
     border-radius: 14px;
@@ -373,7 +437,53 @@
   .deck-panel.theirs {
     --tone: 255 93 108;
   }
+  .pick {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    text-align: left;
+  }
+  .pick:hover .change {
+    color: rgb(var(--tone));
+  }
+  .pick:hover .art img {
+    transform: scale(1.04);
+  }
+  .change {
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 4px 10px;
+    border: 1px solid rgb(var(--tone) / 45%);
+    border-radius: 999px;
+    background: rgb(var(--tone) / 8%);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    transition: color 0.15s;
+  }
+  .reroll {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 42px;
+    height: 42px;
+    border: 1px solid rgb(var(--tone) / 50%);
+    border-radius: 12px;
+    background: rgb(5 8 14 / 70%);
+    backdrop-filter: blur(4px);
+    font-size: 22px;
+    line-height: 1;
+  }
+  .reroll:hover {
+    background: rgb(var(--tone) / 25%);
+  }
+  .reroll.spin {
+    animation: tumble 0.6s ease-out;
+  }
   .art {
+    display: block;
     position: relative;
     height: 150px;
     overflow: hidden;
@@ -385,6 +495,13 @@
     object-fit: cover;
     object-position: 50% 26%;
     mask-image: linear-gradient(180deg, #000 55%, transparent);
+    transition: transform 0.3s;
+    animation: fade 0.35s ease-out;
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
   }
   .who {
     position: absolute;
@@ -497,7 +614,6 @@
     font-size: 13px;
     color: var(--text-dim);
   }
-  select,
   input {
     min-width: 0;
     min-height: 36px;

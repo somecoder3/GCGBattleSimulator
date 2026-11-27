@@ -5,6 +5,7 @@
   import CardImage from "./CardImage.svelte";
   import CardPartners from "./CardPartners.svelte";
   import { MAX_COPIES } from "../../engine/deck";
+  import { modal } from "../lib/modal";
 
   let {
     card: start,
@@ -13,6 +14,7 @@
     deckColors,
     count,
     onadd,
+    onremove,
   }: {
     card: CardDef;
     onclose: () => void;
@@ -21,6 +23,8 @@
     deckColors?: ReadonlySet<string>;
     count?: (no: string) => number;
     onadd?: (no: string) => void;
+    /** With `onadd`: "−" next to the count. */
+    onremove?: (no: string) => void;
   } = $props();
 
   /** Cards opened from "Passt zu", the last one is shown. */
@@ -37,7 +41,11 @@
 
   $effect(() => {
     alt = card.printings[0]?.alt ?? 0;
-    if (!dialog.open) dialog.showModal();
+    if (!dialog.open) {
+      dialog.showModal();
+      // No focus ring on the first button (and no scrolling to it); Esc and the close button still work.
+      dialog.focus({ preventScroll: true });
+    }
   });
 
   function pick(c: CardDef) {
@@ -62,7 +70,13 @@
   );
 </script>
 
-<dialog bind:this={dialog} {onclose} onclick={(e) => e.target === dialog && dialog.close()}>
+<dialog
+  bind:this={dialog}
+  use:modal
+  tabindex="-1"
+  {onclose}
+  onclick={(e) => e.target === dialog && dialog.close()}
+>
   <div class="layout">
     <div class="image">
       <CardImage {card} src={cardImageUrl(card, "full", alt)} eager />
@@ -105,11 +119,22 @@
         </div>
       {/if}
       {#if onadd && count}
+        {@const n = count(card.no)}
         <div class="deck-row">
-          <span>Im Deck: <strong>{count(card.no)}</strong></span>
-          <button class="more" onclick={() => onadd(card.no)} disabled={count(card.no) >= MAX_COPIES}
-            >+ Ins Deck</button
-          >
+          <span>Im Deck</span>
+          {#if onremove}
+            <span class="step" role="group" aria-label="Anzahl im Deck">
+              <button onclick={() => onremove(card.no)} disabled={n === 0} aria-label="Eine weniger">−</button
+              >
+              <strong>{n}</strong>
+              <button onclick={() => onadd(card.no)} disabled={n >= MAX_COPIES} aria-label="Eine mehr"
+                >+</button
+              >
+            </span>
+          {:else}
+            <strong>{n}</strong>
+            <button class="more" onclick={() => onadd(card.no)} disabled={n >= MAX_COPIES}>+ Ins Deck</button>
+          {/if}
         </div>
       {/if}
     </div>
@@ -127,6 +152,8 @@
     width: min(960px, calc(100vw - 32px));
     max-height: calc(100dvh - 32px);
     padding: 0;
+    overscroll-behavior: contain;
+    outline: 0;
     border: 1px solid var(--line);
     border-radius: 14px;
     background: var(--bg-raised);
@@ -250,6 +277,33 @@
   .deck-row .more:disabled {
     opacity: 0.4;
   }
+  .step {
+    display: inline-flex;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-sunken);
+  }
+  .step button {
+    width: 38px;
+    height: 34px;
+    border: 0;
+    background: none;
+    font-size: 18px;
+  }
+  .step button:hover:not(:disabled) {
+    background: rgb(79 195 255 / 14%);
+  }
+  .step button:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+  .step strong {
+    min-width: 24px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
   .close {
     position: absolute;
     top: 12px;
@@ -260,7 +314,31 @@
     border-radius: 50%;
     background: var(--bg-sunken);
   }
+  /* Phones: over the page from the top; it scrolls by itself, the page underneath stays as it was. */
   @media (max-width: 700px) {
+    dialog {
+      width: calc(100vw - 16px);
+      max-width: none;
+      max-height: calc(100dvh - 16px - env(safe-area-inset-top));
+      margin: calc(8px + env(safe-area-inset-top)) auto auto;
+    }
+    dialog[open] {
+      animation: drop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+    }
+    @keyframes drop {
+      from {
+        opacity: 0;
+        transform: translateY(-12px);
+      }
+    }
+    /* Always reachable, also far down in the dialog. */
+    .close {
+      position: fixed;
+      top: calc(16px + env(safe-area-inset-top));
+      right: 16px;
+      z-index: 2;
+      box-shadow: 0 2px 10px rgb(0 0 0 / 50%);
+    }
     .layout {
       grid-template-columns: 1fr;
       padding: 16px;

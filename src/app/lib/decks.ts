@@ -69,6 +69,9 @@ export interface DeckChoice extends NamedDeck {
   group: "meta" | "starter" | "test" | "user" | "lab" | "shared";
   /** Meta share (0–1) for meta decks. */
   share?: number;
+  /** Owner of another user's deck; `name` then ends with " (owner)", `title` is the deck's own name. */
+  owner?: string;
+  title?: string;
   supported: boolean;
 }
 
@@ -100,6 +103,8 @@ export function deckChoices(pool: CardPool, list: MetaList = "consensus"): DeckC
   const shared: DeckChoice[] = SHARED_DECKS.map((d) => ({
     id: sharedId(d.id),
     name: `${d.name} (${d.ownerName})`,
+    title: d.name,
+    owner: d.ownerName,
     colors: deckColors(lib, d.deck.main),
     deck: d.deck,
     group: "shared",
@@ -119,6 +124,9 @@ export function deckColors(lib: CardLib, nos: readonly string[]): string {
   }
   return [...colors].sort().join("/");
 }
+
+/** Name for headings and logs: own decks by name, the others with their id in front (M03 Sazabi). */
+export const deckTitle = (d: DeckChoice) => (namedOnly(d) ? d.name : `${d.id} ${d.name}`);
 
 export function deckLabel(d: DeckChoice): string {
   const share = d.share !== undefined ? ` · ${(d.share * 100).toFixed(1)} %` : "";

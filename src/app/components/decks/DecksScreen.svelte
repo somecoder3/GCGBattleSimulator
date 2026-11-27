@@ -17,7 +17,20 @@
   import { banlistProblems } from "../../../meta/banlist";
   import type { MetaDeck } from "../../../meta/decks";
   import { db, type UserDeck } from "../../lib/db";
-  import { cardLib, deckChoices, deckColors, preset, setUserDecks, sharedId } from "../../lib/decks";
+  import {
+    SNAPSHOT,
+    cardLib,
+    deckChoices,
+    deckColors,
+    pickDeck,
+    preset,
+    setUserDecks,
+    sharedId,
+    type DeckChoice,
+  } from "../../lib/decks";
+  import { groupDecks } from "../../lib/deckgroups";
+  import { modal } from "../../lib/modal";
+  import DeckPicker from "../DeckPicker.svelte";
   import { deckDeleted, onSync, sync, syncAvailable } from "../../lib/sync";
   import type { SyncDeck } from "../../../sync/types";
   import CardImage from "../CardImage.svelte";
@@ -52,19 +65,21 @@
     id: string;
     name: string;
     counts: Record<string, number>;
-    /** Another user's deck: view, play and copy only. */
+    /** Not an own deck (another user's, meta, starter …): view, play and copy only. */
     readonly?: boolean;
-    ownerName?: string;
+    /** What a read-only deck is ("von Max", "Meta-Archetyp", "Starter-Deck" …). */
+    source?: string;
+    /** Its id among the deck choices (for "Gegen die KI spielen"). */
+    choiceId?: string;
     copiedFrom?: string;
   } | null>(null);
+  /** The start page's choices: the deck picker or the import page. */
+  let picking = $state(false);
+  let importing = $state(false);
+  /** A question before leaving unsaved changes or deleting. */
+  let confirming = $state<"leave" | "delete" | null>(null);
   /** Decks of the other signed-in users (cloud sync). */
   let shared = $state.raw<SyncDeck[]>([]);
-  const sharedByOwner = $derived(
-    [...new Set(shared.map((d) => d.ownerName))].map((owner) => ({
-      owner,
-      decks: shared.filter((d) => d.ownerName === owner),
-    })),
-  );
   let dirty = $state(false);
   let filter = $state<CardFilter>(emptyFilter());
   let ordering = $state<Ordering>({ key: "level", desc: false });
@@ -73,7 +88,6 @@
   let shown = $state(SHOW_STEP);
   let importText = $state("");
   let importInfo = $state<string>();
-  let copyFrom = $state("");
   /** For a meta archetype: its consensus list or one of its real lists (index, best first). */
   let copyList = $state("consensus");
   let detail = $state<CardDef>();
@@ -81,16 +95,33 @@
   /** Left column of the editor: the list or its statistics. */
   let view = $state<"list" | "stats">("list");
 
+  /** All decks for "Deck öffnen" (own ones from `decks`, the rest from the deck choices). */
   // svelte-ignore state_referenced_locally
-  const templates = deckChoices(pool).filter((d) => d.group !== "user");
-  const metaTemplates = templates.filter((d) => d.group === "meta");
-  const starterTemplates = templates.filter((d) => d.group === "starter");
-  const testTemplates = templates.filter((d) => d.group === "test");
-  /** Decks of a running lab (PWA): copied as own decks. */
-  const labTemplates = templates.filter((d) => d.group === "lab");
-  const archetype = $derived(
-    (metaTemplates.find((d) => d.id === copyFrom) as (MetaDeck & { group: "meta" }) | undefined)?.archetype,
-  );
+  const others = deckChoices(pool).filter((d) => d.group !== "user" && d.group !== "shared");
+  const META_LABEL = SNAPSHOT ? `Meta (Turniere bis ${SNAPSHOT.to})` : "Meta";
+  const pickerGroups = $derived.by(() => {
+    const own: DeckChoice[] = decks.map((d) => ({
+      id: d.id,
+      name: d.name,
+      colors: deckColors(lib, d.deck.main),
+      deck: d.deck,
+      group: "user",
+      supported: true,
+    }));
+    const theirs: DeckChoice[] = shared.map((d) => ({
+      id: sharedId(d.id),
+      name: `${d.name} (${d.ownerName})`,
+      title: d.name,
+      owner: d.ownerName,
+      colors: deckColors(lib, d.deck.main),
+      deck: d.deck,
+      group: "shared",
+      supported: true,
+    }));
+    return groupDecks([...own, ...theirs, ...others], META_LABEL);
+  });
+  /** The meta archetype of the deck being viewed (its lists can be chosen). */
+  let archetype = $state.raw<(MetaDeck & { group: "meta" })["archetype"]>();
 
   onMount(() => {
     void load();
@@ -121,13 +152,78 @@
     resources: Array<string>(RESOURCE_DECK_SIZE).fill(DEFAULT_RESOURCE),
   });
 
+  function opened() {
+    picking = false;
+    importing = false;
+    view = "list";
+    archetype = undefined;
+    copyList = "consensus";
+    message = undefined;
+    scrollTo({ top: 0, behavior: "instant" });
+  }
+
   function newDeck(name = "Neues Deck", counts: Record<string, number> = {}, copiedFrom?: string) {
+    opened();
     editing = { id: `u-${Date.now().toString(36)}`, name, counts, ...(copiedFrom ? { copiedFrom } : {}) };
     dirty = true;
+  }
+
+  /** A deck chosen in the picker. */
+  function open(d: DeckChoice) {
+    if (d.group === "user") {
+      const own = decks.find((x) => x.id === d.id);
+      if (own) edit(own);
+      return;
+    }
+    if (d.group === "shared") {
+      const theirs = shared.find((x) => sharedId(x.id) === d.id);
+      if (theirs) viewShared(theirs);
+      return;
+    }
+    opened();
+    const SOURCES: Record<string, string> = {
+      meta: "Meta-Archetyp",
+      starter: "Starter-Deck",
+      test: "Testdeck",
+      lab: "Labor-Deck",
+    };
+    editing = {
+      id: d.id,
+      name: d.name,
+      counts: countsOf(d.deck.main),
+      readonly: true,
+      source: [d.group === "lab" ? "" : d.id, SOURCES[d.group], d.share !== undefined ? pct(d.share) : ""]
+        .filter(Boolean)
+        .join(" · "),
+      choiceId: d.id,
+    };
+    archetype = d.group === "meta" ? (d as MetaDeck & { group: "meta" }).archetype : undefined;
+    dirty = false;
+  }
+  const pct = (x: number) => `${(x * 100).toFixed(1).replace(".", ",")} % der Meta`;
+
+  /** A meta archetype's list: the consensus or a real one. */
+  function showList(value: string) {
+    copyList = value;
+    if (!editing || !archetype) return;
+    const entry = value === "consensus" ? undefined : archetype.entries[Number(value)];
+    editing.counts = entry ? { ...entry.cards } : countsOf(archetype.consensus.main);
+  }
+
+  /** Back to the start page (asks first about unsaved changes). */
+  function back(force = false) {
+    if (!force && dirty && editing && !editing.readonly) {
+      confirming = "leave";
+      return;
+    }
+    editing = null;
+    dirty = false;
+    archetype = undefined;
     message = undefined;
   }
 
   function edit(d: UserDeck) {
+    opened();
     editing = {
       id: d.id,
       name: d.name,
@@ -139,28 +235,31 @@
   }
 
   function viewShared(d: SyncDeck) {
+    opened();
     editing = {
       id: d.id,
       name: d.name,
       counts: countsOf(d.deck.main),
       readonly: true,
-      ownerName: d.ownerName,
+      source: `von ${d.ownerName}`,
+      choiceId: sharedId(d.id),
+      copiedFrom: d.id,
     };
     dirty = false;
     message = undefined;
   }
 
-  function copyShared() {
+  /** A read-only deck as a new own deck. */
+  function copyViewed() {
     if (!editing?.readonly) return;
-    newDeck(`${editing.name} (Kopie)`, { ...editing.counts }, editing.id);
-  }
-
-  function copyTemplate() {
-    const t = templates.find((d) => d.id === copyFrom);
-    if (!t) return;
     const entry = archetype && copyList !== "consensus" ? archetype.entries[Number(copyList)] : undefined;
-    if (entry) newDeck(`${t.name} – Platz ${entry.placing} ${entry.tournament.name}`, { ...entry.cards });
-    else newDeck(t.group === "lab" ? t.name : `${t.name} (Kopie)`, countsOf(t.deck.main));
+    const name = entry
+      ? `${editing.name} – Platz ${entry.placing} ${entry.tournament.name}`
+      : editing.source === "Labor-Deck"
+        ? editing.name
+        : `${editing.name} (Kopie)`;
+    // Only another user's deck remembers where it came from (cloud sync).
+    newDeck(name, { ...editing.counts }, editing.choiceId?.startsWith("s:") ? editing.copiedFrom : undefined);
   }
 
   function importList() {
@@ -187,8 +286,21 @@
       return;
     }
     newDeck("Importiertes Deck", counts);
-    importInfo = unknown.length ? `Nicht erkannt: ${unknown.slice(0, 8).join("; ")}` : undefined;
+    message = unknown.length ? `Nicht erkannt: ${unknown.slice(0, 8).join("; ")}` : undefined;
+    importInfo = undefined;
     importText = "";
+  }
+
+  /** The clipboard into the import field (phones: no long-press needed). */
+  let canPaste = $state(typeof navigator !== "undefined" && !!navigator.clipboard?.readText);
+  async function paste() {
+    try {
+      importText = await navigator.clipboard.readText();
+      importInfo = undefined;
+    } catch {
+      canPaste = false;
+      importInfo = "Kein Zugriff auf die Zwischenablage – bitte selbst einfügen.";
+    }
   }
 
   function change(no: string, delta: number) {
@@ -224,11 +336,13 @@
   }
 
   async function remove() {
+    confirming = null;
     if (!editing || editing.readonly) return;
     const deck = decks.find((d) => d.id === editing?.id);
     await db.decks.delete(editing.id).catch(() => undefined);
     if (deck) deckDeleted(deck);
     editing = null;
+    dirty = false;
     await load();
   }
 
@@ -280,9 +394,23 @@
   async function useIn(where: "play" | "sim") {
     if (dirty) await save();
     if (!editing) return;
-    if (editing.readonly) preset.play = sharedId(editing.id);
-    else if (where === "play") preset.play = editing.id;
-    else preset.gauntlet = editing.id;
+    let id = editing.readonly ? (editing.choiceId ?? editing.id) : editing.id;
+    // A meta archetype's real list: as a picked deck "M03T5" (until the page is reloaded).
+    const entry = archetype && copyList !== "consensus" ? archetype.entries[Number(copyList)] : undefined;
+    if (entry) {
+      id = `${id}T${Number(copyList) + 1}`;
+      const deck = toList(editing.counts);
+      pickDeck({
+        id,
+        name: `${editing.name} – Platz ${entry.placing} ${entry.tournament.name}`,
+        colors: deckColors(lib, deck.main),
+        deck,
+        group: "meta",
+        supported: deck.main.every((no) => lib.has(no) && lib.get(no).script.status !== "partial"),
+      });
+    }
+    if (where === "play") preset.play = id;
+    else preset.gauntlet = id;
     location.hash = where === "play" ? "#play" : "#sim";
   }
 
@@ -384,110 +512,93 @@
 </script>
 
 <section class="decks">
-  <div class="panel side">
-    <h1>Decks</h1>
-    <p class="lead">
-      Eigene Decks, im Browser gespeichert{syncAvailable
-        ? " und nach der Anmeldung (oben rechts) auf allen Geräten"
-        : ""}. Sie stehen in Spiel und Simulator unter „Eigene Decks“.
-    </p>
-    <div class="actions">
-      <button class="btn primary" onclick={() => newDeck()}>Neues Deck</button>
+  {#if !editing && !importing}
+    <div class="start">
+      <h1>Decks</h1>
+      <p class="lead">
+        Eigene Decks bauen, ansehen und exportieren; gespeichert im Browser{syncAvailable
+          ? " und nach der Anmeldung (oben rechts) auf allen Geräten"
+          : ""}. Sie stehen im Spiel unter „Eigene Decks“.
+      </p>
+      <div class="tiles">
+        <button class="tile new" onclick={() => newDeck()}>
+          <span class="icon" aria-hidden="true">＋</span>
+          <span class="label">Neues Deck</span>
+          <small>Leeres Deck, Karten aus der Suche hinzufügen</small>
+        </button>
+        <button class="tile open" onclick={() => (picking = true)}>
+          <span class="icon" aria-hidden="true">▤</span>
+          <span class="label">Deck öffnen</span>
+          <small
+            >{decks.length
+              ? `${decks.length} eigene${shared.length ? `, ${shared.length} von anderen` : ""}, dazu Meta- und Starter-Decks`
+              : "Meta-, Starter- und Testdecks ansehen und kopieren"}</small
+          >
+        </button>
+        <button class="tile import" onclick={() => (importing = true)}>
+          <span class="icon" aria-hidden="true">⇩</span>
+          <span class="label">Deck importieren</span>
+          <small>Liste einfügen: ExBurst, Limitless, TTS, Namen …</small>
+        </button>
+      </div>
     </div>
-    {#if decks.length}
-      <ul class="list">
-        {#each decks as d (d.id)}
-          <li>
-            <button class:active={editing?.id === d.id} onclick={() => edit(d)}>
-              {d.name}
-              <small>{deckColors(lib, d.deck.main) || "–"} · {d.deck.main.length} Karten</small>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {:else}
-      <p class="hint">Noch keine eigenen Decks.</p>
-    {/if}
+  {:else if importing && !editing}
+    <div class="panel page">
+      <button class="back" onclick={() => ((importing = false), (importInfo = undefined))}
+        ><span aria-hidden="true">←</span> Decks</button
+      >
+      <h2 class="page-title">Deck importieren</h2>
+      <p class="hint">
+        Eine Liste aus ExBurst, Limitless, Tabletop Simulator, der Scanner-App oder einfach Anzahl und
+        Kartennummer bzw. Name je Zeile.
+      </p>
+      <textarea bind:value={importText} rows="12" placeholder={IMPORT_EXAMPLE} aria-label="Deckliste"
+      ></textarea>
+      <div class="actions">
+        <button class="btn primary" onclick={importList} disabled={!importText.trim()}>Importieren</button>
+        {#if canPaste}<button class="btn" onclick={paste}>Aus Zwischenablage einfügen</button>{/if}
+      </div>
+      {#if importInfo}<p class="hint warn-text">{importInfo}</p>{/if}
+    </div>
+  {/if}
 
-    {#each sharedByOwner as g (g.owner)}
-      <h2 class="owner">Decks von {g.owner}</h2>
-      <ul class="list">
-        {#each g.decks as d (d.id)}
-          <li>
-            <button class:active={editing?.id === d.id} onclick={() => viewShared(d)}>
-              {d.name}
-              <small>{deckColors(lib, d.deck.main) || "–"} · {d.deck.main.length} Karten</small>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/each}
-
-    <details>
-      <summary>Aus Meta-, Starter-{labTemplates.length ? " oder Labor-" : " "}Deck kopieren</summary>
-      <div class="copy">
-        <select
-          bind:value={copyFrom}
-          onchange={() => (copyList = "consensus")}
-          aria-label="Archetyp oder Deck"
-        >
-          <option value="">Archetyp oder Deck wählen …</option>
-          {#if labTemplates.length}
-            <optgroup label="Labor-Decks">
-              {#each labTemplates as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
-            </optgroup>
+  {#if editing}
+    <div class="panel main">
+      <header>
+        <div class="titlebar">
+          <button class="back" onclick={() => back()}><span aria-hidden="true">←</span> Decks</button>
+          {#if editing.readonly}
+            <h2 class="name readonly">
+              {editing.name}
+              {#if editing.source}<small>{editing.source}</small>{/if}
+            </h2>
+          {:else}
+            <input
+              class="name"
+              bind:value={editing.name}
+              oninput={() => (dirty = true)}
+              aria-label="Name des Decks"
+            />
           {/if}
-          {#if metaTemplates.length}
-            <optgroup label="Meta-Archetypen">
-              {#each metaTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
-            </optgroup>
-          {/if}
-          <optgroup label="Starter-Decks">
-            {#each starterTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
-          </optgroup>
-          <optgroup label="Testdecks">
-            {#each testTemplates as t (t.id)}<option value={t.id}>{t.id} {t.name}</option>{/each}
-          </optgroup>
-        </select>
+        </div>
         {#if archetype}
-          <select bind:value={copyList} aria-label="Liste des Archetyps">
+          <select
+            class="lists"
+            value={copyList}
+            onchange={(e) => showList(e.currentTarget.value)}
+            aria-label="Liste des Archetyps"
+          >
             <option value="consensus">Konsensliste (aus {archetype.entries.length} Listen)</option>
             {#each archetype.entries as e, i (i)}<option value={String(i)}>{entryLabel(e)}</option>{/each}
           </select>
-          <p class="hint">
-            Turnierlisten nach Ergebnis sortiert: Platz und Turniergröße (log2 Spieler / √Platz).
-          </p>
-        {/if}
-        <button class="btn" onclick={copyTemplate} disabled={!copyFrom}>Kopieren</button>
-      </div>
-    </details>
-
-    <details>
-      <summary>Liste importieren</summary>
-      <textarea bind:value={importText} rows="8" placeholder={IMPORT_EXAMPLE}></textarea>
-      <button class="btn" onclick={importList} disabled={!importText.trim()}>Importieren</button>
-      {#if importInfo}<p class="hint">{importInfo}</p>{/if}
-    </details>
-  </div>
-
-  <div class="panel main">
-    {#if editing}
-      <header>
-        {#if editing.readonly}
-          <h2 class="name readonly">{editing.name} <small>von {editing.ownerName}</small></h2>
-        {:else}
-          <input
-            class="name"
-            bind:value={editing.name}
-            oninput={() => (dirty = true)}
-            aria-label="Name des Decks"
-          />
         {/if}
         <div class="actions">
           {#if editing.readonly}
-            <button class="btn primary" onclick={copyShared}>Kopieren und bearbeiten</button>
+            <button class="btn primary" onclick={copyViewed}>Kopieren und bearbeiten</button>
           {:else}
-            <button class="btn primary" onclick={save} disabled={!dirty}>Speichern</button>
+            <button class="btn primary" onclick={save} disabled={!dirty}
+              >{dirty ? "Speichern" : "Gespeichert"}</button
+            >
           {/if}
           <button class="btn" onclick={() => useIn("play")} disabled={problems.length > 0}
             >Gegen die KI spielen</button
@@ -507,10 +618,12 @@
             </select>
             <button class="btn" onclick={copyExport}>Liste kopieren</button>
           </span>
-          {#if !editing.readonly}<button class="btn danger" onclick={remove}>Löschen</button>{/if}
+          {#if !editing.readonly}<button class="btn danger" onclick={() => (confirming = "delete")}
+              >Löschen</button
+            >{/if}
         </div>
       </header>
-      {#if message}<p class="hint">{message}</p>{/if}
+      {#if message}<p class="hint" role="status">{message}</p>{/if}
 
       <div class="status" class:ok={!problems.length}>
         <strong>{total} / {DECK_SIZE} Karten</strong> · {deckColors(lib, list?.main ?? []) || "keine Farbe"} · Ressourcen-Deck
@@ -607,17 +720,20 @@
             </label>
             <div class="results">
               {#each results.slice(0, shown) as c (c.no)}
-                <div class="result">
+                {@const n = editing.counts[c.no] ?? 0}
+                <div class="result" class:in={n > 0}>
                   <button class="img" onclick={() => (detail = c)} title={c.name}>
                     <CardImage card={c} src={cardImageUrl(c, "small")} />
                   </button>
-                  <button
-                    class="add"
-                    onclick={() => change(c.no, 1)}
-                    disabled={(editing.counts[c.no] ?? 0) >= MAX_COPIES}
-                  >
-                    + {editing.counts[c.no] ? `(${editing.counts[c.no]})` : ""}
-                  </button>
+                  <div class="step" role="group" aria-label="{c.name}: Anzahl im Deck">
+                    <button onclick={() => change(c.no, -1)} disabled={n === 0} aria-label="Eine weniger"
+                      >−</button
+                    >
+                    <span class="count" aria-live="polite">{n}</span>
+                    <button onclick={() => change(c.no, 1)} disabled={n >= MAX_COPIES} aria-label="Eine mehr"
+                      >+</button
+                    >
+                  </div>
                 </div>
               {:else}
                 <p class="hint">Keine Treffer.</p>
@@ -630,11 +746,63 @@
             {/if}
           </div>{/if}
       </div>
-    {:else}
-      <p class="hint">Ein Deck auswählen, neu anlegen, kopieren oder importieren.</p>
-    {/if}
-  </div>
+    </div>
+  {/if}
 </section>
+
+{#if picking}
+  <DeckPicker
+    title="Deck öffnen"
+    {pool}
+    groups={pickerGroups}
+    open={decks.length ? ["user"] : []}
+    onpick={open}
+    onclose={() => (picking = false)}
+  />
+{/if}
+
+{#if confirming}
+  <dialog
+    class="confirm"
+    use:modal
+    {@attach (node: HTMLDialogElement) => node.showModal()}
+    onclose={() => (confirming = null)}
+    aria-labelledby="confirm-title"
+  >
+    {#if confirming === "leave"}
+      <h2 id="confirm-title">Änderungen speichern?</h2>
+      <p>„{editing?.name}“ hat ungespeicherte Änderungen.</p>
+      <div class="actions">
+        <button
+          class="btn primary"
+          onclick={async () => {
+            confirming = null;
+            await save();
+            if (!dirty) back(true);
+          }}>Speichern</button
+        >
+        <button
+          class="btn danger"
+          onclick={() => {
+            confirming = null;
+            back(true);
+          }}>Verwerfen</button
+        >
+        <button class="btn" onclick={() => (confirming = null)}>Abbrechen</button>
+      </div>
+    {:else}
+      <h2 id="confirm-title">Deck löschen?</h2>
+      <p>
+        „{editing?.name}“ wird gelöscht{syncAvailable ? ", auch auf deinen anderen Geräten" : ""}. Das lässt
+        sich nicht rückgängig machen.
+      </p>
+      <div class="actions">
+        <button class="btn danger solid" onclick={remove}>Löschen</button>
+        <button class="btn" onclick={() => (confirming = null)}>Abbrechen</button>
+      </div>
+    {/if}
+  </dialog>
+{/if}
 
 {#if detail}
   <CardDetail
@@ -646,6 +814,7 @@
           deckColors: colorsInDeck,
           count: (no: string) => editing?.counts[no] ?? 0,
           onadd: (no: string) => change(no, 1),
+          onremove: (no: string) => change(no, -1),
         }
       : {}}
   />
@@ -653,10 +822,150 @@
 
 <style>
   .decks {
+    min-width: 0;
+  }
+  .start {
+    max-width: 880px;
+    margin: 4vh auto 0;
+  }
+  .start h1 {
+    font-size: 26px;
+  }
+  .start .lead {
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+  .tiles {
     display: grid;
-    grid-template-columns: 320px minmax(0, 1fr);
-    gap: 16px;
-    align-items: start;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .tile {
+    --tone: 79 195 255;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    min-height: 170px;
+    padding: 20px;
+    border: 1px solid rgb(var(--tone) / 35%);
+    border-radius: 16px;
+    background:
+      radial-gradient(ellipse 90% 70% at 0% 0%, rgb(var(--tone) / 14%), transparent 70%), var(--bg-raised);
+    text-align: left;
+    transition:
+      transform 0.15s,
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+  .tile:hover {
+    transform: translateY(-2px);
+    border-color: rgb(var(--tone) / 70%);
+    box-shadow: 0 10px 30px rgb(var(--tone) / 12%);
+  }
+  .tile:active {
+    transform: none;
+  }
+  .tile.open {
+    --tone: 255 209 102;
+  }
+  .tile.import {
+    --tone: 63 191 111;
+  }
+  .tile .icon {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    margin-bottom: auto;
+    border-radius: 14px;
+    background: rgb(var(--tone) / 16%);
+    color: rgb(var(--tone));
+    font-size: 26px;
+    line-height: 1;
+  }
+  .tile .label {
+    margin-top: 14px;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .tile small {
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .page {
+    max-width: 720px;
+    margin: 2vh auto 0;
+  }
+  .page-title {
+    margin: 12px 0 4px;
+    font-size: 20px;
+  }
+  .warn-text {
+    color: #ffd166;
+  }
+  .back {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 4px 12px 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-sunken);
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  .back:hover {
+    color: var(--text);
+  }
+  .titlebar {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .lists {
+    flex: 1 1 100%;
+    min-height: 38px;
+  }
+  .confirm {
+    width: min(420px, calc(100vw - 32px));
+    padding: 20px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg-raised);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+  .confirm[open] {
+    animation: pop 0.18s ease-out;
+  }
+  .confirm::backdrop {
+    background: rgb(0 0 0 / 60%);
+  }
+  .confirm h2 {
+    margin: 0 0 8px;
+    font-size: 18px;
+  }
+  .confirm p {
+    margin: 0 0 16px;
+    color: var(--text-dim);
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  .btn.danger.solid {
+    border-color: var(--danger);
+    background: var(--danger);
+    color: #fff;
+    font-weight: 600;
   }
   .panel {
     padding: 18px;
@@ -681,51 +990,6 @@
     margin: 0 0 10px;
     color: var(--text-dim);
     font-size: 13px;
-  }
-  .list {
-    margin: 10px 0;
-    padding: 0;
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .list button {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 6px 10px;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    background: none;
-    text-align: left;
-  }
-  .list button.active,
-  .list button:hover {
-    border-color: var(--line);
-    background: var(--bg-sunken);
-  }
-  .list small {
-    color: var(--text-dim);
-  }
-  details {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-  }
-  summary {
-    cursor: pointer;
-    font-size: 14px;
-  }
-  .copy {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
-  }
-  .copy .btn {
-    align-self: flex-start;
   }
   select,
   input,
@@ -790,7 +1054,7 @@
   }
   .name {
     flex: 1;
-    min-width: 200px;
+    min-width: 0;
     font-size: 18px;
     font-weight: 600;
   }
@@ -823,15 +1087,13 @@
   .editor.single {
     grid-template-columns: minmax(0, 560px);
   }
-  .owner {
-    margin: 14px 0 0;
-    font-size: 14px;
-    color: var(--text-dim);
-  }
   .name.readonly {
     margin: 0;
+    font-size: 18px;
+    line-height: 1.25;
   }
   .name.readonly small {
+    display: block;
     color: var(--text-dim);
     font-size: 13px;
     font-weight: 400;
@@ -968,20 +1230,90 @@
     gap: 4px;
   }
   .img {
+    position: relative;
     padding: 0;
     border: 0;
     background: none;
   }
-  .add {
-    min-height: 28px;
+  .result.in .img {
+    outline: 2px solid rgb(79 195 255 / 70%);
+    outline-offset: 1px;
+    border-radius: var(--radius-card);
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    overflow: hidden;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 8px;
     background: var(--bg-sunken);
   }
+  .step button {
+    min-height: 32px;
+    border: 0;
+    background: none;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .step button:hover:not(:disabled) {
+    background: rgb(79 195 255 / 14%);
+  }
+  .step button:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+  .step .count {
+    min-width: 20px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .result:not(.in) .step .count {
+    color: var(--text-dim);
+    font-weight: 400;
+  }
   @media (max-width: 960px) {
-    .decks,
     .editor {
       grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 700px) {
+    .start {
+      margin-top: 8px;
+    }
+    .tiles {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+    }
+    .tile {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      column-gap: 14px;
+      row-gap: 2px;
+      align-items: center;
+      min-height: 0;
+      padding: 14px 16px;
+    }
+    .tile .icon {
+      grid-row: 1 / 3;
+      margin: 0;
+    }
+    .tile .label {
+      margin: 0;
+      font-size: 16px;
+    }
+    .panel {
+      padding: 14px;
+    }
+    .results {
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      max-height: none;
+      overflow: visible;
+    }
+    .step button {
+      min-height: 36px;
     }
   }
 </style>

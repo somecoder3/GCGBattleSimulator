@@ -65,3 +65,9 @@ button {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* A modal dialog is open (src/app/lib/modal.ts): the page underneath stays where it is. */
+html.modal-open {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}

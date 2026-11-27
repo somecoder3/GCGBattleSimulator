@@ -464,6 +464,13 @@ ab -- --decks ST12,ST12X,ST01,ST02,ST03,ST04` (Testliste ST12X = ST12 mit 4× Th
   mit lila Pfeilen auf ihre Ziele (Feld bleibt so lange auf dem Stand davor, alle warten) und fliegen dann zum
   Trash bzw. zur Unit; zerstörte Karten zeigen einen Blitz. Trash-Stapel zeigt jetzt die neueste Karte (`trash[0]`,
   die Engine legt vorn ab; vorher die älteste), Dialog weiter älteste links, neueste rechts. Details `docs/UI.md`.
+- **Deckauswahl und Deck-Reiter (27. Nov., Nutzerwunsch):** gemeinsamer Dialog `src/app/components/DeckPicker.svelte`
+  (Gruppen/Zufall/Suche in `src/app/lib/deckgroups.ts`) statt Dropdowns im Spiel und statt Seitenliste im Deck-Reiter.
+  Reihenfolge Eigene, je Nutzer „Decks von …“, Labor, Meta, Starter, Test. KI-Deck zufällig (erst Gruppe, dann Deck,
+  nur spielbare), eigenes Deck gemerkt. Deck-Reiter: Startseite Neu/Öffnen/Importieren, fremde Decks schreibgeschützt
+  mit Kopieren, Rückfrage bei ungespeicherten Änderungen und Löschen, −/+ in der Kartensuche und im Detail.
+  `use:modal` (`src/app/lib/modal.ts`) hält die Seite unter Dialogen fest; Kartendetail am Handy oben. Details
+  `docs/UI.md` „Deckauswahl“, Test `tests/app/deckgroups.test.ts`. Geprüft 375×812 und 1024 px.
 - **`dev.bat` (20. Nov., Nutzerwunsch):** Doppelklick startet `npm run dev -- --open`, vorher `npm ci` bzw.
   Submodul, falls sie fehlen. `.gitattributes`: `*.bat` mit CRLF (sonst LF für alles).
 - Nächster Schritt: Rest von **M9**: Feinschliff, Vorbereitung GitHub Pages (Bilderlösung). Offen aus M7: Such-KI deutlich stärker machen (bessere Fortsetzung,

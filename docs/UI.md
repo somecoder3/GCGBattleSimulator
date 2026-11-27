@@ -175,6 +175,30 @@ Tests: `tests/app/gamelog.test.ts` (Mulligan-Zeilen, `segments`), `tests/app/gam
 Deck-Panels mit Aushängeschild (höchste Unit, `faceCard()`), Farben, Meta-Anteil; Schwierigkeit als Kacheln
 (`LEVEL_TEXT`), Startwahl als Umschalter, Seed unter „Erweitert“, Fortsetzen zeigt Decks und Entscheidungszahl.
 
+## Deckauswahl (`DeckPicker.svelte`, `deckgroups.ts`, Nutzerwunsch 27. Nov.)
+
+Ein Dialog für Spiel und Deck-Reiter statt Dropdowns. Gruppen (`groupDecks`) in fester Reihenfolge: Eigene
+Decks, je anderem Nutzer „Decks von …“, Labor-Decks, Meta (nach Anteil), Starter, Testdecks; eigene und fremde
+nach Namen. Gruppen auf- und zuklappbar, Suche über Name/Id/Besitzer/Farbe (öffnet alle Treffergruppen), Zeile
+mit Bildausschnitt der höchsten Unit (`faceCard`), Farben, Meta-Anteil; das gewählte Deck mit ✓ in der Mitte
+der Liste, eine zugeklappte Gruppe mit dem gewählten Deck trägt einen Punkt. Am Handy ganzer Bildschirm, die
+Liste bekommt den Fokus (keine Tastatur), am Desktop die Suche.
+
+- Spiel: Klick auf ein Deck-Panel öffnet den Dialog. Eigenes Deck: Gruppe „Eigene Decks“ offen (ohne eigene
+  Decks die Gruppe des gewählten), gemerkt in `localStorage` (`…play-deck`), sonst erstes eigenes. KI-Deck:
+  zufällig (`randomDeck`: erst Gruppe, dann Deck darin, nur spielbare Decks `playable`), neu bei jeder neuen
+  Partie, 🎲 am Panel und „Zufällig“ im Dialog; im Dialog nur die Gruppe des gewählten Decks offen. Nicht
+  spielbare Decks (unvollständig, ≠ 50 Karten) sind ausgegraut mit Grund.
+- Deck-Reiter: Startseite mit drei Kacheln (Neues Deck, Deck öffnen, Deck importieren). Öffnen zeigt alle
+  Gruppen; fremde Decks (andere Nutzer, Meta, Starter, Test, Labor) schreibgeschützt mit „Kopieren und
+  bearbeiten“, bei Meta Auswahl Konsens/Turnierliste (Spielen nimmt die gezeigte Liste, `M03T5`). „← Decks“
+  fragt bei ungespeicherten Änderungen (Speichern/Verwerfen/Abbrechen), Löschen fragt immer. Import als eigene
+  Seite mit „Aus Zwischenablage einfügen“. Kartensuche mit −/Anzahl/+ je Karte (− nur ab 1, + bis 4), Karten im
+  Deck blau umrandet; das Kartendetail hat dieselben Knöpfe (`onremove`).
+- Modale Dialoge nutzen `use:modal` (`src/app/lib/modal.ts`): Seite darunter scrollt nicht (`html.modal-open`)
+  und steht nach dem Schließen exakt wie vorher. Kartendetail am Handy oben ausgerichtet, scrollt in sich,
+  Schließen-Knopf fest oben rechts.
+
 ## Geprüft
 
 1440×900, 1024×640 (Feld passt, „Main Phase beenden“ klickbar), 375×812 (kein waagerechtes Scrollen), Replay.
